@@ -2,18 +2,16 @@
 # vps01 stack. Deployed by .github/workflows/deploy.yml to
 # /opt/stacks/vps01/docker-compose.yml. Node-specific workload
 # services go here in addition to cloudflared.
+#
+# cloudflared runs on network_mode: host so tunnel origin URLs like
+# http://localhost:PORT resolve to the VPS itself, not the container's
+# own network namespace.
 services:
   cloudflared:
     image: cloudflare/cloudflared:2024.12.2
     container_name: cloudflared-vps01
     restart: unless-stopped
+    network_mode: host
     command: tunnel run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
-    networks:
-      - edge
-
-networks:
-  edge:
-    name: edge
-    driver: bridge
