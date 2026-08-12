@@ -27,6 +27,19 @@ or change routes there (Zero Trust → Networks → Tunnels → *tunnel* → Pub
 Hostnames), not in this repo. Current routes: `dokploy.maybeit.work` →
 `http://localhost:3000` on vps00.
 
+`cloudflared` must run with `network_mode: host` — bridge mode puts it in
+its own network namespace, so `http://localhost:PORT` origin URLs resolve
+to the container, not the VPS (caused 502s).
+
+**One tunnel token = one set of origins.** Only vps00 runs `cloudflared`
+right now — it's the only node with a workload behind the tunnel's routes.
+Do NOT reuse `CLOUDFLARE_TUNNEL_TOKEN` on vps01/vps02 until they serve the
+*same* origins vps00 does: Cloudflare load-balances a hostname's requests
+across every connector registered to that tunnel, so a node with nothing
+listening on the origin port causes ~2/3 of requests to 502. A node with a
+genuinely different workload/hostname needs its own tunnel + token, not
+the shared one.
+
 ## Repo Layout
 
 ```

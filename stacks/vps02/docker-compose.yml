@@ -1,17 +1,15 @@
 ---
 # vps02 stack. Deployed by .github/workflows/deploy.yml to
-# /opt/stacks/vps02/docker-compose.yml. Node-specific workload
-# services go here in addition to cloudflared.
+# /opt/stacks/vps02/docker-compose.yml.
 #
-# cloudflared runs on network_mode: host so tunnel origin URLs like
-# http://localhost:PORT resolve to the VPS itself, not the container's
-# own network namespace.
-services:
-  cloudflared:
-    image: cloudflare/cloudflared:2024.12.2
-    container_name: cloudflared-vps02
-    restart: unless-stopped
-    network_mode: host
-    command: tunnel run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+# No cloudflared here. All 3 nodes shared one CLOUDFLARE_TUNNEL_TOKEN,
+# which made Cloudflare load-balance dokploy.maybeit.work requests across
+# every node's connector — vps01/vps02 have nothing on the origin port,
+# so ~2/3 of requests 502'd. A shared tunnel token only works if every
+# connector node serves the same origins.
+#
+# When vps02 gets a real workload with its own public hostname: either
+# create a separate tunnel + token for this node, or add its port here
+# and give it its own Public Hostname route pointing at this node
+# specifically (not the shared vps00 tunnel).
+services: {}
