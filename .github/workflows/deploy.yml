@@ -61,7 +61,12 @@ jobs:
       - name: Deploy vps00
         run: |
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'cd /opt/stacks/vps00 && docker compose pull && docker compose up -d && docker image prune -f'
+            'cd /opt/stacks/vps00 && \
+             if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
+               docker compose pull && docker compose up -d && docker image prune -f; \
+             else \
+               echo "no services defined, skipping compose pull/up"; \
+             fi'
 
   deploy-vps01:
     needs: deploy-vps00
@@ -103,7 +108,12 @@ jobs:
       - name: Deploy vps01
         run: |
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'cd /opt/stacks/vps01 && docker compose pull && docker compose up -d && docker image prune -f'
+            'cd /opt/stacks/vps01 && \
+             if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
+               docker compose pull && docker compose up -d && docker image prune -f; \
+             else \
+               echo "no services defined, skipping compose pull/up"; \
+             fi'
 
   deploy-vps02:
     needs: deploy-vps01
@@ -145,4 +155,9 @@ jobs:
       - name: Deploy vps02
         run: |
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'cd /opt/stacks/vps02 && docker compose pull && docker compose up -d && docker image prune -f'
+            'cd /opt/stacks/vps02 && \
+             if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
+               docker compose pull && docker compose up -d && docker image prune -f; \
+             else \
+               echo "no services defined, skipping compose pull/up"; \
+             fi'
