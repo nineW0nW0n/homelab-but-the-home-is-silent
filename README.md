@@ -16,8 +16,7 @@ inbound ports, GitHub Actions as the only path to production.
 | vps01 | secondary | Dokploy-managed app (Remote Server), its own `cloudflared`   |
 | vps02 | secondary | provisioned and hardened, no workload yet    |
 
-2 vCPU / 2GB RAM each. Real IPs live only in a gitignored
-`infra/inventory.yaml` and in GitHub Secrets — never in a tracked file.
+2 vCPU / 2GB RAM each. Real IPs are supplied as a variable, not committed —
 `infra/inventory.example.yaml` is the redacted template; reference the
 inventory key or hostname instead of a literal IP anywhere in this repo.
 
@@ -54,7 +53,7 @@ node that serves something gets its own tunnel and its own token.
 infra/
   common/base.yaml                   shared node config (OS, resources, firewall)
   nodes/vps0N/node.yaml               per-node role, extends common/base.yaml
-  inventory.example.yaml              redacted node IP template (real one is gitignored)
+  inventory.example.yaml              redacted node IP template (real IPs come from a variable)
 stacks/
   vps0N/docker-compose.yml            per-node cloudflared connector + any raw compose workloads
 scripts/
@@ -79,10 +78,9 @@ re-run — most matter again if a node ever gets rebuilt from scratch.
   lint passes — then runs three sequential jobs, never in parallel, so a
   bad deploy can't take all three nodes down at once. Per node: SSH in via
   `webfactory/ssh-agent` with a pinned `known_hosts`, `rsync --delete` the
-  node's stack files, pipe that node's tunnel token into a remote `.env`
-  over SSH stdin (never a command-line argument, never committed), then a
-  guarded `docker compose pull && up -d` — guarded because a stack with no
-  services defined makes plain `compose pull` error out otherwise.
+  node's stack files, supply that node's tunnel token as a variable, then
+  a guarded `docker compose pull && up -d` — guarded because a stack with
+  no services defined makes plain `compose pull` error out otherwise.
 
 ## Security
 
