@@ -171,12 +171,13 @@ given the 2vCPU/2GB-per-node resource ceiling.
 
 ## Memory (2vCPU/2GB nodes)
 
-None of the 3 nodes have swap by default — `scripts/add-swap.sh <host>`
-adds a 2GB swapfile (`vm.swappiness=10`, prefers RAM, spills under real
-pressure only). Without it, a transient memory spike (app startup,
-migrations) is a hard OOM-kill instead of a slowdown — this is what broke
-Calcom's first deploy on vps01 ("can't complete build process" was
-actually an OOM kill under a too-tight `mem_limit`, not a real build).
+Nodes have no swap by default — `scripts/add-swap.sh <host>` adds a 2GB
+swapfile (`vm.swappiness=10`, prefers RAM, spills under real pressure
+only). Already applied to all 3 nodes. Without it, a transient memory
+spike (app startup, migrations) is a hard OOM-kill instead of a slowdown —
+this is what broke Calcom's first deploy on vps01 ("can't complete build
+process" was actually an OOM kill under a too-tight `mem_limit`, not a
+real build). Re-run this script on any node rebuilt from scratch.
 
 Always set `mem_limit`/`mem_reservation` on app services in `stacks/` or
 Dokploy-deployed compose files — an unbounded container can starve
