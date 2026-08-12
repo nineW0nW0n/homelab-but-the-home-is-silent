@@ -14,15 +14,16 @@ dokploy:
   server_url: "https://dokploy.maybeit.work"
 
 firewall:
+  # Enforced by scripts/harden-node.sh (UFW). Tunnel is outbound-only —
+  # no inbound port for it, ever. SSH is the only inbound rule.
   default_policy: deny
   allow:
     - port: 22
       proto: tcp
       source: ssh_only
-    - port: 443
-      proto: tcp
-      source: cloudflare_tunnel
-  deny_direct_inbound_http: true
+  fail2ban:
+    enabled: true
+    sshd_mode: aggressive
 
 cloudflared:
   enabled: true

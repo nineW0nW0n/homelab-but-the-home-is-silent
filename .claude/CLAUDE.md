@@ -31,6 +31,11 @@ Hostnames), not in this repo. Current routes: `dokploy.maybeit.work` →
 its own network namespace, so `http://localhost:PORT` origin URLs resolve
 to the container, not the VPS (caused 502s).
 
+Direct `<node-ip>:3000` dashboard access only worked before hardening — UFW
+now denies all inbound except 22, so `dokploy.maybeit.work` via the tunnel
+is the only way in. That's intentional, matches "no inbound ports opened,
+ever."
+
 **One tunnel token = one set of origins.** Only vps00 runs `cloudflared`
 right now — it's the only node with a workload behind the tunnel's routes.
 Do NOT reuse `CLOUDFLARE_TUNNEL_TOKEN` on vps01/vps02 until they serve the
@@ -65,6 +70,9 @@ stacks/
   vps02/docker-compose.yml
 scripts/
   bootstrap-dokploy.sh             # one-time: installs Dokploy control plane on vps00
+  provision-deploy-user.sh         # one-time per node: deploy user + rsync
+  install-docker.sh                # one-time per node: Docker Engine only (no Dokploy)
+  harden-node.sh                   # one-time per node: UFW, sshd key-only, Fail2Ban
 ```
 
 ## Conventions
@@ -118,6 +126,26 @@ manual step: run `scripts/bootstrap-dokploy.sh` (needs `VPS00_HOST` in
 `.env` or the environment). It installs the Dokploy control plane on vps00
 only. vps01/vps02 join later through the Dokploy dashboard (Settings >
 Servers > Add Server) — a different flow, not this script.
+
+## Node Hardening
+
+`scripts/harden-node.sh <host>` (root SSH): UFW (deny-all-incoming except
+22), sshd (`PasswordAuthentication no`, `UsePAM no`), Fail2Ban (aggressive
+sshd jail). Run once per node — already applied to all 3.
+
+Gotcha: Fail2Ban's default sshd jail expects a log *file*
+(`/var/log/auth.log`), which doesn't exist on these minimal Debian 12
+images — no rsyslog installed, sshd logs go straight to journald. Jail
+config must set `backend = systemd` or the service exits immediately with
+"Have not found any log file for sshd jail."
+
+Dokploy's Remote Servers connects as **root** (not `deploy` — that user has
+no sudo, and Dokploy requires root or passwordless-sudo). This is a
+separate SSH keypair Dokploy generates itself, added to each node's
+`root` `authorized_keys` manually (not via a script — one-time, done
+during dashboard setup). Using **Remote Servers**, not Swarm/multi-server
+clustering — each of the 3 nodes stays independent, hosts its own apps,
+given the 2vCPU/2GB-per-node resource ceiling.
 
 ## When Extending This Repo
 
