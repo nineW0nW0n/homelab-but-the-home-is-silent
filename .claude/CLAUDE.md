@@ -139,6 +139,21 @@ images — no rsyslog installed, sshd logs go straight to journald. Jail
 config must set `backend = systemd` or the service exits immediately with
 "Have not found any log file for sshd jail."
 
+Gotcha (bigger one): `UsePAM no` makes sshd do its own `/etc/shadow` check
+instead of delegating to PAM — and that check rejects pubkey auth outright
+on a **locked** account ("account is locked"), even with a perfectly valid
+key. `deploy` is created passwordless, which `useradd` already marks
+locked by default; `provision-deploy-user.sh` used to reinforce that with
+`passwd -l`, which worked fine under the pre-hardening default `UsePAM
+yes` and broke the instant `UsePAM no` landed — every CI deploy started
+failing with `Permission denied (publickey)`. Fix: `passwd -d` (empty
+password field) instead of `passwd -l` (locked marker) — sshd's shadow
+check only vetoes the locked marker specifically, not an empty field, and
+`PasswordAuthentication no` already fully blocks password login regardless
+of which one you use. If you ever provision a node before hardening it,
+run `provision-deploy-user.sh` (or re-run it) *after* `harden-node.sh`, or
+just make sure it's using the current `passwd -d` version.
+
 Dokploy's Remote Servers connects as **root** (not `deploy` — that user has
 no sudo, and Dokploy requires root or passwordless-sudo). This is a
 separate SSH keypair Dokploy generates itself, added to each node's

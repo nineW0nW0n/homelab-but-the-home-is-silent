@@ -41,7 +41,12 @@ printf '%s\n' "$pubkey" > /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
 chown -R deploy:deploy /home/deploy/.ssh
 
-passwd -l deploy >/dev/null 2>&1 || true
+# passwd -d (empty), not -l (locked): with UsePAM no (see harden-node.sh),
+# sshd's own shadow check rejects pubkey auth outright on a *locked*
+# account, even with a valid key. An empty password field doesn't trip
+# that check. PasswordAuthentication no + default PermitEmptyPasswords no
+# still fully block password login either way.
+passwd -d deploy >/dev/null 2>&1 || true
 
 getent group docker >/dev/null 2>&1 && usermod -aG docker deploy || true
 
