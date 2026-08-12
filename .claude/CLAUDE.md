@@ -78,6 +78,7 @@ scripts/
   provision-deploy-user.sh         # one-time per node: deploy user + rsync
   install-docker.sh                # one-time per node: Docker Engine only (no Dokploy)
   harden-node.sh                   # one-time per node: UFW, sshd key-only, Fail2Ban
+  add-swap.sh                      # one-time per node: swap file (2GB nodes have none by default)
 ```
 
 ## Conventions
@@ -167,6 +168,22 @@ separate SSH keypair Dokploy generates itself, added to each node's
 during dashboard setup). Using **Remote Servers**, not Swarm/multi-server
 clustering — each of the 3 nodes stays independent, hosts its own apps,
 given the 2vCPU/2GB-per-node resource ceiling.
+
+## Memory (2vCPU/2GB nodes)
+
+None of the 3 nodes have swap by default — `scripts/add-swap.sh <host>`
+adds a 2GB swapfile (`vm.swappiness=10`, prefers RAM, spills under real
+pressure only). Without it, a transient memory spike (app startup,
+migrations) is a hard OOM-kill instead of a slowdown — this is what broke
+Calcom's first deploy on vps01 ("can't complete build process" was
+actually an OOM kill under a too-tight `mem_limit`, not a real build).
+
+Always set `mem_limit`/`mem_reservation` on app services in `stacks/` or
+Dokploy-deployed compose files — an unbounded container can starve
+Traefik/cloudflared/sshd of RAM and take the whole node down, not just
+itself. Use `mem_limit` (classic Compose key), not `deploy.resources` —
+the latter is swarm-oriented and isn't reliably honored by plain `docker
+compose up`, which is what both `deploy.yml` and Dokploy actually run.
 
 ## When Extending This Repo
 
