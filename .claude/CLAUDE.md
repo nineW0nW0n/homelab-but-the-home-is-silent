@@ -24,8 +24,14 @@ Tunnel runs in **token mode** (`cloudflared tunnel run` + `TUNNEL_TOKEN` env,
 see `stacks/*/docker-compose.yml`) — ingress/public-hostname routing is
 owned by the Cloudflare Zero Trust dashboard, not a local config file. Add
 or change routes there (Zero Trust → Networks → Tunnels → *tunnel* → Public
-Hostnames), not in this repo. Current routes: `dokploy.maybeit.work` →
-`http://localhost:3000` on vps00.
+Hostnames), not in this repo. Current routes:
+- `dokploy.maybeit.work` → `http://localhost:3000` on vps00, tunnel token
+  `CLOUDFLARE_TUNNEL_TOKEN`.
+- `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
+  Traefik, which forwards to the calcom app container on :3000 based on
+  the Domain set in Dokploy's UI), tunnel token
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING` — its own dedicated tunnel, see
+  below.
 
 `cloudflared` must run with `network_mode: host` — bridge mode puts it in
 its own network namespace, so `http://localhost:PORT` origin URLs resolve
@@ -36,14 +42,13 @@ now denies all inbound except 22, so `dokploy.maybeit.work` via the tunnel
 is the only way in. That's intentional, matches "no inbound ports opened,
 ever."
 
-**One tunnel token = one set of origins.** Only vps00 runs `cloudflared`
-right now — it's the only node with a workload behind the tunnel's routes.
-Do NOT reuse `CLOUDFLARE_TUNNEL_TOKEN` on vps01/vps02 until they serve the
-*same* origins vps00 does: Cloudflare load-balances a hostname's requests
-across every connector registered to that tunnel, so a node with nothing
-listening on the origin port causes ~2/3 of requests to 502. A node with a
-genuinely different workload/hostname needs its own tunnel + token, not
-the shared one.
+**One tunnel token = one interchangeable connector pool.** Cloudflare
+load-balances a hostname's requests across *every* connector registered to
+its tunnel — a route isn't pinned to a specific node. So vps00 and vps01
+each need their own tunnel + token; sharing one across nodes with
+different origins causes non-deterministic 502s (hit this once already,
+see git history). vps02 still runs no `cloudflared` — no workload there
+yet. When it gets one: new tunnel, new token, same pattern as vps01.
 
 ## Repo Layout
 
@@ -100,20 +105,21 @@ scripts/
    manual dispatch. Calls `validate.yml` first, then deploys sequentially —
    vps00, then vps01, then vps02 — via SSH (`webfactory/ssh-agent` +
    pinned `known_hosts`), never all three at once. Per node: `mkdir -p` the
-   remote stack dir, `rsync --delete` the stack files there, write
-   `CLOUDFLARE_TUNNEL_TOKEN` into a remote `.env` (piped over SSH stdin,
-   never as a command-line arg, never committed), then
-   `docker compose pull && up -d`.
-3. `stacks/<node>/docker-compose.yml` currently runs only the `cloudflared`
-   connector. Add node workload services to that same file — one compose
-   file per node, kept in sync with the node's `infra/nodes/<node>/node.yaml`
-   `workloads:` list.
+   remote stack dir, `rsync --delete` the stack files there, write that
+   node's tunnel token into a remote `.env` (piped over SSH stdin, never
+   as a command-line arg, never committed), then `docker compose pull &&
+   up -d`. Each node's "Write remote .env" step uses that node's own
+   tunnel token secret — see below, don't reuse vps00's on another node.
+3. `stacks/<node>/docker-compose.yml` runs that node's `cloudflared`
+   connector (own tunnel token) plus any node-specific workload compose
+   services not deployed through Dokploy directly.
 
 ## Required GitHub Secrets / Variables
 
 Secrets: `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
 `VPS02_HOST`, `DOKPLOY_API_TOKEN`, `CLOUDFLARE_API_TOKEN`,
-`CLOUDFLARE_TUNNEL_TOKEN`, `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`.
+`CLOUDFLARE_TUNNEL_TOKEN` (vps00), `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`
+(vps01), `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`.
 
 Variables (non-sensitive, optional, default in workflow): `VPS00_SSH_USER`,
 `VPS00_SSH_PORT` (and `01`/`02` equivalents).

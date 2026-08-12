@@ -2,14 +2,21 @@
 # vps01 stack. Deployed by .github/workflows/deploy.yml to
 # /opt/stacks/vps01/docker-compose.yml.
 #
-# No cloudflared here. All 3 nodes shared one CLOUDFLARE_TUNNEL_TOKEN,
-# which made Cloudflare load-balance dokploy.maybeit.work requests across
-# every node's connector — vps01/vps02 have nothing on the origin port,
-# so ~2/3 of requests 502'd. A shared tunnel token only works if every
-# connector node serves the same origins.
+# Own dedicated tunnel (CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING) — do NOT
+# reuse vps00's shared CLOUDFLARE_TUNNEL_TOKEN. See infra note: one tunnel
+# token = one interchangeable connector pool; sharing across nodes with
+# different origins causes non-deterministic 502s (hit this once already).
 #
-# When vps01 gets a real workload with its own public hostname: either
-# create a separate tunnel + token for this node, or add its port here
-# and give it its own Public Hostname route pointing at this node
-# specifically (not the shared vps00 tunnel).
-services: {}
+# network_mode: host so http://localhost:80 in the tunnel's Public
+# Hostname route resolves to this VPS's own Traefik (booking.maybeit.work
+# -> Dokploy's Traefik on :80 -> calcom container on :3000), not the
+# container's own network namespace.
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2024.12.2
+    container_name: cloudflared-vps01
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING}
