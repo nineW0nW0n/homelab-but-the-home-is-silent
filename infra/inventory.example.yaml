@@ -1,0 +1,16 @@
+---
+# Template. Copy to infra/inventory.yaml (gitignored) and fill real IPs.
+# infra/inventory.yaml is the only place real node IPs live.
+nodes:
+  vps00:
+    hostname: vps00.maybeit.work
+    ip: "REDACTED"
+    role: primary
+  vps01:
+    hostname: vps01.maybeit.work
+    ip: "REDACTED"
+    role: secondary
+  vps02:
+    hostname: vps02.maybeit.work
+    ip: "REDACTED"
+    role: secondary

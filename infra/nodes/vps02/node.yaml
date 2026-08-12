@@ -1,0 +1,20 @@
+---
+# Extends infra/common/base.yaml. IP resolved at deploy time from
+# infra/inventory.yaml (gitignored) or VPS02_HOST secret — never hardcoded.
+node:
+  name: vps02
+  hostname: vps02.maybeit.work
+  role: secondary
+  inventory_ref: nodes.vps02
+
+ssh:
+  user: deploy
+  port: 22
+  host_var: VPS02_HOST
+
+dokploy:
+  register: true
+  labels:
+    - secondary
+
+workloads: []

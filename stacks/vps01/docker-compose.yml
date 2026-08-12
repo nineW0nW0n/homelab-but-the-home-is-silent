@@ -1,0 +1,19 @@
+---
+# vps01 stack. Deployed by .github/workflows/deploy.yml to
+# /opt/stacks/vps01/docker-compose.yml. Node-specific workload
+# services go here in addition to cloudflared.
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2024.12.2
+    container_name: cloudflared-vps01
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - edge
+
+networks:
+  edge:
+    name: edge
+    driver: bridge

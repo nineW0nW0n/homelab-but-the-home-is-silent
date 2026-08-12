@@ -1,0 +1,148 @@
+---
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - infra/**
+      - stacks/**
+      - .github/workflows/deploy.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate.yml
+
+  deploy-vps00:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SSH_PORT: ${{ vars.VPS00_SSH_PORT || 22 }}
+      SSH_USER: ${{ vars.VPS00_SSH_USER || 'deploy' }}
+      SSH_HOST: ${{ secrets.VPS00_HOST }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Ensure remote stack dir
+        run: ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'mkdir -p /opt/stacks/vps00'
+
+      - name: Sync stack files
+        run: |
+          rsync -az --delete -e "ssh -p $SSH_PORT" \
+            stacks/vps00/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps00/"
+
+      - name: Write remote .env
+        run: |
+          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" | \
+            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps00/.env'
+
+      - name: Deploy vps00
+        run: |
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'cd /opt/stacks/vps00 && docker compose pull && docker compose up -d && docker image prune -f'
+
+  deploy-vps01:
+    needs: deploy-vps00
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SSH_PORT: ${{ vars.VPS01_SSH_PORT || 22 }}
+      SSH_USER: ${{ vars.VPS01_SSH_USER || 'deploy' }}
+      SSH_HOST: ${{ secrets.VPS01_HOST }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Ensure remote stack dir
+        run: ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'mkdir -p /opt/stacks/vps01'
+
+      - name: Sync stack files
+        run: |
+          rsync -az --delete -e "ssh -p $SSH_PORT" \
+            stacks/vps01/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps01/"
+
+      - name: Write remote .env
+        run: |
+          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" | \
+            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps01/.env'
+
+      - name: Deploy vps01
+        run: |
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'cd /opt/stacks/vps01 && docker compose pull && docker compose up -d && docker image prune -f'
+
+  deploy-vps02:
+    needs: deploy-vps01
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SSH_PORT: ${{ vars.VPS02_SSH_PORT || 22 }}
+      SSH_USER: ${{ vars.VPS02_SSH_USER || 'deploy' }}
+      SSH_HOST: ${{ secrets.VPS02_HOST }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Ensure remote stack dir
+        run: ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'mkdir -p /opt/stacks/vps02'
+
+      - name: Sync stack files
+        run: |
+          rsync -az --delete -e "ssh -p $SSH_PORT" \
+            stacks/vps02/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps02/"
+
+      - name: Write remote .env
+        run: |
+          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" | \
+            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps02/.env'
+
+      - name: Deploy vps02
+        run: |
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'cd /opt/stacks/vps02 && docker compose pull && docker compose up -d && docker image prune -f'

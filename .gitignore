@@ -1,0 +1,34 @@
+# Secrets
+.env
+.env.*
+!.env.example
+infra/inventory.yaml
+*.pem
+*.key
+id_rsa*
+*_rsa
+cloudflared/*.json
+!cloudflared/config.example.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Python (pre-commit venv)
+.venv/
+__pycache__/
+
+# Logs
+*.log
+
+# Terraform (if added later)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example

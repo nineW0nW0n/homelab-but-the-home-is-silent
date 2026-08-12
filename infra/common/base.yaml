@@ -1,0 +1,33 @@
+---
+# Applied to all 3 nodes. Per-node files override/extend, never duplicate.
+os:
+  distro: debian
+  version: "12"
+
+resources:
+  vcpu: 2
+  memory_gb: 2
+
+dokploy:
+  agent: true
+  # node registers to Dokploy control plane via DOKPLOY_API_TOKEN (GitHub secret)
+  server_url: "https://dokploy.maybeit.work"
+
+firewall:
+  default_policy: deny
+  allow:
+    - port: 22
+      proto: tcp
+      source: ssh_only
+    - port: 443
+      proto: tcp
+      source: cloudflare_tunnel
+  deny_direct_inbound_http: true
+
+cloudflared:
+  enabled: true
+  # tunnel is outbound-only; no inbound ports exposed, no public IP needed
+  tunnel_id_ref: "${CLOUDFLARE_TUNNEL_ID}"
+
+updates:
+  unattended_security: true
