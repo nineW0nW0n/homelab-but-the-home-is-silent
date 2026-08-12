@@ -20,6 +20,13 @@ IP in a tracked file — reference the hostname or the inventory key instead.
 
 Domain: `maybeit.work`, DNS on Cloudflare.
 
+Tunnel runs in **token mode** (`cloudflared tunnel run` + `TUNNEL_TOKEN` env,
+see `stacks/*/docker-compose.yml`) — ingress/public-hostname routing is
+owned by the Cloudflare Zero Trust dashboard, not a local config file. Add
+or change routes there (Zero Trust → Networks → Tunnels → *tunnel* → Public
+Hostnames), not in this repo. Current routes: `dokploy.maybeit.work` →
+`http://localhost:3000` on vps00.
+
 ## Repo Layout
 
 ```
@@ -35,7 +42,6 @@ infra/
   inventory.yaml                # gitignored, real IPs
   common/
     base.yaml                   # OS, resources, firewall, dokploy agent
-    cloudflared.yaml            # tunnel ingress, hostname-routed, no IPs
   nodes/
     vps00/node.yaml
     vps01/node.yaml
@@ -44,6 +50,8 @@ stacks/
   vps00/docker-compose.yml        # cloudflared connector (+ future workloads)
   vps01/docker-compose.yml
   vps02/docker-compose.yml
+scripts/
+  bootstrap-dokploy.sh             # one-time: installs Dokploy control plane on vps00
 ```
 
 ## Conventions
@@ -88,6 +96,15 @@ Secrets: `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
 
 Variables (non-sensitive, optional, default in workflow): `VPS00_SSH_USER`,
 `VPS00_SSH_PORT` (and `01`/`02` equivalents).
+
+## Dokploy Bootstrap
+
+Dokploy itself is NOT installed by `deploy.yml` — that workflow only manages
+`stacks/*/docker-compose.yml`. Installing Dokploy is a separate, one-time,
+manual step: run `scripts/bootstrap-dokploy.sh` (needs `VPS00_HOST` in
+`.env` or the environment). It installs the Dokploy control plane on vps00
+only. vps01/vps02 join later through the Dokploy dashboard (Settings >
+Servers > Add Server) — a different flow, not this script.
 
 ## When Extending This Repo
 
