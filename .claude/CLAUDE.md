@@ -5,6 +5,8 @@ Dokploy and exposed through Cloudflare Tunnel. GitHub Actions handles
 validation and rolling deployment. No inbound ports are opened on any node —
 all public traffic arrives through the tunnel.
 
+Public repo, licensed AGPLv3 (`LICENSE`).
+
 ## Topology
 
 | Node  | Hostname             | Role      |
