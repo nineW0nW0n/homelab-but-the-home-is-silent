@@ -2,7 +2,8 @@
 # One-time (idempotent) per-node bootstrap: creates the unprivileged
 # 'deploy' user that .github/workflows/deploy.yml and scripts/*.sh SSH in
 # as. Key-based auth only, password login locked, added to docker group,
-# and owns /opt/stacks/<node> for CI rsync.
+# owns /opt/stacks/<node> for CI rsync. Also installs rsync itself — the
+# deploy workflow's sync step needs it on every node, not just Docker.
 #
 # Usage: scripts/provision-deploy-user.sh <node-name> <host>
 #   scripts/provision-deploy-user.sh vps00 203.0.113.10
@@ -26,6 +27,11 @@ echo "Provisioning deploy user on ${node} (root@${host}:${ssh_port}) ..."
 # shellcheck disable=SC2087
 ssh -p "$ssh_port" "root@${host}" "sh -s" <<EOF
 set -eu
+
+command -v rsync >/dev/null 2>&1 || {
+  apt-get -qq update >/dev/null
+  DEBIAN_FRONTEND=noninteractive apt-get -y -qq install rsync >/dev/null
+}
 
 id -u deploy >/dev/null 2>&1 || useradd -m -s /bin/bash deploy
 
