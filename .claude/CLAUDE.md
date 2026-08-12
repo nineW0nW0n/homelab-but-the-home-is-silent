@@ -79,6 +79,7 @@ scripts/
   install-docker.sh                # one-time per node: Docker Engine only (no Dokploy)
   harden-node.sh                   # one-time per node: UFW, sshd key-only, Fail2Ban
   add-swap.sh                      # one-time per node: swap file (2GB nodes have none by default)
+  cap-dokploy-resources.sh         # one-time per node: memory-cap Dokploy's own control plane
 ```
 
 ## Conventions
@@ -185,6 +186,23 @@ Traefik/cloudflared/sshd of RAM and take the whole node down, not just
 itself. Use `mem_limit` (classic Compose key), not `deploy.resources` —
 the latter is swarm-oriented and isn't reliably honored by plain `docker
 compose up`, which is what both `deploy.yml` and Dokploy actually run.
+
+## Dokploy's Own Resource Usage
+
+Dokploy's control plane was uncapped by default: the `dokploy` app itself
+was observed at ~913MiB on a 1.9GiB node before capping — nearly half the
+box, for the control plane alone, no app workloads counted.
+`scripts/cap-dokploy-resources.sh <host>` caps it: `dokploy` 1024M limit /
+512M reserve, `dokploy-postgres` 320M / 128M, `dokploy-traefik` 128M
+(memory-swap 256M). None of this lives in this repo's compose files —
+it's all installed by `bootstrap-dokploy.sh`'s upstream installer, so
+these caps aren't declarative and must be reapplied after any Dokploy
+reinstall/upgrade. Two different mechanisms, don't mix them up: `dokploy`
+and `dokploy-postgres` are Swarm services (`docker service update
+--limit-memory`; plain `docker update` gets silently reconciled away).
+`dokploy-traefik` is a plain container the installer runs directly with
+`docker run` (`docker service update` 404s on it — needs plain `docker
+update --memory`).
 
 ## When Extending This Repo
 
