@@ -1,220 +1,204 @@
-# Project Context
+# CLAUDE.md — root
 
-GitOps infrastructure repo for a 3-node Debian 12 VPS cluster, deployed via
-Dokploy and exposed through Cloudflare Tunnel. GitHub Actions handles
-validation and rolling deployment. No inbound ports are opened on any node —
-all public traffic arrives through the tunnel.
+> Audience: Claude Code, first. Ex, second. Every rule exists because it
+> makes the agent more reliable, not because it reads nicely. If a rule
+> helps the agent but confuses Ex, keep it and add one clarifying line.
 
-Public repo, licensed AGPLv3 (`LICENSE`).
+Map, not manual. Budgets apply to what is always in context: directory
+`CLAUDE.md` files ~250 lines, this root ~500 (it carries the map, rails,
+and protocol). Skills are exempt — they load on demand, so their cost is
+paid only when used; keep them scannable, not short. Anything longer than
+a couple of lines of install commands, config, or multi-step workflow
+belongs in `.claude/skills/`, not here.
 
-## Topology
+## What / where / when / why / how
 
-| Node  | Hostname             | Role      |
-|-------|----------------------|-----------|
-| vps00 | vps00.maybeit.work   | primary   |
-| vps01 | vps01.maybeit.work   | secondary |
-| vps02 | vps02.maybeit.work   | secondary |
+- **What**: `homelab-but-the-home-is-silent` — GitOps infra for a 3-node
+  Debian 12 VPS homelab. Dokploy deploys, Cloudflare Tunnel is the only
+  public ingress, GitHub Actions is the only path to production.
+- **Where**: `vps00` (primary, Dokploy control plane, Swarm-managed),
+  `vps01` (secondary, Dokploy Remote Server), `vps02` (hardened, no
+  workload yet). 2 vCPU / 2GB RAM each, no swap by default.
+- **When**: work in progress. Provisioning/hardening done and CI-
+  deployable; first workload still being shaken out. Expect force-pushes.
+- **Why**: learn GitOps end to end on real, cheap, constrained hardware.
+  The constraints are the point, not accidents to design around.
+- **How**: infra under `infra/`, workloads under `stacks/`, push to
+  `main`, `validate.yml` gates `deploy.yml`, deploy is sequential —
+  `vps00 → vps01 → vps02`, never parallel.
 
-Real IPs live only in `infra/inventory.yaml` (gitignored) and in the
-`VPS00_HOST` / `VPS01_HOST` / `VPS02_HOST` GitHub secrets. Never hardcode an
-IP in a tracked file — reference the hostname or the inventory key instead.
-`infra/inventory.example.yaml` is the tracked, redacted template.
+## Directory map
 
-Domain: `maybeit.work`, DNS on Cloudflare.
+| Directory | Role | CLAUDE.md status |
+|---|---|---|
+| `infra/` | Node/OS config, firewall, per-node roles, redacted inventory template | exists → `infra/CLAUDE.md` |
+| `stacks/` | Per-node `docker-compose.yml` — cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
+| `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
+| `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy) | exists → `.github/workflows/CLAUDE.md` |
 
-Tunnel runs in **token mode** (`cloudflared tunnel run` + `TUNNEL_TOKEN` env,
-see `stacks/*/docker-compose.yml`) — ingress/public-hostname routing is
-owned by the Cloudflare Zero Trust dashboard, not a local config file. Add
-or change routes there (Zero Trust → Networks → Tunnels → *tunnel* → Public
-Hostnames), not in this repo. Current routes:
-- `dokploy.maybeit.work` → `http://localhost:3000` on vps00, tunnel token
-  `CLOUDFLARE_TUNNEL_TOKEN`.
-- `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
-  Traefik, which forwards to the calcom app container on :3000 based on
-  the Domain set in Dokploy's UI), tunnel token
-  `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING` — its own dedicated tunnel, see
-  below.
+Keep this column current the same commit you add or remove a directory
+file.
 
-`cloudflared` must run with `network_mode: host` — bridge mode puts it in
-its own network namespace, so `http://localhost:PORT` origin URLs resolve
-to the container, not the VPS (caused 502s).
+## Reading protocol — use the distributed context, don't just write it
 
-Direct `<node-ip>:3000` dashboard access only worked before hardening — UFW
-now denies all inbound except 22, so `dokploy.maybeit.work` via the tunnel
-is the only way in. That's intentional, matches "no inbound ports opened,
-ever."
+**Before working in any directory:** read its `CLAUDE.md` first if one
+exists. Check — don't assume it's already in context. Its rails apply on
+top of root's for everything you do there.
 
-**One tunnel token = one interchangeable connector pool.** Cloudflare
-load-balances a hostname's requests across *every* connector registered to
-its tunnel — a route isn't pinned to a specific node. So vps00 and vps01
-each need their own tunnel + token; sharing one across nodes with
-different origins causes non-deterministic 502s (hit this once already,
-see git history). vps02 still runs no `cloudflared` — no workload there
-yet. When it gets one: new tunnel, new token, same pattern as vps01.
+**After a context compaction, or any point where you're unsure what's
+still in context:** re-read this file and the active directory's
+`CLAUDE.md` before continuing, and say in one line that you did. Losing
+these rules mid-session is the most likely way a long session goes bad.
 
-## Repo Layout
+**If a directory file contradicts root:** root wins. Stop, name the two
+conflicting lines, ask. Then fix the loser in the same turn and log it.
+Never silently pick one.
 
+## Hard rails — never break these
+
+1. **No open inbound ports except SSH (22).** Public traffic goes through
+   Cloudflare Tunnel, never a direct port.
+2. **One tunnel token per node, never shared.** A shared token means
+   requests can land on the wrong node and 502.
+3. **`network_mode: host` on every `cloudflared` service.** Bridge mode
+   breaks `localhost:PORT` origin URLs.
+4. **Explicit `mem_limit`/`mem_reservation` on every app service.** Classic
+   Compose key — `deploy.resources` isn't honored by `docker compose up`.
+5. **Real IPs are never committed.** Use the inventory key/hostname;
+   `infra/inventory.example.yaml` stays redacted.
+6. **CI deploy user: key-only, no sudo, no password login.** Dokploy uses
+   its own separate credential.
+7. **Deploys are sequential, never parallel** — `vps00 → vps01 → vps02`.
+8. **`validate.yml` passes before `deploy.yml` runs.** Fix lint failures;
+   never bypass them.
+9. **Biome lints/formats all JS, TS, JSON, JSONC, CSS.** No ESLint, no
+   Prettier. Config: `biome.json` — see the `tooling-setup` skill.
+10. **`yamllint` lints every `.yml`/`.yaml` file** until Biome ships YAML
+    support ([tracked, not shipped](https://github.com/biomejs/biome/issues/2365)).
+    Config: `.yamllint` — see the `tooling-setup` skill.
+11. **Never print secret material in full** — tunnel tokens, key
+    contents, `.env` values — in your own chat output, not just commits.
+    Redact (`TUNNEL_TOKEN=***redacted***`).
+12. **Rollback is `git revert` + push, not manual node surgery.** Let
+    `deploy.yml` redeploy the last-known-good stack.
+
+## The loop
+
+Every change runs through this before you report it done.
+
+```sh
+pre-commit run --all-files   # yamllint --strict, actionlint, gitleaks,
+                             # trailing-whitespace, large-file/private-key checks
+shellcheck scripts/*.sh      # every script stays shellcheck-clean
+biome ci .                   # only if the repo has .js/.ts/.json/.jsonc/.css
+find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +
 ```
-.yamllint                       # strict yamllint rules (all *.yaml/*.yml)
-.pre-commit-config.yaml         # trailing-whitespace, yamllint, gitleaks, actionlint
-.env.example                    # local tooling env template (no real values)
-.gitignore                      # blocks .env, keys, infra/inventory.yaml, tfstate
-.github/workflows/
-  validate.yml                  # pre-commit --all-files, reusable via workflow_call
-  deploy.yml                    # sequential rolling deploy vps00 -> vps01 -> vps02
-infra/
-  inventory.example.yaml        # tracked, redacted IP template
-  inventory.yaml                # gitignored, real IPs
-  common/
-    base.yaml                   # OS, resources, firewall, dokploy agent
-  nodes/
-    vps00/node.yaml
-    vps01/node.yaml
-    vps02/node.yaml
-stacks/
-  vps00/docker-compose.yml        # cloudflared connector (+ future workloads)
-  vps01/docker-compose.yml
-  vps02/docker-compose.yml
-scripts/
-  bootstrap-dokploy.sh             # one-time: installs Dokploy control plane on vps00
-  provision-deploy-user.sh         # one-time per node: deploy user + rsync
-  install-docker.sh                # one-time per node: Docker Engine only (no Dokploy)
-  harden-node.sh                   # one-time per node: UFW, sshd key-only, Fail2Ban
-  add-swap.sh                      # one-time per node: swap file (2GB nodes have none by default)
-  cap-dokploy-resources.sh         # one-time per node: memory-cap Dokploy's own control plane
-```
 
-## Conventions
+- The `find` line prints but never fails — acting on it is on you: root
+  over ~500 or a directory file over ~250 gets fixed before you report
+  done. Plain globs miss `.github/`; `find` doesn't.
+- `biome ci .` finding nothing to lint is a pass, not a skip.
+- Scripts stay idempotent — trace or run twice, confirm the second is a
+  no-op.
+- Never report done on a red check. Never hand-edit
+  `infra/inventory.example.yaml` with a real IP. Pin
+  `.pre-commit-config.yaml` hook revs exactly, same as any tool.
 
-- **Secrets**: never hardcoded. Local dev uses `.env` (gitignored, copied from
-  `.env.example`). CI uses GitHub Actions Secrets (sensitive: tokens, IPs,
-  SSH key) and Variables (non-sensitive: SSH user, SSH port).
-- **YAML**: every file starts with `---`, 2-space indent, 120-char line max,
-  no duplicate keys, strict yamllint enforced in pre-commit and CI.
-- **Commits**: atomic, conventional commit format (`feat:`, `fix:`, `chore:`,
-  `docs:`).
-- **Shell**: POSIX-compatible, no bashisms unless the script is explicitly
-  `#!/bin/bash`.
-- **Node configs**: `infra/nodes/<name>/node.yaml` extends
-  `infra/common/base.yaml`. Never duplicate a common setting per-node —
-  override only what differs.
-- **No code fragments in commits** — files are committed complete.
+**Definition of done:**
 
-## CI/CD Flow
+- Stack/compose change → `docker compose config` passes, plus
+  `pre-commit`.
+- Workflow change → `actionlint` passes, and you can state what would've
+  caught the bug you're fixing.
+- Script change → idempotency check above, done and stated.
+- Anything else → `pre-commit run --all-files` green is the floor. Unsure
+  what "done" means for an unlisted change type? Ask.
 
-1. `validate.yml` runs on every PR and push to `main`: pre-commit over all
-   files (yamllint --strict, actionlint, gitleaks, trailing-whitespace,
-   large-file/private-key checks).
-2. `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`) or
-   manual dispatch. Calls `validate.yml` first, then deploys sequentially —
-   vps00, then vps01, then vps02 — via SSH (`webfactory/ssh-agent` +
-   pinned `known_hosts`), never all three at once. Per node: `mkdir -p` the
-   remote stack dir, `rsync --delete` the stack files there, write that
-   node's tunnel token into a remote `.env` (piped over SSH stdin, never
-   as a command-line arg, never committed), then `docker compose pull &&
-   up -d`. Each node's "Write remote .env" step uses that node's own
-   tunnel token secret — see below, don't reuse vps00's on another node.
-3. `stacks/<node>/docker-compose.yml` runs that node's `cloudflared`
-   connector (own tunnel token) plus any node-specific workload compose
-   services not deployed through Dokploy directly.
+## Tooling
 
-## Required GitHub Secrets / Variables
+Five tools: Biome and yamllint (linters), superpowers (workflow skills),
+rtk (compresses bash output before it hits context), caveman (terse
+output + commit messages). All install-if-missing and pre-approved — say
+what you installed in your summary.
 
-Secrets: `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
-`VPS02_HOST`, `DOKPLOY_API_TOKEN`, `CLOUDFLARE_API_TOKEN`,
-`CLOUDFLARE_TUNNEL_TOKEN` (vps00), `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`
-(vps01), `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`.
+Install commands, hard-railed configs, and the superpowers skill-mapping
+table live in **`.claude/skills/tooling-setup/SKILL.md`**. Load it when
+you actually need it — a tool check fails, a config file is missing, or
+setup is the task — not routinely at session start. It is a skill
+precisely so it stays out of context until needed.
 
-Variables (non-sensitive, optional, default in workflow): `VPS00_SSH_USER`,
-`VPS00_SSH_PORT` (and `01`/`02` equivalents).
+Never inline its contents into this file or a directory file.
 
-## Dokploy Bootstrap
+## Failure log (cross-cutting only)
 
-Dokploy itself is NOT installed by `deploy.yml` — that workflow only manages
-`stacks/*/docker-compose.yml`. Installing Dokploy is a separate, one-time,
-manual step: run `scripts/bootstrap-dokploy.sh` (needs `VPS00_HOST` in
-`.env` or the environment). It installs the Dokploy control plane on vps00
-only. vps01/vps02 join later through the Dokploy dashboard (Settings >
-Servers > Add Server) — a different flow, not this script.
+Directory-specific mistakes go in that directory's `CLAUDE.md`.
 
-## Node Hardening
+- Dokploy's control plane was uncapped by default and ate a
+  disproportionate share of a 2GB node — new control-plane-style
+  services get an explicit cap from the start. Detail moved to
+  `scripts/CLAUDE.md` (the fix is `cap-dokploy-resources.sh`).
+- Fail2Ban and the `docker compose pull`-on-empty-stack gotchas moved to
+  `scripts/CLAUDE.md` and `.github/workflows/CLAUDE.md` respectively —
+  each is specific to one script/workflow, not cross-cutting.
+- Pin exact versions/commits for Biome, rtk, caveman, yamllint. Never
+  `latest`.
+- yamllint's default `truthy` rule flags `on:` in GitHub Actions
+  workflows as a boolean. Fix `.yamllint` (`check-keys: false`), never
+  the workflow file.
+- A `wc -l CLAUDE.md */CLAUDE.md */*/CLAUDE.md` budget check silently
+  skips `.github/` — shell globs don't match dot-directories. Use `find`.
 
-`scripts/harden-node.sh <host>` (root SSH): UFW (deny-all-incoming except
-22), sshd (`PasswordAuthentication no`, `UsePAM no`), Fail2Ban (aggressive
-sshd jail). Run once per node — already applied to all 3.
+## Propagation protocol
 
-Gotcha: Fail2Ban's default sshd jail expects a log *file*
-(`/var/log/auth.log`), which doesn't exist on these minimal Debian 12
-images — no rsyslog installed, sshd logs go straight to journald. Jail
-config must set `backend = systemd` or the service exits immediately with
-"Have not found any log file for sshd jail."
+Distributed context: this root file, one `CLAUDE.md` per working
+directory, skills in `.claude/skills/` for anything longer. Root is the
+map; directory files carry local rails, vocabulary, and failure logs.
 
-Gotcha (bigger one): `UsePAM no` makes sshd do its own `/etc/shadow` check
-instead of delegating to PAM — and that check rejects pubkey auth outright
-on a **locked** account ("account is locked"), even with a perfectly valid
-key. `deploy` is created passwordless, which `useradd` already marks
-locked by default; `provision-deploy-user.sh` used to reinforce that with
-`passwd -l`, which worked fine under the pre-hardening default `UsePAM
-yes` and broke the instant `UsePAM no` landed — every CI deploy started
-failing with `Permission denied (publickey)`. Fix: `passwd -d` (empty
-password field) instead of `passwd -l` (locked marker) — sshd's shadow
-check only vetoes the locked marker specifically, not an empty field, and
-`PasswordAuthentication no` already fully blocks password login regardless
-of which one you use. If you ever provision a node before hardening it,
-run `provision-deploy-user.sh` (or re-run it) *after* `harden-node.sh`, or
-just make sure it's using the current `passwd -d` version.
+**On first substantive work in a directory with no `CLAUDE.md`:**
 
-Dokploy's Remote Servers connects as **root** (not `deploy` — that user has
-no sudo, and Dokploy requires root or passwordless-sudo). This is a
-separate SSH keypair Dokploy generates itself, added to each node's
-`root` `authorized_keys` manually (not via a script — one-time, done
-during dashboard setup). Using **Remote Servers**, not Swarm/multi-server
-clustering — each of the 3 nodes stays independent, hosts its own apps,
-given the 2vCPU/2GB-per-node resource ceiling.
+1. Skip directories that only contain other directories — create the file
+   where the files actually are (`.github/workflows/`, not `.github/`).
+2. Create `<directory>/CLAUDE.md`, opening with `Parent: ../CLAUDE.md`.
+3. Fill in only what's true there — purpose, local rails, vocabulary,
+   directory-specific commands. Don't repeat root.
+4. End with an empty `## Failure log` heading.
+5. Sweep root's failure log: move any entry that turns out to be about
+   this directory down into the new file, and say so in your summary.
+6. Mark the row `exists → <directory>/CLAUDE.md` in the directory map.
 
-## Memory (2vCPU/2GB nodes)
+**Whenever corrected, or you catch a mistake, or find something true that
+wasn't written down:**
 
-Nodes have no swap by default — `scripts/add-swap.sh <host>` adds a 2GB
-swapfile (`vm.swappiness=10`, prefers RAM, spills under real pressure
-only). Already applied to all 3 nodes. Without it, a transient memory
-spike (app startup, migrations) is a hard OOM-kill instead of a slowdown —
-this is what broke Calcom's first deploy on vps01 ("can't complete build
-process" was actually an OOM kill under a too-tight `mem_limit`, not a
-real build). Re-run this script on any node rebuilt from scratch.
+1. One line, imperative, in that directory's failure log: "Do not run X —
+   it causes Y. Do Z instead."
+2. Repo-wide lesson → root's log instead; say so in your summary.
+3. Log it in the same commit/turn as the fix. Never batch for later.
+4. Never delete a superseded line — replace it in place.
 
-Always set `mem_limit`/`mem_reservation` on app services in `stacks/` or
-Dokploy-deployed compose files — an unbounded container can starve
-Traefik/cloudflared/sshd of RAM and take the whole node down, not just
-itself. Use `mem_limit` (classic Compose key), not `deploy.resources` —
-the latter is swarm-oriented and isn't reliably honored by plain `docker
-compose up`, which is what both `deploy.yml` and Dokploy actually run.
+**Keeping this current:**
 
-## Dokploy's Own Resource Usage
+- A directory file past ~250 lines signals splitting the directory, not
+  trimming the file — ask before restructuring.
+- Anything long and reusable → a skill, referenced by one line, never
+  inlined. Never create a directory's `CLAUDE.md` speculatively.
 
-Dokploy's control plane was uncapped by default: the `dokploy` app itself
-was observed at ~913MiB on a 1.9GiB node before capping — nearly half the
-box, for the control plane alone, no app workloads counted.
-`scripts/cap-dokploy-resources.sh <host>` caps it: `dokploy` 1024M limit /
-512M reserve, `dokploy-postgres` 320M / 128M, `dokploy-traefik` 128M
-(memory-swap 256M). None of this lives in this repo's compose files —
-it's all installed by `bootstrap-dokploy.sh`'s upstream installer, so
-these caps aren't declarative and must be reapplied after any Dokploy
-reinstall/upgrade. Two different mechanisms, don't mix them up: `dokploy`
-and `dokploy-postgres` are Swarm services (`docker service update
---limit-memory`; plain `docker update` gets silently reconciled away).
-`dokploy-traefik` is a plain container the installer runs directly with
-`docker run` (`docker service update` 404s on it — needs plain `docker
-update --memory`).
+## Self-audit — on demand
 
-## When Extending This Repo
+Ex runs this manually. When asked: review every `CLAUDE.md` and skill for
+stale map rows, superseded-but-unreplaced log lines, rails that no longer
+match reality, and anything over budget. Report drift, fix what's
+unambiguous, ask before restructuring.
 
-- New per-node setting → edit `infra/nodes/<name>/node.yaml`, not `base.yaml`,
-  unless it applies to all 3 nodes.
-- New secret → add to `.env.example` (empty value) and to this file's
-  required-secrets list, add to GitHub repo secrets, never commit the value.
-- New YAML file → must pass `yamllint -c .yamllint <file>` before commit;
-  pre-commit enforces this automatically.
-- New workflow → add `actionlint` will catch shell-injection risks from
-  unquoted `${{ }}` expressions in `run:` blocks; keep using intermediate
-  `env:` vars for untrusted input (PR titles, branch names) rather than
-  interpolating directly into shell.
+**Recommend one, unprompted, when:** the failure log gains 3+ entries in
+a session, a hard rail needed double-checking against real behavior, or
+the repo's structure no longer matches the directory map. One line.
+
+## When you're unsure
+
+Ask before: opening an inbound port, changing tunnel/token/SSH/auth
+setup, changing deploy order or rollback behavior, or removing a guard
+that looks redundant. State assumptions at the top of your summary.
+
+Ex is not an engineer. Before a non-trivial infra decision — not after —
+explain in plain terms what and why, in 1-3 sentences. Hard-rail-adjacent
+and destructive changes always; a typo fix doesn't.
