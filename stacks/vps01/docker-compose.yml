@@ -9,8 +9,9 @@
 #
 # network_mode: host so http://localhost:80 in the tunnel's Public
 # Hostname route resolves to this VPS's own Traefik (booking.maybeit.work
-# -> Dokploy's Traefik on :80 -> calcom container on :3000), not the
-# container's own network namespace.
+# -> Dokploy's Traefik on :80 -> whatever app container Dokploy's UI has
+# the Domain pointed at — see stacks/CLAUDE.md), not the container's own
+# network namespace.
 services:
   cloudflared:
     image: cloudflare/cloudflared:2024.12.2
