@@ -146,12 +146,6 @@ jobs:
           rsync -az --delete -e "ssh -p $SSH_PORT" \
             stacks/vps02/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps02/"
 
-      - name: Write remote .env
-        run: |
-          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" | \
-            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'umask 077 && cat > /opt/stacks/vps02/.env'
-
       - name: Deploy vps02
         run: |
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \

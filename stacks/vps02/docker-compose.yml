@@ -12,4 +12,10 @@
 # create a separate tunnel + token for this node, or add its port here
 # and give it its own Public Hostname route pointing at this node
 # specifically (not the shared vps00 tunnel).
+#
+# deploy.yml's vps02 job writes no .env — there's no dedicated token to
+# write yet. Adding a cloudflared service here means adding a new
+# CLOUDFLARE_TUNNEL_TOKEN_VPS02_* secret + a "Write remote .env" step in
+# deploy.yml, same pattern as vps01. Do NOT reuse CLOUDFLARE_TUNNEL_TOKEN
+# (vps00's) — see stacks/CLAUDE.md failure log.
 services: {}

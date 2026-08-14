@@ -43,4 +43,3 @@ hand-edit it with a real value. Tracked files reference the hostname or
   commit; pre-commit enforces this automatically.
 
 ## Failure log
-

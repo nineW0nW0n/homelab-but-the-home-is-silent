@@ -49,3 +49,10 @@ Variables (optional, default in workflow): `VPS0N_SSH_USER`,
   is guarded (`if [ -n "$(docker compose config --services)" ]`) — keep
   the guard, don't remove it as "dead code" without checking every node's
   stack first.
+- deploy-vps02's "Write remote .env" step used to write
+  `CLOUDFLARE_TUNNEL_TOKEN` — vps00's shared token — into vps02's `.env`,
+  even though vps02 has no service to consume it. Removed. When vps02
+  gets its first `cloudflared` workload, add a dedicated
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_*` secret and its own "Write remote
+  .env" step, same pattern as vps01 — never wire in vps00's token
+  (rail 2).
