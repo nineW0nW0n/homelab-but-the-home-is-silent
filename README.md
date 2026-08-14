@@ -51,8 +51,6 @@ node that serves something gets its own tunnel and its own token.
   validate.yml                       pre-commit over the whole repo, reusable via workflow_call
   deploy.yml                         sequential rolling deploy: vps00 -> vps01 -> vps02
 infra/
-  common/base.yaml                   shared node config (OS, resources, firewall)
-  nodes/vps0N/node.yaml               per-node role, extends common/base.yaml
   inventory.example.yaml              redacted node IP template (real IPs come from a variable)
 stacks/
   vps0N/docker-compose.yml            per-node cloudflared connector + any raw compose workloads

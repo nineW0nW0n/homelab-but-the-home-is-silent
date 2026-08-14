@@ -1,22 +1,17 @@
 Parent: ../.claude/CLAUDE.md
 
-# infra/ — node & OS config
+# infra/ — inventory
 
-Docs-as-config for the 3 nodes: OS/resource/firewall/dokploy settings
-(`common/base.yaml`, overridden per-node in `nodes/<name>/node.yaml`) and
-the inventory (real IPs vs. redacted template).
-
-## IMPORTANT: not machine-read
-
-`common/base.yaml` and `nodes/*/node.yaml` are **documentation only** —
-grepped the repo, nothing in `scripts/` or `.github/workflows/` parses
-them. Real enforcement lives directly in `scripts/harden-node.sh` (UFW,
-sshd, Fail2Ban), `scripts/cap-dokploy-resources.sh` (resource caps), and
-GitHub Secrets/Variables (host/port/user, resolved at deploy time — see
-`.github/workflows/CLAUDE.md`). If you change a value here, you must also
-update the script or secret that actually implements it — the yaml won't
-propagate on its own. Don't cite `base.yaml`/`node.yaml` as proof a
-setting is live; check the script.
+Real IPs vs. redacted template. That's the whole directory now —
+`common/base.yaml` and `nodes/*/node.yaml` (declarative OS/firewall/
+resource config nothing ever read) were deleted; nothing in `scripts/` or
+`.github/workflows/` parsed them, so they only drifted from what the
+scripts actually do. Enforcement lives directly in
+`scripts/harden-node.sh` (UFW, sshd, Fail2Ban),
+`scripts/cap-dokploy-resources.sh` (resource caps), and GitHub
+Secrets/Variables (host/port/user, resolved at deploy time — see
+`.github/workflows/CLAUDE.md`). If node config needs to change, change
+the script; there's no yaml layer to edit first.
 
 ## Topology
 
@@ -34,12 +29,11 @@ hand-edit it with a real value. Tracked files reference the hostname or
 `inventory_ref` key, never a bare IP. CI resolves the actual host from the
 `VPS0N_HOST` GitHub secret, not from this directory.
 
-## Conventions
-
-- New per-node setting → edit `nodes/<name>/node.yaml`, not `base.yaml`,
-  unless it applies to all 3 nodes. Never duplicate a common setting
-  per-node — override only what differs.
-- New YAML file → must pass `yamllint -c ../.yamllint <file>` before
-  commit; pre-commit enforces this automatically.
-
 ## Failure log
+
+- `common/base.yaml`/`nodes/*/node.yaml` existed as declarative config
+  for OS/firewall/resources/dokploy but nothing ever read them — scripts
+  hardcoded the same values independently. Deleted rather than wired up:
+  3 static nodes don't justify a yaml-parsing layer in POSIX `sh`
+  scripts. If node config needs to be data-driven again, that's a real
+  design decision, not a resurrection of these files as-is.

@@ -31,7 +31,7 @@ belongs in `.claude/skills/`, not here.
 
 | Directory | Role | CLAUDE.md status |
 |---|---|---|
-| `infra/` | Node/OS config, firewall, per-node roles, redacted inventory template | exists → `infra/CLAUDE.md` |
+| `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml` — cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy) | exists → `.github/workflows/CLAUDE.md` |
