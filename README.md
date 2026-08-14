@@ -1,20 +1,25 @@
 # homelab-but-the-home-is-silent
 
-**Status: work in progress.** Nodes are provisioned, hardened, and
-deployable via CI. Dokploy and Cloudflare Tunnel are live. First workload
-is still being shaken out. Expect rough edges and force-pushed fixes.
+[![validate](https://github.com/nineW0nW0n/homelab-but-the-home-is-silent/actions/workflows/validate.yml/badge.svg)](https://github.com/nineW0nW0n/homelab-but-the-home-is-silent/actions/workflows/validate.yml)
+[![license: AGPLv3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](./LICENSE)
 
 GitOps infrastructure for a 3-node Debian 12 VPS homelab: [Dokploy](https://dokploy.com)
 as the deployment platform, Cloudflare Tunnel for public access with zero
 inbound ports, GitHub Actions as the only path to production.
 
-## Topology
+> [!NOTE]
+> **Status: work in progress.** Nodes are provisioned, hardened, and
+> deployable via CI. Dokploy and Cloudflare Tunnel are live. First
+> workload is still being shaken out. Expect rough edges and
+> force-pushed fixes.
 
-| Node  | Role      | Runs                                        |
-|-------|-----------|----------------------------------------------|
-| vps00 | primary   | Dokploy control plane (Swarm-managed), its own `cloudflared` |
-| vps01 | secondary | Dokploy-managed app (Remote Server), its own `cloudflared`   |
-| vps02 | secondary | provisioned and hardened, no workload yet    |
+## 🗺️ Topology
+
+| Node  | Role      | Notes                                                    |
+|-------|-----------|-----------------------------------------------------------|
+| vps00 | primary   | Dokploy control plane (Swarm-managed) + own `cloudflared`  |
+| vps01 | secondary | Dokploy-managed app (Remote Server) + own `cloudflared`    |
+| vps02 | secondary | Provisioned, hardened — no workload yet                    |
 
 2 vCPU / 2GB RAM each. Real IPs are supplied as a variable, not committed —
 `infra/inventory.example.yaml` is the redacted template; reference the
@@ -25,11 +30,28 @@ each node stays independent and hosts its own apps rather than pooling
 resources, which fits three boxes this small a lot better than clustering
 them.
 
-## Network model
+```mermaid
+flowchart LR
+    internet(("Public traffic")) --> tunnel["Cloudflare Tunnel\n(outbound-only)"]
+    tunnel --> vps00["vps00 — primary\nDokploy control plane"]
+    tunnel --> vps01["vps01 — secondary\nDokploy app"]
+    vps02["vps02 — secondary\nhardened, no workload"]
 
-No node has an open inbound port except SSH (22, enforced by UFW). All
-public traffic — the Dokploy dashboard, deployed apps — arrives through
-Cloudflare Tunnel, which is outbound-only from each node's side.
+    subgraph ci["GitHub Actions"]
+        validate["validate.yml\nlint gate"] --> deploy["deploy.yml"]
+    end
+
+    deploy -. "1️⃣ sequential" .-> vps00
+    deploy -. "2️⃣" .-> vps01
+    deploy -. "3️⃣" .-> vps02
+```
+
+## 🔒 Network model
+
+> [!IMPORTANT]
+> No node has an open inbound port except SSH (22, enforced by UFW). All
+> public traffic — the Dokploy dashboard, deployed apps — arrives through
+> Cloudflare Tunnel, which is outbound-only from each node's side.
 
 `cloudflared` runs in token mode (`tunnel run` + `TUNNEL_TOKEN`), and
 public-hostname routing is configured in the Cloudflare Zero Trust
@@ -43,7 +65,7 @@ route isn't pinned to a specific node. Two nodes sharing one token means
 requests for either node's app can land on the wrong node and 502. Each
 node that serves something gets its own tunnel and its own token.
 
-## Repo layout
+## 📦 Repo layout
 
 ```
 .yamllint, .pre-commit-config.yaml   strict lint, enforced pre-commit + CI
@@ -51,16 +73,16 @@ node that serves something gets its own tunnel and its own token.
   validate.yml                       pre-commit over the whole repo, reusable via workflow_call
   deploy.yml                         sequential rolling deploy: vps00 -> vps01 -> vps02
 infra/
-  inventory.example.yaml              redacted node IP template (real IPs come from a variable)
+  inventory.example.yaml             redacted node IP template (real IPs come from a variable)
 stacks/
-  vps0N/docker-compose.yml            per-node cloudflared connector + any raw compose workloads
+  vps0N/docker-compose.yml           per-node cloudflared connector + any raw compose workloads
 scripts/
-  bootstrap-dokploy.sh                install Dokploy control plane (vps00 only)
-  provision-deploy-user.sh            create the CI deploy user, key-only, rsync installed
-  install-docker.sh                   Docker Engine on secondary nodes (no Dokploy)
-  harden-node.sh                      UFW, key-only sshd, Fail2Ban (aggressive sshd jail)
-  add-swap.sh                         swap file (these nodes ship with none)
-  cap-dokploy-resources.sh            memory-cap Dokploy's own control plane
+  bootstrap-dokploy.sh               install Dokploy control plane (vps00 only)
+  provision-deploy-user.sh           create the CI deploy user, key-only, rsync installed
+  install-docker.sh                  Docker Engine on secondary nodes (no Dokploy)
+  harden-node.sh                     UFW, key-only sshd, Fail2Ban (aggressive sshd jail)
+  add-swap.sh                        swap file (these nodes ship with none)
+  cap-dokploy-resources.sh           memory-cap Dokploy's own control plane
 ```
 
 All scripts are idempotent, POSIX `sh`, shellcheck-clean, and safe to
@@ -80,7 +102,7 @@ re-run — most matter again if a node ever gets rebuilt from scratch.
   a guarded `docker compose pull && up -d` — guarded because a stack with
   no services defined makes plain `compose pull` error out otherwise.
 
-## Security
+## 🧯 Security
 
 - UFW: deny-all-incoming except SSH, on every node.
 - sshd: key-only auth (`PasswordAuthentication no`, `UsePAM no`).
