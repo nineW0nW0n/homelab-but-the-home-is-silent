@@ -148,6 +148,15 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   the workflow file.
 - A `wc -l CLAUDE.md */CLAUDE.md */*/CLAUDE.md` budget check silently
   skips `.github/` — shell globs don't match dot-directories. Use `find`.
+- Biome 2.x's config schema moved fast: `files.ignore` → `files.includes`
+  with `!` negation, top-level `organizeImports` → `assist.actions.source`,
+  `linter.rules.recommended: true` → `linter.rules.preset: "recommended"`
+  (not `"none"` — `biome migrate --write` mis-converted `recommended: true`
+  to `preset: "none"`, which silently disables all lint rules; verify the
+  migrated `linter` block by hand, don't trust the tool output blindly).
+  Always resolve the exact Biome version being installed and pin
+  `biome.json`'s `$schema` and syntax to that version, not to whatever an
+  older doc/skill shows.
 
 ## Propagation protocol
 
