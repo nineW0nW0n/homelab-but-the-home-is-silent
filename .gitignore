@@ -36,3 +36,4 @@ __pycache__/
 # Node (worker/status/)
 node_modules/
 .wrangler/
+.dev.vars
