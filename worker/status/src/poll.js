@@ -62,7 +62,14 @@ async function pollNode(fetchFn, host, headers, previous) {
     // lastSeen carries forward the previous snapshot's lastSeen (last
     // time this node was confirmed up), or null on a node's first-ever
     // poll with no prior snapshot to carry forward from.
-    return { up: false, cpu: 0, mem: 0, disk: 0, lastPolled: now, lastSeen: previous?.lastSeen ?? null }
+    return {
+      up: false,
+      cpu: 0,
+      mem: 0,
+      disk: 0,
+      lastPolled: now,
+      lastSeen: previous?.lastSeen ?? null,
+    }
   }
 }
 

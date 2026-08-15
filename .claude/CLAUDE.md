@@ -89,9 +89,9 @@ Every change runs through this before you report it done.
 
 ```sh
 pre-commit run --all-files   # yamllint --strict, actionlint, gitleaks,
-                             # trailing-whitespace, large-file/private-key checks
+                             # trailing-whitespace, large-file/private-key
+                             # checks, biome ci . (local hook)
 shellcheck scripts/*.sh      # every script stays shellcheck-clean
-biome ci .                   # only if the repo has .js/.ts/.json/.jsonc/.css
 find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +
 ```
 
@@ -157,6 +157,13 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   Always resolve the exact Biome version being installed and pin
   `biome.json`'s `$schema` and syntax to that version, not to whatever an
   older doc/skill shows.
+- Rail 9 (Biome lints everything) existed in this file but was never
+  gate-enforced — no pre-commit hook, no validate.yml step. Fixed by
+  adding a `local` pre-commit hook (`language: node`,
+  `additional_dependencies: ["@biomejs/biome@2.5.8"]`, matching
+  `biome.json`'s `$schema`) so `pre-commit run --all-files` actually
+  runs it. A rail without a wired-in check is undetectable drift —
+  double-check new rails have an enforcement point, not just a sentence.
 
 ## Propagation protocol
 
