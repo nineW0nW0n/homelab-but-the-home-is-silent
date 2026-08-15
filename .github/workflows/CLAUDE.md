@@ -30,7 +30,9 @@ Secrets: `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
 `CLOUDFLARE_TUNNEL_TOKEN` (vps00), `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`
 (vps01), `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` (vps02),
 `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`, `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_CHAT_ID` (Netdata alerts, all 3 nodes).
+`TELEGRAM_CHAT_ID` (Netdata alerts, all 3 nodes), `CF_ACCESS_CLIENT_ID`,
+`CF_ACCESS_CLIENT_SECRET` (status Worker's Cloudflare Access service
+token, `deploy-worker.yml`).
 
 Variables (optional, default in workflow): `VPS0N_SSH_USER`,
 `VPS0N_SSH_PORT`.
