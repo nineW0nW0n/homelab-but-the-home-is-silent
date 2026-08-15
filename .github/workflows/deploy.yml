@@ -72,7 +72,8 @@ jobs:
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'cd /opt/stacks/vps00 && \
              if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
-               docker compose pull && docker compose up -d && docker image prune -f; \
+               docker compose pull && docker compose up -d && docker image prune -f && \
+               docker compose restart netdata; \
              else \
                echo "no services defined, skipping compose pull/up"; \
              fi'
@@ -128,7 +129,8 @@ jobs:
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'cd /opt/stacks/vps01 && \
              if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
-               docker compose pull && docker compose up -d && docker image prune -f; \
+               docker compose pull && docker compose up -d && docker image prune -f && \
+               docker compose restart netdata; \
              else \
                echo "no services defined, skipping compose pull/up"; \
              fi'
@@ -184,7 +186,8 @@ jobs:
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'cd /opt/stacks/vps02 && \
              if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
-               docker compose pull && docker compose up -d && docker image prune -f; \
+               docker compose pull && docker compose up -d && docker image prune -f && \
+               docker compose restart netdata; \
              else \
                echo "no services defined, skipping compose pull/up"; \
              fi'

@@ -20,8 +20,11 @@ Parent: ../../.claude/CLAUDE.md
    stack dir, `rsync --delete` the stack files, write that node's tunnel
    token into a remote `.env` (piped over SSH stdin, never a CLI arg,
    never committed), then `docker compose pull && up -d && image prune
-   -f` — guarded: if the stack has no services, skip pull/up instead of
-   erroring (see failure log).
+   -f && restart netdata` — guarded: if the stack has no services, skip
+   pull/up instead of erroring (see failure log). The trailing `restart
+   netdata` is needed because bind-mounted `netdata.conf` /
+   `health_alarm_notify.conf` content changes don't force a container
+   recreate under `docker compose up -d` on their own.
 
 ## Required GitHub Secrets / Variables
 
