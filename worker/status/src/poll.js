@@ -31,6 +31,10 @@ async function queryPercent(fetchFn, host, headers, chart, dimName) {
 async function pollNode(fetchFn, host, headers) {
   const now = new Date().toISOString()
   try {
+    // PROVISIONAL: these chart/dimension names are unverified guesses --
+    // never confirmed against a real Netdata instance. Confirm against
+    // a live node's /api/v1/charts response before or shortly after
+    // first production deploy (see worker/status/CLAUDE.md).
     const [idle, mem, disk] = await Promise.all([
       queryPercent(fetchFn, host, headers, 'system.cpu', 'idle'),
       queryPercent(fetchFn, host, headers, 'system.ram', 'used'),
