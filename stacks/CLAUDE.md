@@ -21,10 +21,20 @@ Current routes:
   Traefik, forwards to the app container per the Domain set in Dokploy's
   UI), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING` — its own dedicated
   tunnel, not shared with vps00's.
+- vps02's Netdata → `http://localhost:19999`, token
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` — its own dedicated tunnel,
+  vps02's first workload, not shared with vps00's or vps01's.
 
-`vps02` has no `cloudflared` service yet (`services: {}`) — no workload
-there. When it gets one: new tunnel, new token, own env var, same pattern
-as vps01. Do not point it at `CLOUDFLARE_TUNNEL_TOKEN` (vps00's).
+## Netdata
+
+Runs on all 3 nodes as a `netdata` service, `network_mode: host`,
+bound to `127.0.0.1:19999` (see each node's `netdata.conf`, `[web] bind
+to = 127.0.0.1` — not exposed beyond the host; reaching it publicly goes
+through that node's `cloudflared` route above). Config is split two ways:
+`netdata.conf` (committed, no secrets, identical across nodes) and
+`health_alarm_notify.conf` (generated at deploy time by a separate step,
+never committed — `docker compose config` doesn't need it to exist,
+`docker compose up` does).
 
 ## Why network_mode: host (rail 3)
 

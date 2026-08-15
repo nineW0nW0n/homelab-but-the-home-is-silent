@@ -28,7 +28,8 @@ Parent: ../../.claude/CLAUDE.md
 Secrets: `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
 `VPS02_HOST`, `DOKPLOY_API_TOKEN`, `CLOUDFLARE_API_TOKEN`,
 `CLOUDFLARE_TUNNEL_TOKEN` (vps00), `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`
-(vps01), `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`.
+(vps01), `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` (vps02),
+`CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`.
 
 Variables (optional, default in workflow): `VPS0N_SSH_USER`,
 `VPS0N_SSH_PORT`.
@@ -51,8 +52,7 @@ Variables (optional, default in workflow): `VPS0N_SSH_USER`,
   stack first.
 - deploy-vps02's "Write remote .env" step used to write
   `CLOUDFLARE_TUNNEL_TOKEN` — vps00's shared token — into vps02's `.env`,
-  even though vps02 has no service to consume it. Removed. When vps02
-  gets its first `cloudflared` workload, add a dedicated
-  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_*` secret and its own "Write remote
-  .env" step, same pattern as vps01 — never wire in vps00's token
-  (rail 2).
+  even though vps02 has no service to consume it. Removed at the time.
+  vps02 now has its first workload (Netdata) and its own dedicated
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` secret + "Write remote .env"
+  step, same pattern as vps01 — never wire in vps00's token (rail 2).

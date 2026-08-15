@@ -2,20 +2,45 @@
 # vps02 stack. Deployed by .github/workflows/deploy.yml to
 # /opt/stacks/vps02/docker-compose.yml.
 #
-# No cloudflared here. All 3 nodes shared one CLOUDFLARE_TUNNEL_TOKEN,
-# which made Cloudflare load-balance dokploy.maybeit.work requests across
-# every node's connector — vps01/vps02 have nothing on the origin port,
-# so ~2/3 of requests 502'd. A shared tunnel token only works if every
-# connector node serves the same origins.
+# Netdata is this node's first workload — it gets its own dedicated
+# tunnel + token (CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS), never vps00's
+# shared CLOUDFLARE_TUNNEL_TOKEN (see stacks/CLAUDE.md, rail 2 — a
+# shared token load-balances requests across nodes with different
+# origins and 502s).
 #
-# When vps02 gets a real workload with its own public hostname: either
-# create a separate tunnel + token for this node, or add its port here
-# and give it its own Public Hostname route pointing at this node
-# specifically (not the shared vps00 tunnel).
-#
-# deploy.yml's vps02 job writes no .env — there's no dedicated token to
-# write yet. Adding a cloudflared service here means adding a new
-# CLOUDFLARE_TUNNEL_TOKEN_VPS02_* secret + a "Write remote .env" step in
-# deploy.yml, same pattern as vps01. Do NOT reuse CLOUDFLARE_TUNNEL_TOKEN
-# (vps00's) — see stacks/CLAUDE.md failure log.
-services: {}
+# network_mode: host so localhost:19999 in the tunnel's Public Hostname
+# route resolves to this VPS's own Netdata, not the container's netns.
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2024.12.2
+    container_name: cloudflared-vps02
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS}
+
+  netdata:
+    image: netdata/netdata:v2.11.0
+    container_name: netdata
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./netdata.conf:/etc/netdata/netdata.conf:ro
+      - ./health_alarm_notify.conf:/etc/netdata/health_alarm_notify.conf:ro
+    mem_limit: 200m
+    mem_reservation: 100m
+
+volumes:
+  netdataconfig:
+  netdatalib:
+  netdatacache:
