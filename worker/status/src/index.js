@@ -12,7 +12,8 @@ export default {
   },
 
   async scheduled(_event, env) {
-    const snapshot = await pollAll(env)
+    const previousSnapshot = await env.STATUS_KV.get(SNAPSHOT_KEY, { type: 'json' })
+    const snapshot = await pollAll(env, fetch, previousSnapshot)
     await env.STATUS_KV.put(SNAPSHOT_KEY, JSON.stringify(snapshot))
   },
 }

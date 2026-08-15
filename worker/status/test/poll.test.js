@@ -40,7 +40,49 @@ test('pollAll marks a node down on fetch failure, without throwing', async () =>
   }
   const snapshot = await pollAll(env, fetchFn)
   assert.equal(snapshot.nodes.vps01.up, false)
+  assert.ok(snapshot.nodes.vps01.lastPolled)
+  // first-ever poll, no previous snapshot to carry a lastSeen forward from
+  assert.equal(snapshot.nodes.vps01.lastSeen, null)
   assert.equal(snapshot.dokploy.up, true)
+})
+
+test('pollAll carries the previous lastSeen forward when a node fails after being up before', async () => {
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: 'vps01-metrics.maybeit.work',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  const fetchFn = async () => {
+    throw new Error('network error')
+  }
+  const previousSnapshot = {
+    nodes: { vps01: { up: true, lastSeen: '2026-08-01T00:00:00.000Z' } },
+    dokploy: { up: false, lastSeen: '2026-07-30T00:00:00.000Z' },
+  }
+  const snapshot = await pollAll(env, fetchFn, previousSnapshot)
+  assert.equal(snapshot.nodes.vps01.up, false)
+  assert.equal(snapshot.nodes.vps01.lastSeen, '2026-08-01T00:00:00.000Z')
+  assert.notEqual(snapshot.nodes.vps01.lastPolled, snapshot.nodes.vps01.lastSeen)
+  assert.equal(snapshot.dokploy.up, false)
+  assert.equal(snapshot.dokploy.lastSeen, '2026-07-30T00:00:00.000Z')
+})
+
+test('pollAll fails a node closed when a Netdata dimension value is non-numeric', async () => {
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: 'vps00-metrics.maybeit.work',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  const fetchFn = async (url) => {
+    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, null])
+    if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
+    if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
+    return new Response('', { status: 200 })
+  }
+  const snapshot = await pollAll(env, fetchFn)
+  assert.equal(snapshot.nodes.vps00.up, false)
 })
 
 test('pollAll marks dokploy down on a 5xx response', async () => {

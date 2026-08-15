@@ -10,6 +10,13 @@ function bar(pct) {
   return `<div class="bar"><div class="bar-fill" style="width:${clamped}%"></div><span>${clamped.toFixed(1)}%</span></div>`
 }
 
+// lastSeen is "last time this node was confirmed up" -- null on a
+// node's first-ever poll if it's never come back up. "never" reads
+// better than the literal string "null".
+function seen(lastSeen) {
+  return lastSeen ?? 'never'
+}
+
 function renderShell(body) {
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>maybeit.work status</title>
@@ -37,7 +44,7 @@ export function renderStatusPage(snapshot) {
         <td>${bar(n.cpu)}</td>
         <td>${bar(n.mem)}</td>
         <td>${bar(n.disk)}</td>
-        <td>${n.lastSeen}</td>
+        <td>${seen(n.lastSeen)}</td>
       </tr>`,
     )
     .join('')
@@ -46,7 +53,7 @@ export function renderStatusPage(snapshot) {
     <tr>
       <td>${light(snapshot.dokploy.up)} dokploy</td>
       <td colspan="3">control plane</td>
-      <td>${snapshot.dokploy.lastSeen}</td>
+      <td>${seen(snapshot.dokploy.lastSeen)}</td>
     </tr>`
 
   return renderShell(`
