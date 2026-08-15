@@ -58,6 +58,15 @@ jobs:
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps00/.env'
 
+      - name: Write remote health_alarm_notify.conf
+        run: |
+          sed \
+            -e "s/__TELEGRAM_BOT_TOKEN__/${{ secrets.TELEGRAM_BOT_TOKEN }}/" \
+            -e "s/__TELEGRAM_CHAT_ID__/${{ secrets.TELEGRAM_CHAT_ID }}/" \
+            stacks/vps00/health_alarm_notify.conf.template | \
+            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps00/health_alarm_notify.conf'
+
       - name: Deploy vps00
         run: |
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
@@ -105,6 +114,15 @@ jobs:
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps01/.env'
 
+      - name: Write remote health_alarm_notify.conf
+        run: |
+          sed \
+            -e "s/__TELEGRAM_BOT_TOKEN__/${{ secrets.TELEGRAM_BOT_TOKEN }}/" \
+            -e "s/__TELEGRAM_CHAT_ID__/${{ secrets.TELEGRAM_CHAT_ID }}/" \
+            stacks/vps01/health_alarm_notify.conf.template | \
+            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps01/health_alarm_notify.conf'
+
       - name: Deploy vps01
         run: |
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
@@ -151,6 +169,15 @@ jobs:
           printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS }}" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps02/.env'
+
+      - name: Write remote health_alarm_notify.conf
+        run: |
+          sed \
+            -e "s/__TELEGRAM_BOT_TOKEN__/${{ secrets.TELEGRAM_BOT_TOKEN }}/" \
+            -e "s/__TELEGRAM_CHAT_ID__/${{ secrets.TELEGRAM_CHAT_ID }}/" \
+            stacks/vps02/health_alarm_notify.conf.template | \
+            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps02/health_alarm_notify.conf'
 
       - name: Deploy vps02
         run: |
