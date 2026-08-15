@@ -43,6 +43,18 @@ Bridge mode puts `cloudflared` in its own network namespace, so
 container, not the VPS itself — the origin app is unreachable, 502.
 `network_mode: host` makes `localhost` mean the node.
 
+## TODO — alert thresholds not tightened (spec/implementation gap)
+
+The design spec calls for tightening mem/disk warn thresholds (~80%/90%)
+below Netdata's defaults (~90%/98%) since a 2GB node fills fast. That
+was never implemented — `netdata.conf`/`health_alarm_notify.conf` ship
+Netdata's stock health config, no custom threshold overrides. No spec
+amendment recorded the deviation either. Deferred as a follow-up, not
+this branch — writing custom Netdata health config files without a real
+node to verify against is exactly the unverified-guess risk this repo
+already avoids elsewhere (see `worker/status/CLAUDE.md`'s Outstanding
+manual steps).
+
 ## Why one token per node (rail 2)
 
 Cloudflare load-balances a hostname's requests across *every* connector
