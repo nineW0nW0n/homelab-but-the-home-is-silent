@@ -37,3 +37,7 @@ __pycache__/
 node_modules/
 .wrangler/
 .dev.vars
+
+# Claude Code local permission state -- machine-specific, never shared.
+# Also keeps Biome from linting a file it does not own (vcs.useIgnoreFile).
+.claude/settings.local.json

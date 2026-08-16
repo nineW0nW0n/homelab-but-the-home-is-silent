@@ -87,6 +87,17 @@ protection working, not a stuck job. The setting lives in GitHub
 (Settings → Environments → production), not in this repo, so it is the
 one control here that a `git revert` cannot restore.
 
+Same category: a repository **ruleset** on `main` blocks deletion and
+force-pushes (rules `deletion` + `non_fast_forward`, no bypass actors).
+Also GitHub-side, also not restorable by revert. A rejected push reading
+"push declined due to repository rule violations" is that rule doing its
+job. To rewrite history deliberately, disable the ruleset, rewrite,
+re-enable — and expect every SHA in `docs/` to dangle afterwards.
+
+Note all three workflow tokens are `permissions: contents: read`, so no
+workflow can push to `main` at all. These rules guard against human
+error, not against CI.
+
 ## Failure log
 
 - A stack with `services: {}` (e.g. vps02, no workload yet) makes plain

@@ -23,7 +23,11 @@ belongs in `.claude/skills/`, not here.
   open between them (verified 2026-08-16). All three run `cloudflared`,
   Netdata, and a Dokploy-installed `dokploy-traefik`.
 - **When**: work in progress. Provisioning/hardening done and CI-
-  deployable; first workload still being shaken out. Expect force-pushes.
+  deployable; first workload live. `main` is protected against deletion
+  and force-pushes by a GitHub ruleset (verified by attempting a rewind
+  and being rejected), so a history rewrite is now a deliberate act:
+  disable the ruleset, rewrite, re-enable. Don't assume you can
+  force-push.
 - **Why**: learn GitOps end to end on real, cheap, constrained hardware.
   The constraints are the point, not accidents to design around.
 - **How**: infra under `infra/`, workloads under `stacks/`, push to
