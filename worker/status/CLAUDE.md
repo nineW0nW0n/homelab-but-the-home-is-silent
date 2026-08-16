@@ -2,9 +2,10 @@ Parent: ../../.claude/CLAUDE.md
 
 # worker/status/ — maybeit.work status dashboard (Cloudflare Worker)
 
-Serves the status page at the `maybeit.work` apex and polls node health
-on a Cron Trigger. Deliberately **not** deployed via Dokploy/VPS — see
-the design spec for why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`).
+Serves the status page at the `maybeit.work` apex. Polls node health
+fresh on every page load — no Cron Trigger, see failure log for why.
+Deliberately **not** deployed via Dokploy/VPS — see the design spec for
+why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`).
 
 ## Layout
 
@@ -14,18 +15,14 @@ the design spec for why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-
 - `src/poll.js` — polls each node's Netdata API (through the
   Access-gated tunnel route) + a plain Dokploy reachability check,
   returns a status snapshot. `fetch` is injectable for testing.
-- `src/index.js` — wires `fetch` (render from KV, plus `/__poll` and
-  `/debug`) and `scheduled` (self-fetch `/__poll`) handlers together.
-  `scheduled` doesn't poll directly -- see failure log below for why.
+- `src/index.js` — the `fetch` handler polls fresh, writes the snapshot
+  to KV, then renders it (or returns it raw at `/debug`). No
+  `scheduled` handler — deliberately, see failure log.
 
 ## Local dev
 
-`npm install`, `npx wrangler dev`, then
-`curl "http://localhost:8787/__poll"` to manually fire the poll locally
-before hitting `http://localhost:8787/`. Don't use
-`--test-scheduled`/`/__scheduled` for this -- `scheduled()` self-fetches
-the *production* `maybeit.work/__poll` (see failure log), so exercising
-it locally would poll and write to real production KV.
+`npm install`, `npx wrangler dev`, then hit `http://localhost:8787/` —
+every load polls live, no separate step needed.
 
 ## Secrets
 
@@ -43,17 +40,34 @@ Set via `wrangler secret put`, never in this directory.
   does report one, see `queryCpuBusyPercent`). The root filesystem
   chart id keeps the literal `/` (`disk_space./`), not sanitized to `_`
   as guessed. `system.ram`/`used` was correct as guessed.
-- Even with a confirmed-working `CF_ACCESS_CLIENT_ID`/`SECRET` (rotated
-  and verified via direct curl and via a `fetch()`-handler request),
-  `scheduled()` calling `pollAll` directly still got a 403 from
-  Cloudflare Access on every Netdata call, every cron tick, no
-  exceptions. The identical `pollAll` call succeeds every time when run
-  inside a `fetch()` invocation instead. Root cause not confirmed
-  (Cloudflare-side, not something visible from this repo) -- Cron
-  Trigger subrequests to this account's own Access-protected apps
-  appear to hit Access differently than an HTTP-triggered subrequest.
-  Workaround: `scheduled()` only does `fetch('https://maybeit.work/__poll')`
-  (a self-fetch), and the real poll+KV-write logic lives behind that
-  route instead, so it always runs in a `fetch()` context. If Cloudflare
-  ever fixes the underlying behavior, `scheduled()` could poll directly
-  again -- not urgent, the self-fetch has no real downside.
+- Cloudflare Cron Triggers can't reliably poll this account's own
+  Access-protected Netdata apps. Even with a confirmed-working
+  `CF_ACCESS_CLIENT_ID`/`SECRET`, `scheduled()` calling `pollAll`
+  directly got a 403 from Access on every Netdata call, every tick, no
+  exceptions — while the identical call succeeded from a real
+  HTTP-triggered `fetch()` invocation every time. First workaround
+  tried: have `scheduled()` self-fetch `/__poll` so the real poll ran
+  inside a nested `fetch()` invocation instead. **That didn't work
+  either** — still 403'd at the next real cron tick, even though
+  manually hitting `/__poll` from outside Cloudflare (plain curl)
+  worked every time. So it's not "scheduled vs fetch handler type",
+  it's that anything in a request chain rooted at a Cron Trigger gets
+  hit, no matter how many fetch() hops deep. Root cause not confirmed
+  (Cloudflare-side, nothing visible from this repo to dig further).
+  Current fix: no Cron Trigger at all — `wrangler.toml` has no
+  `[triggers]` block, `index.js` has no `scheduled()` handler, and the
+  `fetch()` handler polls fresh on every page load instead of reading a
+  cached KV snapshot. Trade-off accepted deliberately: page load is
+  slower (waits on live Netdata + Dokploy calls) in exchange for
+  actually working. KV write stays, only to carry `lastSeen` forward
+  across visits when a node's down at the current one.
+- Separately, vps02's Cloudflare Tunnel showed `Inactive` / 0 replicas
+  in the dashboard — cloudflared on vps02 had never once connected,
+  Netdata calls to it got a 530 (Cloudflare-level, not Access). Fixed
+  by rotating the tunnel token (Cloudflare dashboard → Tunnels →
+  vps02-metrics → Rotate token) and updating
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`, then re-running `deploy.yml`
+  to push it. Confirmed healthy (1 active replica) after. Root cause of
+  the original bad token unclear — likely a bad paste when it was first
+  set (the value was never visible to the assistant, added directly by
+  a human via the dashboard in an earlier session).

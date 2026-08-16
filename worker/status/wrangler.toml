@@ -6,9 +6,6 @@ routes = [
   { pattern = "maybeit.work", custom_domain = true }
 ]
 
-[triggers]
-crons = ["*/5 * * * *"]
-
 [[kv_namespaces]]
 binding = "STATUS_KV"
 id = "8fbd60e3276e4a40a63609f9ed56e1fd"
