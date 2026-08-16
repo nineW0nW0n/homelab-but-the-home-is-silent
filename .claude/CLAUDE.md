@@ -174,6 +174,13 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   `biome.json`'s `$schema`) so `pre-commit run --all-files` actually
   runs it. A rail without a wired-in check is undetectable drift —
   double-check new rails have an enforcement point, not just a sentence.
+- A `git filter-repo` rewrite invalidates every commit SHA already
+  written down — handoffs, plans, specs, and the rewrite's own commit
+  message. Before force-pushing a rewrite, grep `docs/` for short SHAs
+  and plan to annotate them; cite commits by *message* in documents
+  meant to outlive a rewrite. Found the hard way: the security handoff
+  cited `2e8e44d` for its own scrub commit, which the rewrite had
+  already turned into `87ff87b`.
 - `pre-commit` was configured but never installed as a git hook (no
   `.git/hooks/pre-commit`), so `git commit` ran no checks locally — only
   `validate.yml` caught anything, after a push. Run `pre-commit install`

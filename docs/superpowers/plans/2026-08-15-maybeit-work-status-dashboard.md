@@ -1,5 +1,12 @@
 # maybeit.work Status Dashboard Implementation Plan
 
+> **Commit SHAs in this document are dangling (2026-08-16).** History was
+> rewritten with `git filter-repo` to remove real node IPs and
+> force-pushed, so every SHA recorded before that rewrite no longer
+> resolves. Search by commit *message* instead. The work itself is
+> unaffected; only the identifiers moved.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a status page at `maybeit.work` showing red/green health and

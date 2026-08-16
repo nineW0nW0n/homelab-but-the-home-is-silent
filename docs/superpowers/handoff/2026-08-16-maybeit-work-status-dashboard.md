@@ -1,5 +1,12 @@
 # Handoff — maybeit.work status dashboard
 
+> **Commit SHAs in this document are dangling (2026-08-16).** History was
+> rewritten with `git filter-repo` to remove real node IPs and
+> force-pushed, so every SHA recorded before that rewrite no longer
+> resolves. Search by commit *message* instead. The work itself is
+> unaffected; only the identifiers moved.
+
+
 **State as of 2026-08-16:** feature merged locally to `main` (commit
 `29cbfb8`), **not pushed**. Nothing is live yet — no Netdata container
 running anywhere, Worker not deployed, KV namespace exists but empty.

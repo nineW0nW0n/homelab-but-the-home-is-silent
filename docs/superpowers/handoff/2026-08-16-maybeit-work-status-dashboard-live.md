@@ -1,5 +1,12 @@
 # Handoff — maybeit.work status dashboard, post-push
 
+> **Commit SHAs in this document are dangling (2026-08-16).** History was
+> rewritten with `git filter-repo` to remove real node IPs and
+> force-pushed, so every SHA recorded before that rewrite no longer
+> resolves. Search by commit *message* instead. The work itself is
+> unaffected; only the identifiers moved.
+
+
 **State as of 2026-08-16 (later same day):** `main` pushed to origin
 (`1da5dec`, was `e25dc68..1da5dec`, 27 commits, plus several more this
 session fixing what the push surfaced). **The dashboard is fully live**

@@ -1,5 +1,20 @@
 # `maybeit.work` status dashboard — design
 
+> **Superseded in three places (2026-08-16).** This is a point-in-time
+> design record; it is annotated rather than rewritten so the reasoning
+> stays readable. What shipped differs here:
+>
+> - **No Cron Trigger.** Anything in a request chain rooted at a Cron
+>   Trigger gets a 403 from Access when calling this account's own
+>   Access-protected apps, even with a working service token. The Worker
+>   polls on request instead, cached for 30s. Sections 69, 124-125 and
+>   136 below describe the abandoned design — see
+>   `worker/status/CLAUDE.md`'s failure log for what was tried.
+> - **vps02 is not idle.** Line 34's "no workload" was true when written;
+>   it now runs Netdata, `cloudflared` and a Dokploy-installed Traefik.
+> - **`/debug` is gated.** It requires an `x-debug-key` header matched
+>   against a Worker secret and 404s otherwise.
+
 > **Implementation update (during execution, 2026-08-15):** Netdata is
 > deployed as a **Docker container via `stacks/<node>/` + `deploy.yml`**
 > (GitOps, matching this repo's stated deploy model), not the ad-hoc SSH

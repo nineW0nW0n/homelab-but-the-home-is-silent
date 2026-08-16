@@ -46,7 +46,7 @@ drop them because they are old.
 |---|---|---|---|
 | 1 | C1 Access on Dokploy | done, verified | `6e96d1a` |
 | 2 | C2 Docker bypasses UFW | done, all 3 nodes rebooted | `ed3a43f` |
-| 3 | H1 real IPs | done; GitHub GC request outstanding (Ex) | `2e8e44d`, `d63b331` |
+| 3 | H1 real IPs | done; GitHub GC request outstanding (Ex) | `87ff87b`, `d63b331` |
 | 4 | H3 docker.sock in Netdata | done, verified on all 3 nodes | `e181556` |
 | 5 | H2 SSH key blast radius | done, both levers, old key revoked | `b39a6f4` |
 | 6 | M1 secrets in `run:` | done, deploy green, Telegram verified | `63ee827` |
