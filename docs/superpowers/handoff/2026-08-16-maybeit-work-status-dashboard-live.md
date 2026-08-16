@@ -2,9 +2,9 @@
 
 **State as of 2026-08-16 (later same day):** `main` pushed to origin
 (`1da5dec`, was `e25dc68..1da5dec`, 27 commits). Netdata is **live on
-all 3 nodes**. The Worker deploy **partially failed** — code is
-uploaded but not routed to `maybeit.work` yet. See "Push results"
-below.
+all 3 nodes**, and the Worker is **live and routed to `maybeit.work`**
+— both blockers below were hit and fixed this session. See "Push
+results" for what broke and how it was fixed.
 
 This supersedes `2026-08-16-maybeit-work-status-dashboard.md` (the
 pre-push handoff) for "what's next" purposes; keep that file too, it
@@ -31,63 +31,71 @@ Run IDs: `deploy` 31919749826, `Deploy Worker` 31919749732, `validate`
 - [x] `validate.yml`: **success**.
 - [x] `deploy.yml`: **success**. Netdata containers are live on
       vps00-02, sequential rollout completed clean.
-- [ ] `Deploy Worker`: **failed**, but partially landed — read on.
+- [x] `Deploy Worker`: **success**, after 2 rounds of fixing
+      infra gaps this session (see below). Worker is live and routed to
+      `maybeit.work`.
 
-### Deploy Worker failure — root cause and fix
+### Deploy Worker — two blockers hit and fixed this session
 
-The Worker code itself deployed fine: `wrangler deploy` uploaded
-`maybeit-status`, bindings are live (`env.STATUS_KV`,
-`env.NODE_HOSTS`, `env.DOKPLOY_HOST`), secrets
-(`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`) were created. It
-failed on the **next** step, attaching the route:
-
+**Blocker 1 — route attach failed.** First run: `wrangler deploy`
+uploaded the Worker fine (bindings live: `env.STATUS_KV`,
+`env.NODE_HOSTS`, `env.DOKPLOY_HOST`; secrets
+`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` created), but failed
+attaching the route:
 ```
 ✘ A request to the Cloudflare API (/zones/9a13fac38c7078e576ed3260f9df9591/workers/routes) failed.
   Authentication error [code: 10000]
 ```
+Cause: `CLOUDFLARE_API_TOKEN` had account-level Worker-deploy
+permission but not `Zone > Workers Routes > Edit` scoped to
+`maybeit.work`. Fixed via Cloudflare dashboard (browser automation,
+with Ex's go-ahead): added a policy to the token
+(`falling-resonance-af51`) — Specified Domain `maybeit.work` →
+Developer Platform → Workers Routes → Edit.
 
-Cause: `CLOUDFLARE_API_TOKEN` has account-level Worker-deploy
-permission but not `Zone > Workers Routes > Edit` scoped to the
-`maybeit.work` zone. **This is why the site still won't route to the
-Worker** — it exists at `maybeit-status.<subdomain>.workers.dev` but
-`maybeit.work` itself isn't wired to it.
+**Blocker 2 — no workers.dev subdomain.** Re-ran, route attach
+succeeded this time, but the cron-trigger step then failed:
+```
+- A request to the Cloudflare API (/accounts/***/workers/scripts/maybeit-status/schedules) failed.
+  - You need a workers.dev subdomain in order to proceed. [code: 10063]
+```
+Cause: the account had never opened the Workers dashboard, so no
+`workers.dev` subdomain existed yet (first-visit auto-provisions one).
+Fixed by visiting `dash.cloudflare.com/<account>/workers-and-pages`
+once in browser — subdomain `abcollado-28.workers.dev` was created
+automatically. Re-ran, **green**.
 
-Fix (needs Ex, credential change, not done by the assistant): in the
-Cloudflare dashboard, My Profile → API Tokens → edit the token used
-for `CLOUDFLARE_API_TOKEN` → add `Zone > Workers Routes > Edit` scoped
-to `maybeit.work` → Save. Then re-run just the Worker deploy:
-```
-gh run rerun 31919749732 --repo nineW0nW0n/homelab-but-the-home-is-silent
-```
-(or push a trivial change under `worker/status/` to retrigger
-path-scoped). Confirm green before moving to step 2 below.
+If this ever needs redoing on a fresh Cloudflare account: visit the
+Workers & Pages dashboard page once before the first `wrangler deploy`
+that includes a cron trigger, and make sure the deploy token has
+`Zone > Workers Routes > Edit` for every zone it needs to route.
 
 ## Not yet done — next steps, in order
 
-1. **Fix the `CLOUDFLARE_API_TOKEN` permission and get `Deploy Worker`
-   green** (see above). Blocks everything else — `maybeit.work` has no
-   Worker attached until this lands.
+1. ~~Verify `poll.js`'s Netdata dimension names against a real
+   node~~ — **done this session.** Checked vps00's live
+   `/api/v1/charts` via browser (Cloudflare Access SSO, no service
+   token needed). Two of three were wrong:
+   - `system.cpu` has **no `idle` dimension** in this deployment's
+     config — only busy-state ones (`user`, `system`, `nice`,
+     `iowait`, `irq`, `softirq`, `steal`, `guest`, `guest_nice`), which
+     already sum to the busy percentage.
+   - Root disk chart id is `disk_space./` (literal `/`), not
+     `disk_space._` as guessed.
+   - `system.ram`/`used` was correct as guessed.
 
-2. **Verify `poll.js`'s Netdata dimension names against a real node**
-   (only once `deploy.yml` succeeded and Netdata containers are
-   actually up):
-   ```
-   curl -H "CF-Access-Client-Id: <id>" \
-        -H "CF-Access-Client-Secret: <secret>" \
-        https://vps00-metrics.maybeit.work/api/v1/charts | jq
-   ```
-   Confirm chart/dimension ids for CPU idle %, RAM used, and root disk
-   usage match what `worker/status/src/poll.js`'s `pollNode` hardcodes:
-   `system.cpu`/`idle`, `system.ram`/`used`, `disk_space._`/`used`. If
-   any differ, edit `poll.js`, re-run `node --test` in
-   `worker/status/`, commit, push (path-scoped — only re-triggers
-   `deploy-worker.yml`, not the full node deploy).
+   Fixed in `poll.js` (`d8a8c39`): CPU now sums the busy-state
+   dimensions, with a fallback to `100 - idle` if a Netdata config does
+   report one. Disk chart id corrected. New test covers the no-`idle`
+   shape. `node --test` in `worker/status/`: 10/10 pass. Pushed —
+   watch `deploy-worker.yml` for this path-scoped run before trusting
+   the live page's numbers.
 
-3. **Confirm the page renders live data.** Wait one cron tick (~5 min)
+2. **Confirm the page renders live data.** Wait one cron tick (~5 min)
    after `Deploy Worker` succeeded, then load `https://maybeit.work` —
    expect the status table, not "no data yet."
 
-4. **Sanity-check Telegram alerting end-to-end.** The bot
+3. **Sanity-check Telegram alerting end-to-end.** The bot
    (`@maybeitwork_status_bot`) exists and the chat id is your personal
    account (`6637564124`, from `Ash Collado`'s Telegram). Default
    Netdata alert thresholds are still in effect (tightening was scoped
