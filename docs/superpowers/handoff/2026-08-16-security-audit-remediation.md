@@ -32,8 +32,14 @@ drop them because they are old.
       Note this removes the objects from GitHub only — anything that scraped
       or mirrored the repo while it was public is beyond reach, which is why
       C1 and C2 were the actual fix.
-- [ ] **Dokploy account hygiene (from C1) — rescoped, the original ask is
-      impossible.** Dokploy v0.29.14 (the version running) has no 2FA and no
+- [x] **Dokploy account hygiene (from C1) — CLOSED 2026-08-16.** Password
+      rotated, host-level persistence check clean, and Ex confirmed no
+      unrecognised API tokens or keys in the Dokploy UI. The exposure window
+      leaves no residual action; what remains is preventive and already in
+      place (Access in front, direct-IP path firewalled). Original ask was
+      rescoped because the version has neither control — detail kept below.
+
+      **Rescoped, the original ask was impossible.** Dokploy v0.29.14 (the version running) has no 2FA and no
       login/audit log, or they are license-gated. Confirmed empirically as well
       as from the docs: 30 days of `docker service logs dokploy` is 38 lines
       total, zero of them auth-related, and the Swarm task was recreated during
