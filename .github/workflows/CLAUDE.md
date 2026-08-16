@@ -81,6 +81,12 @@ The real controls are: one key per node (blast radius), and required
 reviewers on the `production` environment (a human approves before any
 deploy runs, which is what stops an automated exfiltration path).
 
+Both are in place as of 2026-08-16. **Every deploy now waits for Ex to
+approve it** in the Actions tab — a run sitting at "Waiting" is the
+protection working, not a stuck job. The setting lives in GitHub
+(Settings → Environments → production), not in this repo, so it is the
+one control here that a `git revert` cannot restore.
+
 ## Failure log
 
 - A stack with `services: {}` (e.g. vps02, no workload yet) makes plain

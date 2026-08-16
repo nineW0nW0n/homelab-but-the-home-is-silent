@@ -35,6 +35,11 @@ drop them because they are old.
       publicly reachable for an unknown period, so assume a scanner found it.
       No firewall or Access change can retroactively fix a credential that was
       already used.
+- [ ] **Create the `DEBUG_KEY` repo secret (L1).** `deploy-worker.yml` now
+      pushes it to the Worker, and `wrangler-action` refuses to upload an empty
+      secret, so **the Worker deploy fails until this exists** and `/debug`
+      stays public in the meantime. One command, value never printed:
+      `openssl rand -hex 32 > ~/.maybeit-debug-key && chmod 600 ~/.maybeit-debug-key && gh secret set DEBUG_KEY < ~/.maybeit-debug-key && gh workflow run deploy-worker.yml`
 
 ## Progress — 2026-08-16
 
@@ -44,12 +49,12 @@ drop them because they are old.
 | 2 | C2 Docker bypasses UFW | done, all 3 nodes rebooted | `ed3a43f` |
 | 3 | H1 real IPs | done; GitHub GC request outstanding (Ex) | `2e8e44d`, `d63b331` |
 | 4 | H3 docker.sock in Netdata | done, verified on all 3 nodes | `e181556` |
-| 5 | H2 SSH key blast radius | **blocked — needs Ex's decision** | — |
+| 5 | H2 SSH key blast radius | done, both levers, old key revoked | `b39a6f4` |
 | 6 | M1 secrets in `run:` | done, deploy green, Telegram verified | `63ee827` |
 | 7 | M2 Worker polls per request | done, verified 50 requests → 0 polls | `8165384` |
 | 8 | M3 actions pinned by tag | done, Dependabot on | `bc46ba6` |
 | 9 | M4 `curl \| sh` bootstrap | done (apt path untested on a fresh node) | `45f18f1` |
-| 10 | L1 public `/debug` | **blocked — needs Ex's decision** | — |
+| 10 | L1 public `/debug` | code done; **blocked on Ex creating `DEBUG_KEY`** | `83d10ac` |
 | 11 | L2 security headers | done, CSP verified clean in a browser | `43367b0` |
 
 ## Rules for the executor
