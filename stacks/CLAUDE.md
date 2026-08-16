@@ -96,6 +96,14 @@ sends some requests to a node with nothing listening on that origin port.
 
 ## Failure log
 
+- Dokploy v0.29.14 has **no 2FA and no login/audit log** (absent or
+  license-gated). Verified empirically, not just from docs: 30 days of
+  `docker service logs dokploy` is 38 lines with zero auth events. Don't
+  plan a security control around either existing. Authentication and the
+  access log both live in Cloudflare Access instead (Zero Trust → Logs →
+  Access), which is the better placement anyway — it records attempts
+  that never reach the origin.
+
 - vps00 and vps01 once shared one `CLOUDFLARE_TUNNEL_TOKEN`. Cloudflare
   load-balanced `dokploy.maybeit.work` across both connectors; vps01 had
   nothing on that origin port, so ~2/3 of requests 502'd. Fixed by giving

@@ -32,14 +32,33 @@ drop them because they are old.
       Note this removes the objects from GitHub only — anything that scraped
       or mirrored the repo while it was public is beyond reach, which is why
       C1 and C2 were the actual fix.
-- [ ] **Dokploy account hygiene (from C1).** Password confirmed adequate by Ex
-      (2026-08-16: random 32 chars, mixed case, alphanumeric plus a special
-      character) — that part is closed. **Still open:** enable 2FA if that
-      Dokploy version supports it, and check the login/audit log for sessions
-      Ex does not recognise. The UI was publicly reachable for an unknown
-      period, so assume a scanner found it; password strength does not help
-      against a credential that was already captured, which is what the log
-      review is for.
+- [ ] **Dokploy account hygiene (from C1) — rescoped, the original ask is
+      impossible.** Dokploy v0.29.14 (the version running) has no 2FA and no
+      login/audit log, or they are license-gated. Confirmed empirically as well
+      as from the docs: 30 days of `docker service logs dokploy` is 38 lines
+      total, zero of them auth-related, and the Swarm task was recreated during
+      today's reboot anyway. **There is no way to determine whether anyone
+      logged in during the exposed window.** Do not keep looking for a log; it
+      does not exist.
+
+      What replaces it:
+      - **Rotate the admin password.** Not because the current one is weak — it
+        is not — but because rotation is the only control that helps against a
+        credential that may already have been captured, and unknowability is
+        exactly the case rotation exists for.
+      - **Check for persistence, which *is* visible without an audit log:**
+        unexpected users under Settings → Users, unrecognised API tokens under
+        Settings → Profile → API Tokens, and any project/app or SSH key in the
+        UI that Ex did not create. That is what an intruder would leave behind,
+        and it survives a password change — so do this *before* rotating, then
+        again after.
+      - **MFA moves to Cloudflare Access**, which is strictly better than
+        Dokploy 2FA would have been: it authenticates before the request ever
+        reaches Dokploy. Whatever identity method the Access policy uses is now
+        the real second factor, so that account is the one that needs 2FA on it.
+      - **The login log is now Access's**, Zero Trust → Logs → Access. It
+        records every allow and deny per application, including attempts that
+        never reach the origin.
 - [x] ~~Create the `DEBUG_KEY` repo secret (L1).~~ Done 2026-08-16. The value
       lives at `~/.maybeit-debug-key` on Ex's machine (mode 600); send it as the
       `x-debug-key` header. Verified: no header 404, wrong key 404, correct key
