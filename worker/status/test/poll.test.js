@@ -85,6 +85,28 @@ test('pollAll fails a node closed when a Netdata dimension value is non-numeric'
   assert.equal(snapshot.nodes.vps00.up, false)
 })
 
+test('pollAll sums busy-state dimensions when Netdata reports no idle dimension', async () => {
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: 'vps00-metrics.maybeit.work',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  const fetchFn = async (url) => {
+    // Shape confirmed against a live vps00 node: no "idle" dimension,
+    // just the busy-state ones summing to the busy percentage.
+    if (url.includes('system.cpu')) {
+      return jsonResponse(['time', 'user', 'system', 'iowait'], [10, 5, 2])
+    }
+    if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
+    if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
+    return new Response('', { status: 200 })
+  }
+  const snapshot = await pollAll(env, fetchFn)
+  assert.equal(snapshot.nodes.vps00.up, true)
+  assert.equal(snapshot.nodes.vps00.cpu, 17)
+})
+
 test('pollAll marks dokploy down on a 5xx response', async () => {
   const env = {
     CF_ACCESS_CLIENT_ID: 'id',

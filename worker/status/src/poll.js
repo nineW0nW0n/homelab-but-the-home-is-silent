@@ -37,21 +37,47 @@ async function queryPercent(fetchFn, host, headers, chart, dimName) {
   return value
 }
 
+// Confirmed against a live vps00 node's /api/v1/charts (2026-08-16):
+// system.cpu has no "idle" dimension in this deployment's Netdata
+// config -- only the busy-state dimensions (user/system/nice/iowait/
+// irq/softirq/steal/guest/guest_nice), which already sum to the busy
+// percentage. Other Netdata configs do report "idle" explicitly, so
+// handle both rather than hardcoding one shape.
+async function queryCpuBusyPercent(fetchFn, host, headers, chart) {
+  const url = `https://${host}/api/v1/data?chart=${encodeURIComponent(chart)}&after=-60&points=1&options=percentage`
+  const res = await fetchWithTimeout(fetchFn, url, { headers })
+  if (!res.ok) throw new Error(`netdata ${chart} status ${res.status}`)
+  const { labels, data } = await res.json()
+  const row = data[0]
+  if (!row) throw new Error(`netdata ${chart} no data`)
+  const idleIdx = labels.indexOf('idle')
+  if (idleIdx >= 0) {
+    const idleValue = row[idleIdx]
+    if (typeof idleValue !== 'number' || Number.isNaN(idleValue)) {
+      throw new Error(`netdata ${chart} dimension idle not numeric`)
+    }
+    return 100 - idleValue
+  }
+  const values = row.slice(1) // drop the leading timestamp column
+  if (values.length === 0 || values.some((v) => typeof v !== 'number' || Number.isNaN(v))) {
+    throw new Error(`netdata ${chart} missing/invalid dimension values`)
+  }
+  return values.reduce((sum, v) => sum + v, 0)
+}
+
 async function pollNode(fetchFn, host, headers, previous) {
   const now = new Date().toISOString()
   try {
-    // PROVISIONAL: these chart/dimension names are unverified guesses --
-    // never confirmed against a real Netdata instance. Confirm against
-    // a live node's /api/v1/charts response before or shortly after
-    // first production deploy (see worker/status/CLAUDE.md).
-    const [idle, mem, disk] = await Promise.all([
-      queryPercent(fetchFn, host, headers, 'system.cpu', 'idle'),
+    const [cpuBusy, mem, disk] = await Promise.all([
+      queryCpuBusyPercent(fetchFn, host, headers, 'system.cpu'),
       queryPercent(fetchFn, host, headers, 'system.ram', 'used'),
-      queryPercent(fetchFn, host, headers, 'disk_space._', 'used'),
+      // Root filesystem chart id keeps the literal "/" -- confirmed
+      // against a live vps00 node, not sanitized to "_" as guessed.
+      queryPercent(fetchFn, host, headers, 'disk_space./', 'used'),
     ])
     return {
       up: true,
-      cpu: round1(100 - idle),
+      cpu: round1(cpuBusy),
       mem: round1(mem),
       disk: round1(disk),
       lastPolled: now,
