@@ -42,16 +42,25 @@ drop them because they are old.
       does not exist.
 
       What replaces it:
-      - **Rotate the admin password.** Not because the current one is weak — it
-        is not — but because rotation is the only control that helps against a
-        credential that may already have been captured, and unknowability is
-        exactly the case rotation exists for.
-      - **Check for persistence, which *is* visible without an audit log:**
-        unexpected users under Settings → Users, unrecognised API tokens under
-        Settings → Profile → API Tokens, and any project/app or SSH key in the
-        UI that Ex did not create. That is what an intruder would leave behind,
-        and it survives a password change — so do this *before* rotating, then
-        again after.
+      - [x] **Rotate the admin password.** Done by Ex 2026-08-16. Note what
+        rotation does *not* invalidate: existing Dokploy API tokens, and
+        possibly existing sessions.
+      - [x] **Host-level persistence check — done 2026-08-16, clean.** Every
+        container and Swarm service across all three nodes is accounted for
+        (`cloudflared`, Netdata, `dokploy-traefik` everywhere; `dokploy` +
+        `dokploy-postgres` on vps00; the booking app on vps01). No unexpected
+        users with a login shell, no added `authorized_keys` entries beyond
+        Ex's key, Dokploy's own credential and the per-node CI keys, no root
+        crontab, no `/etc/cron.d` entries beyond Debian's `e2scrub_all`, and no
+        unexplained listener. Absence of artifacts is not proof of absence of
+        compromise, but this is the realistic check for a panel found by a
+        scanner.
+      - [ ] **Dokploy-internal persistence check — only Ex can see this.** The
+        UI state is not visible over SSH: unexpected users under Settings →
+        Users, unrecognised API tokens under Settings → Profile → API Tokens,
+        and any project, app, or registered Server that Ex did not create.
+        **API tokens are the important one** — they survive a password rotation
+        entirely, which is exactly why this check outlives the rotation.
       - **MFA moves to Cloudflare Access**, which is strictly better than
         Dokploy 2FA would have been: it authenticates before the request ever
         reaches Dokploy. Whatever identity method the Access policy uses is now
