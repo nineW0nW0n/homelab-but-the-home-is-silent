@@ -14,14 +14,18 @@ the design spec for why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-
 - `src/poll.js` — polls each node's Netdata API (through the
   Access-gated tunnel route) + a plain Dokploy reachability check,
   returns a status snapshot. `fetch` is injectable for testing.
-- `src/index.js` — wires `fetch` (render from KV) and `scheduled` (poll,
-  write to KV) handlers together. No logic of its own.
+- `src/index.js` — wires `fetch` (render from KV, plus `/__poll` and
+  `/debug`) and `scheduled` (self-fetch `/__poll`) handlers together.
+  `scheduled` doesn't poll directly -- see failure log below for why.
 
 ## Local dev
 
-`npm install`, `npx wrangler dev --test-scheduled`, then
-`curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"` to manually
-fire the poll locally before hitting `http://localhost:8787/`.
+`npm install`, `npx wrangler dev`, then
+`curl "http://localhost:8787/__poll"` to manually fire the poll locally
+before hitting `http://localhost:8787/`. Don't use
+`--test-scheduled`/`/__scheduled` for this -- `scheduled()` self-fetches
+the *production* `maybeit.work/__poll` (see failure log), so exercising
+it locally would poll and write to real production KV.
 
 ## Secrets
 
@@ -39,3 +43,17 @@ Set via `wrangler secret put`, never in this directory.
   does report one, see `queryCpuBusyPercent`). The root filesystem
   chart id keeps the literal `/` (`disk_space./`), not sanitized to `_`
   as guessed. `system.ram`/`used` was correct as guessed.
+- Even with a confirmed-working `CF_ACCESS_CLIENT_ID`/`SECRET` (rotated
+  and verified via direct curl and via a `fetch()`-handler request),
+  `scheduled()` calling `pollAll` directly still got a 403 from
+  Cloudflare Access on every Netdata call, every cron tick, no
+  exceptions. The identical `pollAll` call succeeds every time when run
+  inside a `fetch()` invocation instead. Root cause not confirmed
+  (Cloudflare-side, not something visible from this repo) -- Cron
+  Trigger subrequests to this account's own Access-protected apps
+  appear to hit Access differently than an HTTP-triggered subrequest.
+  Workaround: `scheduled()` only does `fetch('https://maybeit.work/__poll')`
+  (a self-fetch), and the real poll+KV-write logic lives behind that
+  route instead, so it always runs in a `fetch()` context. If Cloudflare
+  ever fixes the underlying behavior, `scheduled()` could poll directly
+  again -- not urgent, the self-fetch has no real downside.
