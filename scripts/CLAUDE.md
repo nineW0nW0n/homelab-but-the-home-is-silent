@@ -80,3 +80,13 @@ run is a no-op, before calling a script change done.
   plane and every container. The loopback-bind layer is therefore
   inactive until the next Docker restart or reboot; the `DOCKER-USER`
   drops are active immediately, so the node is closed either way.
+- `daemon.json`'s `"ip": "127.0.0.1"` does **not** apply to a Swarm
+  service's host-mode publish. Measured on vps00 after a reboot with
+  the setting active: `dokploy-traefik` (plain container) moved to
+  `127.0.0.1:80`/`127.0.0.1:443`, but the `dokploy` service's port 3000
+  still binds `0.0.0.0` **and** `[::]`. So on vps00, port 3000 is
+  closed by the `DOCKER-USER` rule *alone* — the second layer does not
+  back it up there. If `docker-wan-drop.service` ever fails to start,
+  3000 is open to the internet with only the Dokploy admin password in
+  front of it. Check `systemctl is-active docker-wan-drop` before
+  trusting a port sweep taken from inside the node.

@@ -18,6 +18,24 @@ time.
 
 ---
 
+## Ex's open items — surface these every session until Ex says done
+
+Neither can be done by the agent. Keep them in every status summary,
+unprompted, until Ex explicitly says the item is finished. Do not quietly
+drop them because they are old.
+
+- [ ] **GitHub GC request.** History was rewritten and force-pushed, but GitHub
+      still serves the pre-rewrite commits by SHA — verified after the push.
+      Open a GitHub Support request asking them to garbage-collect unreachable
+      objects on `nineW0nW0n/homelab-but-the-home-is-silent`. Keep
+      `~/homelab-pre-rewrite-backup.bundle` until they confirm.
+- [ ] **Dokploy account hygiene (from C1).** Confirm the admin password is
+      strong and unique, enable 2FA if that Dokploy version supports it, and
+      check the login/audit log for sessions Ex does not recognise. The UI was
+      publicly reachable for an unknown period, so assume a scanner found it.
+      No firewall or Access change can retroactively fix a credential that was
+      already used.
+
 ## Rules for the executor
 
 Non-negotiable, they exist because breaking them is how this list got written:
@@ -422,8 +440,8 @@ mechanism instead of a package plus a fallback.
 | node | `DOCKER-USER` v4+v6 | `daemon.json` | reboot-proven | open ports |
 |---|---|---|---|---|
 | vps02 | active | **active** | yes | 22 only |
-| vps01 | active | written, inactive | not yet | 22 only |
-| vps00 | active | written, inactive | not yet | 22 only |
+| vps01 | active | **active** | yes | 22 only |
+| vps00 | active | **active** (partial, see below) | yes | 22 only |
 
 - vps02 was rebooted: rules present after boot, unit `active`, and the Docker
   restart activated the loopback bind — `dokploy-traefik` now binds
@@ -451,15 +469,28 @@ mechanism instead of a package plus a fallback.
   the Worker's service-token poll still reaches Dokploy — so the tunnel path to
   a now-firewalled origin is intact.
 
-### Outstanding
+### C2 is complete — all three nodes rebooted and re-verified
 
-1. Reboot vps01 and vps00 (separately, scheduled) to activate their
-   `daemon.json` loopback bind and re-prove persistence. Not urgent: the drop
-   rules already close the ports and persist via the systemd unit. vps00's
-   reboot takes Dokploy, its Postgres, Traefik and every managed container down
-   for a minute or two.
-2. After each reboot, confirm `iptables -S DOCKER-USER` and
-   `ip6tables -S DOCKER-USER` still carry the rule and re-sweep the ports.
+Rules present after boot, unit `active`, ports 22-only, and every public route
+still serving (`maybeit.work` 200, `booking` 200, `dokploy` 302 to Access, three
+nodes `up` on `/debug`).
+
+**One measured limitation, found only because vps00 was rebooted:**
+`daemon.json`'s `"ip": "127.0.0.1"` does **not** cover a Swarm service's
+host-mode publish. With the setting active on vps00, `dokploy-traefik` (a plain
+container) moved to `127.0.0.1:80`/`127.0.0.1:443`, but the `dokploy` service's
+port 3000 still binds `0.0.0.0` *and* `[::]`.
+
+Consequence: **on vps00, port 3000 is held closed by the `DOCKER-USER` rule
+alone.** The second layer does not back it up there. If
+`docker-wan-drop.service` fails to start, 3000 is exposed with only the Dokploy
+admin password in front of it. That single point is worth a monitor — the
+status Worker already polls Dokploy through Access and would not notice, since
+it tests the tunnel path, not the direct-IP path.
+
+This also corrects Plan B's stated weakness in this document: it is not only
+*ingress*-mode Swarm publishes that escape the daemon default — host-mode ones
+do too.
 
 ---
 
