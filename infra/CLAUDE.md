@@ -7,7 +7,8 @@ Real IPs vs. redacted template. That's the whole directory now —
 resource config nothing ever read) were deleted; nothing in `scripts/` or
 `.github/workflows/` parsed them, so they only drifted from what the
 scripts actually do. Enforcement lives directly in
-`scripts/harden-node.sh` (UFW, sshd, Fail2Ban),
+`scripts/harden-node.sh` (UFW, sshd, Fail2Ban, and the `DOCKER-USER`
+drops + `daemon.json` loopback bind that make rail 1 true),
 `scripts/cap-dokploy-resources.sh` (resource caps), and GitHub
 Secrets/Variables (host/port/user, resolved at deploy time — see
 `.github/workflows/CLAUDE.md`). If node config needs to change, change
@@ -15,11 +16,20 @@ the script; there's no yaml layer to edit first.
 
 ## Topology
 
-| Node  | Hostname             | Role      |
-|-------|----------------------|-----------|
-| vps00 | vps00.maybeit.work   | primary   |
-| vps01 | vps01.maybeit.work   | secondary |
-| vps02 | vps02.maybeit.work   | secondary |
+| Node  | Hostname (label only) | Role      |
+|-------|-----------------------|-----------|
+| vps00 | vps00.maybeit.work    | primary   |
+| vps01 | vps01.maybeit.work    | secondary |
+| vps02 | vps02.maybeit.work    | secondary |
+
+**These hostnames have no DNS records** (verified 2026-08-16). They are
+inventory labels, not resolvable names — never substitute one for an IP
+in a script or an ssh command, it will fail confusingly. Use
+`inventory.yaml` locally, `VPS0N_HOST` in CI.
+
+All three nodes run their own **independent single-node Swarm** — three
+separate swarms, not one cluster. Nothing needs 2377/7946 reachable
+between nodes, which is why UFW blocking them breaks nothing.
 
 ## Real IPs (rail 5)
 

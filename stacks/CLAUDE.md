@@ -28,7 +28,14 @@ Current routes:
   tunnel, not shared with vps00's.
 - vps02's Netdata → `http://localhost:19999`, token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` — its own dedicated tunnel,
-  vps02's first workload, not shared with vps00's or vps01's.
+  vps02's first workload *from this repo*, not shared with vps00's or
+  vps01's.
+
+Note vps02 is not the empty node it reads as: Dokploy has installed
+`dokploy-traefik` there too, publishing 80/443. Nothing in `stacks/`
+declares it — it comes from Dokploy's Remote Server setup, same as on
+vps00 and vps01. `docker ps` on a node is the truth, not this
+directory.
 
 ## Netdata
 

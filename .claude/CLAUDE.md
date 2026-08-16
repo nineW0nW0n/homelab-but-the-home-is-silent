@@ -16,9 +16,12 @@ belongs in `.claude/skills/`, not here.
 - **What**: `homelab-but-the-home-is-silent` — GitOps infra for a 3-node
   Debian 12 VPS homelab. Dokploy deploys, Cloudflare Tunnel is the only
   public ingress, GitHub Actions is the only path to production.
-- **Where**: `vps00` (primary, Dokploy control plane, Swarm-managed),
-  `vps01` (secondary, Dokploy Remote Server), `vps02` (hardened, no
-  workload yet). 2 vCPU / 2GB RAM each, no swap by default.
+- **Where**: `vps00` (primary, Dokploy control plane), `vps01` and
+  `vps02` (Dokploy Remote Servers). 2 vCPU / 2GB RAM each, no swap by
+  default. Each node runs its **own independent single-node Swarm** —
+  three separate swarms, not one cluster, so nothing needs 2377/7946
+  open between them (verified 2026-08-16). All three run `cloudflared`,
+  Netdata, and a Dokploy-installed `dokploy-traefik`.
 - **When**: work in progress. Provisioning/hardening done and CI-
   deployable; first workload still being shaken out. Expect force-pushes.
 - **Why**: learn GitOps end to end on real, cheap, constrained hardware.
@@ -34,7 +37,7 @@ belongs in `.claude/skills/`, not here.
 | `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml` — cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
-| `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy) | exists → `.github/workflows/CLAUDE.md` |
+| `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
 | `worker/status/` | Cloudflare Worker: status page + health poller | exists → worker/status/CLAUDE.md |
 
 Keep this column current the same commit you add or remove a directory
@@ -94,8 +97,10 @@ Every change runs through this before you report it done.
 
 ```sh
 pre-commit run --all-files   # yamllint --strict, actionlint, gitleaks,
-                             # trailing-whitespace, large-file/private-key
-                             # checks, biome ci . (local hook)
+                             # shellcheck -s sh, trailing-whitespace,
+                             # large-file/private-key checks, and two
+                             # local hooks: no-real-ips (rail 5),
+                             # biome ci . (rail 9)
 shellcheck scripts/*.sh      # every script stays shellcheck-clean
 find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +
 ```
@@ -182,6 +187,14 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   assume CI enforces it; use a `local` hook that takes filenames. gitleaks
   still earns its place as a commit-time secret check — just do not credit
   it with coverage it does not have.
+- The `tooling-setup` skill's Biome config block sat at the 1.x
+  spellings (`files.ignore`, top-level `organizeImports`,
+  `rules.recommended: true`) for as long as the log entry above said
+  they were wrong — so following the skill would have reintroduced the
+  exact bug the log warns about. Fixed 2026-08-16. When a failure-log
+  entry says a config shape is wrong, grep the skills for that shape in
+  the same turn; a log entry and a skill that contradict each other is
+  worse than neither.
 
 ## Propagation protocol
 

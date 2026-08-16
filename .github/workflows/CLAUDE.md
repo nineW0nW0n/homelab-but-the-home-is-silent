@@ -2,15 +2,19 @@ Parent: ../../.claude/CLAUDE.md
 
 # .github/workflows/ — CI/CD
 
-`validate.yml` (lint gate) and `deploy.yml` (sequential rolling deploy).
+`validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy to
+the three nodes), and `deploy-worker.yml` (the `maybeit.work` status
+Worker — `npm test` then `wrangler deploy`, entirely separate from the
+node deploy path; see `worker/status/CLAUDE.md`).
 
 ## Flow
 
 1. `validate.yml` runs on every PR and push to `main`: `pre-commit
    run --all-files --show-diff-on-failure` (yamllint --strict,
-   actionlint, gitleaks, trailing-whitespace, large-file/private-key
-   checks). Also callable via `workflow_call` — `deploy.yml` calls it
-   first (rail 8).
+   actionlint, gitleaks, shellcheck, trailing-whitespace,
+   large-file/private-key checks, plus the `no-real-ips` and `biome ci`
+   local hooks). Also callable via `workflow_call` — `deploy.yml` calls
+   it first (rail 8).
 2. `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`,
    itself) or manual dispatch. `concurrency: deploy-production`,
    `cancel-in-progress: false` — a second push queues, doesn't abort a
@@ -62,3 +66,8 @@ Variables (optional, default in workflow): `VPS0N_SSH_USER`,
   vps02 now has its first workload (Netdata) and its own dedicated
   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` secret + "Write remote .env"
   step, same pattern as vps01 — never wire in vps00's token (rail 2).
+- The `gitleaks` hook here is `gitleaks protect --staged`: it scans
+  staged changes only, so under `pre-commit run --all-files` in CI —
+  where nothing is staged — it scans nothing. It is a commit-time
+  secret check, not a CI one. Any repo-wide content rule needs a
+  `local` hook that takes filenames instead (see `no-real-ips`).

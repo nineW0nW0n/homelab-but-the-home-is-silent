@@ -33,12 +33,15 @@ this content (this is the hard-railed config — don't improvise values):
 
 ```json
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "ignoreUnknown": false, "ignore": ["node_modules", "dist", "build"] },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": ["**", "!**/node_modules", "!**/dist", "!**/build"]
+  },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
-  "organizeImports": { "enabled": true },
-  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "linter": { "enabled": true, "rules": { "preset": "recommended" } },
   "javascript": {
     "formatter": { "quoteStyle": "single", "semicolons": "asNeeded", "trailingCommas": "all" }
   },
@@ -46,10 +49,25 @@ this content (this is the hard-railed config — don't improvise values):
 }
 ```
 
-Update `$schema` to match whatever exact version you actually installed.
-This repo has no JS/TS/JSON files as of this writing — that's fine. Set
-Biome up the first time any such file is added, the same way a directory
-gets its first `CLAUDE.md`: on first real contact, not speculatively.
+**Three keys here are the 2.x spellings and they are not interchangeable
+with the 1.x ones** — root's failure log records this repo getting each
+one wrong:
+
+- `files.includes` with `!` negation, **not** `files.ignore`
+- `assist.actions.source.organizeImports`, **not** top-level `organizeImports`
+- `linter.rules.preset: "recommended"`, **not** `rules.recommended: true`.
+  `biome migrate --write` mis-converts this one to `preset: "none"`, which
+  silently disables every lint rule. Check the migrated `linter` block by
+  hand; do not trust the tool's output.
+
+Update `$schema` to match whatever exact version you actually installed,
+and keep the pre-commit hook's `additional_dependencies` pin
+(`@biomejs/biome@<version>`) in step with it — rail 9 is only enforced
+because that local hook exists.
+
+This repo does have JS/JSON: `worker/status/`. Biome is already set up
+and wired into `.pre-commit-config.yaml`; `biome ci .` finding nothing to
+lint in a given run is a pass, not a skip.
 
 ## yamllint — linter for YAML / GitOps files (until Biome covers YAML)
 
