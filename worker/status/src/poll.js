@@ -83,11 +83,13 @@ async function pollNode(fetchFn, host, headers, previous) {
       lastPolled: now,
       lastSeen: now,
     }
-  } catch {
+  } catch (err) {
     // lastPolled is always "now" -- honest "last time we checked".
     // lastSeen carries forward the previous snapshot's lastSeen (last
     // time this node was confirmed up), or null on a node's first-ever
-    // poll with no prior snapshot to carry forward from.
+    // poll with no prior snapshot to carry forward from. `error` is
+    // kept (not rendered on the page) so a silent down-node can still
+    // be diagnosed via the raw snapshot -- see index.js's /debug route.
     return {
       up: false,
       cpu: 0,
@@ -95,6 +97,7 @@ async function pollNode(fetchFn, host, headers, previous) {
       disk: 0,
       lastPolled: now,
       lastSeen: previous?.lastSeen ?? null,
+      error: err?.message ?? String(err),
     }
   }
 }
