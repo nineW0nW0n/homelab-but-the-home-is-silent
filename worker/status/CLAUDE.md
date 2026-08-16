@@ -9,15 +9,29 @@ why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`
 
 ## Layout
 
-- `src/render.js` — pure function, status JSON in, HTML out. No fetch,
-  no KV — this is the only part with real branching logic, and the only
-  part with a test.
+- `src/page.html` — the designed front-end, a straight committed copy of
+  `nineW0nW0n/maybeitwork-site`'s `index.html` (own repo, own README —
+  that repo's "Deploy: GitHub → Dokploy" line is stale, this Worker is
+  the actual deploy path). Self-contained (fonts inlined, no CDN), pulls
+  its own live data client-side via `fetch('/status.json')` on load —
+  see that file's own DATA CONTRACT comment for the exact shape. No
+  templating on the server side; served byte-for-byte via a Wrangler
+  `Text` module rule (`import page from './page.html'` in `index.js`).
+  Copy-paste, not a submodule — one static file doesn't justify the
+  ceremony.
 - `src/poll.js` — polls each node's Netdata API (through the
   Access-gated tunnel route) + a plain Dokploy reachability check,
   returns a status snapshot. `fetch` is injectable for testing.
 - `src/index.js` — the `fetch` handler polls fresh, writes the snapshot
-  to KV, then renders it (or returns it raw at `/debug`). No
+  to KV, then serves `page.html` at `/`, the page's own JSON contract at
+  `/status.json` (3 nodes, ordered from `NODE_HOSTS` — not
+  `Object.entries(snapshot.nodes)`, whose insertion order isn't
+  guaranteed to match since `pollAll` fills it from concurrent
+  promises), or the raw snapshot (dokploy included) at `/debug`. No
   `scheduled` handler — deliberately, see failure log.
+- No dokploy row on the page itself — `page.html`'s design hardcodes
+  exactly 3 status-dot slots, one per VPS node, no 4th slot for it.
+  Still visible at `/debug` if needed.
 
 ## Local dev
 
@@ -71,3 +85,19 @@ Set via `wrangler secret put`, never in this directory.
   the original bad token unclear — likely a bad paste when it was first
   set (the value was never visible to the assistant, added directly by
   a human via the dashboard in an earlier session).
+- `page.html`'s status dots are matched to nodes by **array index**, not
+  by name — `SERVICES.forEach((s, i) => ...d${i}/v${i}...)`. First draft
+  of `toStatusJson` built the array from `Object.entries(snapshot.nodes)`,
+  which looked fine locally but isn't guaranteed to stay in `NODE_HOSTS`
+  order — `pollAll` fills that object from concurrent per-node promises,
+  so a slow vps00 poll can land after a fast vps01 one. Fixed by
+  building the array directly from `NODE_HOSTS.split(',')` instead.
+  Would've silently mislabeled a node's live stats under real network
+  jitter — order-sensitive output from a concurrently-filled object is
+  worth grepping for whenever one shows up again.
+- `system.load`'s dimensions (load1/load5/load15) don't sum to a whole,
+  unlike `system.ram`/`mem.swap` — so `options=percentage` is meaningless
+  there. Confirmed against a live vps00 node before wiring it, not
+  guessed (see `queryRaw` vs `queryPercent` in `poll.js`); load1 is
+  normalized to a 0-100 score by dividing by `NODE_VCPUS` (2, this
+  homelab's fixed spec) instead.

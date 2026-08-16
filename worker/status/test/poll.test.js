@@ -17,6 +17,9 @@ test('pollAll marks a node up with parsed cpu/mem/disk percentages', async () =>
     if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, 85])
     if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
     if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
+    if (url.includes('system.load'))
+      return jsonResponse(['time', 'load1', 'load5', 'load15'], [0.5, 0.3, 0.2])
+    if (url.includes('mem.swap')) return jsonResponse(['time', 'free', 'used'], [90, 10])
     return new Response('', { status: 200 })
   }
   const snapshot = await pollAll(env, fetchFn)
@@ -24,6 +27,9 @@ test('pollAll marks a node up with parsed cpu/mem/disk percentages', async () =>
   assert.equal(snapshot.nodes.vps00.cpu, 15)
   assert.equal(snapshot.nodes.vps00.mem, 60)
   assert.equal(snapshot.nodes.vps00.disk, 30)
+  // load1 0.5 / 2 vCPUs * 100 = 25
+  assert.equal(snapshot.nodes.vps00.load, 25)
+  assert.equal(snapshot.nodes.vps00.swap, 10)
   assert.equal(snapshot.dokploy.up, true)
 })
 
@@ -100,11 +106,35 @@ test('pollAll sums busy-state dimensions when Netdata reports no idle dimension'
     }
     if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
     if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
+    if (url.includes('system.load'))
+      return jsonResponse(['time', 'load1', 'load5', 'load15'], [0.5, 0.3, 0.2])
+    if (url.includes('mem.swap')) return jsonResponse(['time', 'free', 'used'], [90, 10])
     return new Response('', { status: 200 })
   }
   const snapshot = await pollAll(env, fetchFn)
   assert.equal(snapshot.nodes.vps00.up, true)
   assert.equal(snapshot.nodes.vps00.cpu, 17)
+})
+
+test('pollAll clamps load to 100 when load1 exceeds vCPU count', async () => {
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: 'vps00-metrics.maybeit.work',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  const fetchFn = async (url) => {
+    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, 85])
+    if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
+    if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
+    // load1 of 5 on a 2 vCPU box is 250% raw -- must clamp to 100
+    if (url.includes('system.load'))
+      return jsonResponse(['time', 'load1', 'load5', 'load15'], [5, 3, 2])
+    if (url.includes('mem.swap')) return jsonResponse(['time', 'free', 'used'], [90, 10])
+    return new Response('', { status: 200 })
+  }
+  const snapshot = await pollAll(env, fetchFn)
+  assert.equal(snapshot.nodes.vps00.load, 100)
 })
 
 test('pollAll marks dokploy down on a 5xx response', async () => {

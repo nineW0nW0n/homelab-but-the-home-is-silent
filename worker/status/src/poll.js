@@ -18,11 +18,12 @@ function round1(n) {
   return Math.round(n * 10) / 10
 }
 
-async function queryPercent(fetchFn, host, headers, chart, dimName) {
+async function queryChart(fetchFn, host, headers, chart, dimName, options) {
   // Window is 60s (>> Netdata's 5s update every, see netdata.conf) so a
   // slow tick or two never reads back empty -- a narrower window risks
   // throwing on a healthy node.
-  const url = `https://${host}/api/v1/data?chart=${encodeURIComponent(chart)}&after=-60&points=1&options=percentage`
+  const optionsParam = options ? `&options=${options}` : ''
+  const url = `https://${host}/api/v1/data?chart=${encodeURIComponent(chart)}&after=-60&points=1${optionsParam}`
   const res = await fetchWithTimeout(fetchFn, url, { headers })
   if (!res.ok) throw new Error(`netdata ${chart} status ${res.status}`)
   const { labels, data } = await res.json()
@@ -35,6 +36,21 @@ async function queryPercent(fetchFn, host, headers, chart, dimName) {
     throw new Error(`netdata ${chart} dimension ${dimName} not numeric`)
   }
   return value
+}
+
+// "percentage" makes Netdata return the dimension as % of that chart's
+// stacked dimensions at that point -- works for any chart whose dims sum
+// to a whole (system.ram, mem.swap), regardless of the chart's own units.
+function queryPercent(fetchFn, host, headers, chart, dimName) {
+  return queryChart(fetchFn, host, headers, chart, dimName, 'percentage')
+}
+
+// system.load's dimensions (load1/load5/load15) don't sum to anything --
+// each is its own absolute load-average number, so no percentage option.
+// Confirmed against a live vps00 node's /api/v1/charts (2026-08-16):
+// dims are load1/load5/load15, units "load".
+function queryRaw(fetchFn, host, headers, chart, dimName) {
+  return queryChart(fetchFn, host, headers, chart, dimName, null)
 }
 
 // Confirmed against a live vps00 node's /api/v1/charts (2026-08-16):
@@ -65,21 +81,31 @@ async function queryCpuBusyPercent(fetchFn, host, headers, chart) {
   return values.reduce((sum, v) => sum + v, 0)
 }
 
+// Every node in this homelab is a 2 vCPU VPS (root CLAUDE.md) -- load1 is
+// an absolute average, not a percent, so normalize by core count to get
+// a 0-100 score. Update this if a node's spec ever changes.
+const NODE_VCPUS = 2
+
 async function pollNode(fetchFn, host, headers, previous) {
   const now = new Date().toISOString()
   try {
-    const [cpuBusy, mem, disk] = await Promise.all([
+    const [cpuBusy, mem, disk, load1, swap] = await Promise.all([
       queryCpuBusyPercent(fetchFn, host, headers, 'system.cpu'),
       queryPercent(fetchFn, host, headers, 'system.ram', 'used'),
       // Root filesystem chart id keeps the literal "/" -- confirmed
       // against a live vps00 node, not sanitized to "_" as guessed.
       queryPercent(fetchFn, host, headers, 'disk_space./', 'used'),
+      queryRaw(fetchFn, host, headers, 'system.load', 'load1'),
+      queryPercent(fetchFn, host, headers, 'mem.swap', 'used'),
     ])
+    const loadPercent = Math.max(0, Math.min(100, (load1 / NODE_VCPUS) * 100))
     return {
       up: true,
       cpu: round1(cpuBusy),
       mem: round1(mem),
       disk: round1(disk),
+      load: round1(loadPercent),
+      swap: round1(swap),
       lastPolled: now,
       lastSeen: now,
     }
@@ -95,6 +121,8 @@ async function pollNode(fetchFn, host, headers, previous) {
       cpu: 0,
       mem: 0,
       disk: 0,
+      load: 0,
+      swap: 0,
       lastPolled: now,
       lastSeen: previous?.lastSeen ?? null,
       error: err?.message ?? String(err),
