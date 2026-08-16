@@ -32,7 +32,8 @@ node deploy path; see `worker/status/CLAUDE.md`).
 
 ## Required GitHub Secrets / Variables
 
-Secrets: `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
+Secrets: `SSH_PRIVATE_KEY_VPS00` / `_VPS01` / `_VPS02` (one CI key per
+node — see the blast-radius note below), `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
 `VPS02_HOST`, `DOKPLOY_API_TOKEN`, `CLOUDFLARE_API_TOKEN`,
 `CLOUDFLARE_TUNNEL_TOKEN` (vps00), `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`
 (vps01), `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` (vps02),
@@ -60,6 +61,25 @@ Variables (optional, default in workflow): `VPS0N_SSH_USER`,
   mutable; a retagged upstream runs with `SSH_PRIVATE_KEY` and
   `CLOUDFLARE_API_TOKEN` in scope. Dependabot (`.github/dependabot.yml`)
   bumps the pins weekly so they don't rot.
+
+## Blast radius of the CI credential
+
+Each deploy job authenticates with **its own** node key
+(`SSH_PRIVATE_KEY_VPS0N`), so one leaked secret reaches one node, not
+three. That is the only thing per-node keys buy — read the next
+paragraph before assuming they buy more.
+
+`deploy` is in the `docker` group, which is root-equivalent, and it owns
+`/opt/stacks/<node>/docker-compose.yml`, so it can write any compose file
+it likes and have root run it. **Any path that lets CI deploy containers
+is root-equivalent by construction.** Removing `deploy` from the `docker`
+group and granting `sudo docker compose` instead is theatre — do not
+propose it as a fix. Rail 6's "no sudo" restricts the *shape* of the
+access, not its power.
+
+The real controls are: one key per node (blast radius), and required
+reviewers on the `production` environment (a human approves before any
+deploy runs, which is what stops an automated exfiltration path).
 
 ## Failure log
 
