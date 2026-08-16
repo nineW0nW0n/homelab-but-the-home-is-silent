@@ -39,7 +39,8 @@ Secrets: `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
 `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`, `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_CHAT_ID` (Netdata alerts, all 3 nodes), `CF_ACCESS_CLIENT_ID`,
 `CF_ACCESS_CLIENT_SECRET` (status Worker's Cloudflare Access service
-token, `deploy-worker.yml`).
+token, `deploy-worker.yml`), `DEBUG_KEY` (gates `maybeit.work/debug`;
+if unset the route 404s for everyone — it fails closed).
 
 Variables (optional, default in workflow): `VPS0N_SSH_USER`,
 `VPS0N_SSH_PORT`.

@@ -50,6 +50,11 @@ jobs:
           secrets: |
             CF_ACCESS_CLIENT_ID
             CF_ACCESS_CLIENT_SECRET
+            DEBUG_KEY
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          # Gates /debug. If this repo secret is unset, the Worker denies
+          # /debug to everyone -- the route fails closed, it does not fall
+          # back to public.
+          DEBUG_KEY: ${{ secrets.DEBUG_KEY }}

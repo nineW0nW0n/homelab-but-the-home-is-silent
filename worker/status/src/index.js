@@ -1,3 +1,4 @@
+import { isDebugAuthorized } from './debug-auth.js'
 import page from './page.html'
 import { isFresh, pollAll } from './poll.js'
 
@@ -68,6 +69,17 @@ export default {
     // 404 path used to poll all three nodes and write KV first.
     if (pathname !== '/status.json' && pathname !== '/debug') {
       return new Response(page, { headers: PAGE_HEADERS })
+    }
+
+    // /debug returns the raw snapshot: per-node error strings (Netdata
+    // internals, HTTP status codes) and Dokploy reachability. No secrets,
+    // but it is a recon aid, so it takes a shared header.
+    //
+    // Fails closed: if DEBUG_KEY is unset the route is 404 for everyone,
+    // rather than open to everyone. 404 rather than 403 on a bad key too
+    // -- do not confirm the route exists.
+    if (pathname === '/debug' && !isDebugAuthorized(request, env)) {
+      return new Response('not found', { status: 404 })
     }
 
     const previousSnapshot = await env.STATUS_KV.get(SNAPSHOT_KEY, { type: 'json' })

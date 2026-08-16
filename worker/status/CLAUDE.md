@@ -46,6 +46,12 @@ every load polls live, no separate step needed.
 Access service token created in the design's Cloudflare dashboard step.
 Set via `wrangler secret put`, never in this directory.
 
+`DEBUG_KEY` — shared header value gating `/debug`. Send it as
+`x-debug-key`. Unset means the route 404s for everyone; the check fails
+closed by design, so a rolled-back or missing secret can never leave
+`/debug` public. `deploy-worker.yml` pushes it from the GitHub secret of
+the same name.
+
 ## Failure log
 
 - `poll.js`'s Netdata chart/dimension names were unverified guesses at
