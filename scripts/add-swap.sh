@@ -5,6 +5,7 @@
 #
 # Usage: scripts/add-swap.sh <host> [size_gb]
 #   scripts/add-swap.sh 203.0.113.11 2
+#   Real addresses live in infra/inventory.yaml (gitignored).
 
 set -eu
 

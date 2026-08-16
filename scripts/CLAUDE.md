@@ -56,3 +56,10 @@ run is a no-op, before calling a script change done.
   process" failure on vps01 when it was actually an OOM kill under a
   too-tight `mem_limit`. `add-swap.sh` fixes the swap side; the app's own
   `mem_limit`/`mem_reservation` (rail 4) still needs headroom.
+- Never put a real node IP in a script's usage example — five scripts here
+  did, publishing two nodes' addresses in a public repo next to a full
+  description of what runs on them. Use RFC 5737 documentation addresses
+  (`203.0.113.10` vps00-shaped, `.11` vps01-shaped, `.12` vps02-shaped) and
+  point at `infra/inventory.yaml` for the real ones. Enforced by the
+  `real-node-ip` rule in `.gitleaks.toml` — rail 5 was a sentence with
+  nothing checking it, same drift class as rail 9.

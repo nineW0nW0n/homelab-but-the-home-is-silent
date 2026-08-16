@@ -9,6 +9,7 @@
 #
 # Usage: scripts/harden-node.sh <host>
 #   scripts/harden-node.sh 203.0.113.10
+#   Real addresses live in infra/inventory.yaml (gitignored).
 
 set -eu
 

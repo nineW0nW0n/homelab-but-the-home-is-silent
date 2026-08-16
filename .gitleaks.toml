@@ -1,0 +1,35 @@
+# gitleaks config -- extends the built-in ruleset with rail 5 ("real IPs are
+# never committed"). gitleaks picks this file up automatically from the repo
+# root; the pre-commit hook needs no extra args.
+#
+# Rail 5 existed as a sentence with nothing enforcing it, and five scripts
+# leaked node IPs into a public repo as a result. Same class of drift as the
+# rail 9 entry in root CLAUDE.md's failure log: a rail without a wired-in
+# check is undetectable.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "real-node-ip"
+description = "Real IPv4 address in a tracked file (rail 5)"
+regex = '''\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b'''
+
+  [rules.allowlist]
+  # Documentation ranges (RFC 5737), loopback, unspecified, and RFC 1918
+  # private space are all safe to commit. Anything else is a real address.
+  regexes = [
+    '''127\.\d{1,3}\.\d{1,3}\.\d{1,3}''',
+    '''0\.0\.0\.0''',
+    '''203\.0\.113\.\d{1,3}''',
+    '''192\.0\.2\.\d{1,3}''',
+    '''198\.51\.100\.\d{1,3}''',
+    '''10\.\d{1,3}\.\d{1,3}\.\d{1,3}''',
+    '''172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}''',
+    '''192\.168\.\d{1,3}\.\d{1,3}''',
+  ]
+  # Lockfiles carry version quads that look like addresses and are not ours.
+  paths = [
+    '''package-lock\.json''',
+    '''node_modules/''',
+  ]

@@ -6,6 +6,7 @@
 #
 # Usage: scripts/install-docker.sh <host>
 #   scripts/install-docker.sh 203.0.113.11
+#   Real addresses live in infra/inventory.yaml (gitignored).
 
 set -eu
 

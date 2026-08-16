@@ -7,6 +7,7 @@
 #
 # Usage: scripts/provision-deploy-user.sh <node-name> <host>
 #   scripts/provision-deploy-user.sh vps00 203.0.113.10
+#   Real addresses live in infra/inventory.yaml (gitignored).
 #
 # Requires root SSH access with the key in PUBKEY_FILE below (or override
 # via PUBKEY_FILE env var).

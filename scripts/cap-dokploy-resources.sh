@@ -16,6 +16,7 @@
 #
 # Usage: scripts/cap-dokploy-resources.sh <host>
 #   scripts/cap-dokploy-resources.sh 203.0.113.10
+#   Real addresses live in infra/inventory.yaml (gitignored).
 
 set -eu
 
