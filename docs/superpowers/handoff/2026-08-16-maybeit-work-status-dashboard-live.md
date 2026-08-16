@@ -99,13 +99,24 @@ landed.
 
 ## Not yet done
 
-1. **Sanity-check Telegram alerting end-to-end.** The bot
-   (`@maybeitwork_status_bot`) exists and the chat id is your personal
-   account (`6637564124`, from `Ash Collado`'s Telegram). Default
-   Netdata alert thresholds are still in effect (tightening was scoped
-   out, see `stacks/CLAUDE.md`) — no easy way to trigger a real alert
-   without stressing a node, so this may just mean waiting for an
-   organic alert rather than manufacturing one.
+Nothing outstanding from this handoff. Telegram alerting was sanity-
+checked end-to-end (see below) — no other open items recorded.
+
+## Telegram alerting — sanity-checked end-to-end (2026-08-16)
+
+Used Netdata's built-in test command instead of stressing a node:
+`docker exec netdata /usr/libexec/netdata/plugins.d/alarm-notify.sh
+test` on vps00. Fires a synthetic WARNING → CRITICAL → CLEAR sequence
+through every configured notification method — no real threshold
+touched, no load on the node. Container log confirmed all 3 sent to
+Telegram chat `6637564124` (`[ALERT NOTIFICATION]: sent telegram
+notification to '6637564124'...`). Pipeline (Netdata → bot →
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` secrets) confirmed working.
+
+Default Netdata alert thresholds (~90%/98% mem/disk) are still in
+effect — tightening was scoped out, see `stacks/CLAUDE.md`'s TODO. Not
+part of this check; still a real gap if the box fills before those
+kick in.
 
 ## Useful references
 
