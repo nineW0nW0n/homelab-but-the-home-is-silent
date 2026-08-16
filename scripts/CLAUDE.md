@@ -61,5 +61,5 @@ run is a no-op, before calling a script change done.
   description of what runs on them. Use RFC 5737 documentation addresses
   (`203.0.113.10` vps00-shaped, `.11` vps01-shaped, `.12` vps02-shaped) and
   point at `infra/inventory.yaml` for the real ones. Enforced by the
-  `real-node-ip` rule in `.gitleaks.toml` — rail 5 was a sentence with
+  `no-real-ips` local pre-commit hook — rail 5 was a sentence with
   nothing checking it, same drift class as rail 9.

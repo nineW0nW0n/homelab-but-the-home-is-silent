@@ -502,10 +502,16 @@ Ex has made a call on history.
 
 - Five script usage examples now use `203.0.113.10/.11`, each with a pointer to
   `infra/inventory.yaml`. Tree-wide grep returns nothing.
-- `.gitleaks.toml` adds the `real-node-ip` rule, verified in both directions: a
-  routable-looking address fails the hook, `203.0.113.10` passes. (Do not paste
-  the failing test address into a tracked file to document it — the guard
-  correctly rejects that too. It was caught doing exactly this.)
+- Guard is the `no-real-ips` **local** pre-commit hook, not a custom gitleaks
+  rule. The gitleaks hook runs `gitleaks protect --staged`, which scans staged
+  changes only — in CI nothing is staged, so a custom rule there is a no-op and
+  `validate.yml` would never have caught anything. The local hook takes
+  filenames, so it fires identically at commit time and under `--all-files`.
+  Verified in both directions: a routable address in a tracked file fails,
+  `203.0.113.10` passes. (Do not paste the failing test address into a tracked
+  file to document it — the guard correctly rejects that too.)
+- `pre-commit install` had never been run in this clone, so `git commit` was
+  running no checks locally at all. Installed.
 - History rewritten with `git filter-repo --replace-text` across all 67 commits
   and force-pushed. Pre-rewrite backup bundle:
   `~/homelab-pre-rewrite-backup.bundle` (outside the repo, keep until the GC

@@ -170,6 +170,13 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   in a fresh clone; a config file is not an installed hook. Third
   instance of the same class as rail 9 and rail 5: the check existed on
   paper and nothing invoked it.
+- The `gitleaks` pre-commit hook's entry is `gitleaks protect --staged` —
+  it scans *staged changes only*. Under `pre-commit run --all-files` in
+  `validate.yml` nothing is staged, so it silently scans nothing. Never
+  express a repo-wide content rule as a custom `.gitleaks.toml` rule and
+  assume CI enforces it; use a `local` hook that takes filenames. gitleaks
+  still earns its place as a commit-time secret check — just do not credit
+  it with coverage it does not have.
 
 ## Propagation protocol
 
