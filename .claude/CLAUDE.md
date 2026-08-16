@@ -164,6 +164,12 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   `biome.json`'s `$schema`) so `pre-commit run --all-files` actually
   runs it. A rail without a wired-in check is undetectable drift —
   double-check new rails have an enforcement point, not just a sentence.
+- `pre-commit` was configured but never installed as a git hook (no
+  `.git/hooks/pre-commit`), so `git commit` ran no checks locally — only
+  `validate.yml` caught anything, after a push. Run `pre-commit install`
+  in a fresh clone; a config file is not an installed hook. Third
+  instance of the same class as rail 9 and rail 5: the check existed on
+  paper and nothing invoked it.
 
 ## Propagation protocol
 

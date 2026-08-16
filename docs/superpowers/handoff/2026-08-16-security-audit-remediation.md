@@ -502,8 +502,10 @@ Ex has made a call on history.
 
 - Five script usage examples now use `203.0.113.10/.11`, each with a pointer to
   `infra/inventory.yaml`. Tree-wide grep returns nothing.
-- `.gitleaks.toml` adds the `real-node-ip` rule, verified in both directions:
-  `198.51.99.7` fails the hook, `203.0.113.10` passes.
+- `.gitleaks.toml` adds the `real-node-ip` rule, verified in both directions: a
+  routable-looking address fails the hook, `203.0.113.10` passes. (Do not paste
+  the failing test address into a tracked file to document it — the guard
+  correctly rejects that too. It was caught doing exactly this.)
 - History rewritten with `git filter-repo --replace-text` across all 67 commits
   and force-pushed. Pre-rewrite backup bundle:
   `~/homelab-pre-rewrite-backup.bundle` (outside the repo, keep until the GC
