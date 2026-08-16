@@ -31,13 +31,6 @@ Set via `wrangler secret put`, never in this directory.
 
 ## Outstanding manual steps before first deploy
 
-- `wrangler.toml`'s `[[kv_namespaces]]` `id` is still the literal
-  placeholder `REPLACE_AFTER_RUNNING: ...` — no real KV namespace has
-  been created yet. Run `wrangler kv namespace create STATUS_KV` with
-  real Cloudflare credentials and paste the returned id into
-  `wrangler.toml` before merging this branch to `main` —
-  `deploy-worker.yml` deploys on every push to `worker/status/**`, and a
-  deploy against the placeholder id will fail (or bind to nothing).
 - `poll.js`'s Netdata chart/dimension names (`system.cpu`/`idle`,
   `system.ram`/`used`, `disk_space._`/`used`) are unverified guesses —
   no live Netdata instance has confirmed them yet. Confirm against a

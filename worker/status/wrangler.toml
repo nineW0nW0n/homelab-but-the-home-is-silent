@@ -11,12 +11,7 @@ crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "STATUS_KV"
-# PLACEHOLDER -- not a real namespace id. Run `wrangler kv namespace
-# create STATUS_KV` with real Cloudflare credentials and paste the
-# returned id here BEFORE this branch merges to main (deploy-worker.yml
-# deploys on push to worker/status/**). See worker/status/CLAUDE.md,
-# "Outstanding manual steps before first deploy".
-id = "REPLACE_AFTER_RUNNING: wrangler kv namespace create STATUS_KV"
+id = "8fbd60e3276e4a40a63609f9ed56e1fd"
 
 [vars]
 NODE_HOSTS = "vps00-metrics.maybeit.work,vps01-metrics.maybeit.work,vps02-metrics.maybeit.work"
