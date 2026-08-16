@@ -28,6 +28,14 @@ export default {
         bodySnippet: body.slice(0, 300),
       })
     }
+    // Runs the exact scheduled()-handler poll path on demand, isolating
+    // whether failures are specific to the scheduled trigger context.
+    if (new URL(request.url).pathname === '/debug/pollnow') {
+      const previousSnapshot = await env.STATUS_KV.get(SNAPSHOT_KEY, { type: 'json' })
+      const fresh = await pollAll(env, fetch, previousSnapshot)
+      await env.STATUS_KV.put(SNAPSHOT_KEY, JSON.stringify(fresh))
+      return Response.json(fresh)
+    }
     return new Response(renderStatusPage(snapshot), {
       headers: { 'content-type': 'text/html; charset=utf-8' },
     })
