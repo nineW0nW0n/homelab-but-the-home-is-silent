@@ -29,12 +29,14 @@ drop them because they are old.
       Open a GitHub Support request asking them to garbage-collect unreachable
       objects on `nineW0nW0n/homelab-but-the-home-is-silent`. Keep
       `~/homelab-pre-rewrite-backup.bundle` until they confirm.
-- [ ] **Dokploy account hygiene (from C1).** Confirm the admin password is
-      strong and unique, enable 2FA if that Dokploy version supports it, and
-      check the login/audit log for sessions Ex does not recognise. The UI was
-      publicly reachable for an unknown period, so assume a scanner found it.
-      No firewall or Access change can retroactively fix a credential that was
-      already used.
+- [ ] **Dokploy account hygiene (from C1).** Password confirmed adequate by Ex
+      (2026-08-16: random 32 chars, mixed case, alphanumeric plus a special
+      character) — that part is closed. **Still open:** enable 2FA if that
+      Dokploy version supports it, and check the login/audit log for sessions
+      Ex does not recognise. The UI was publicly reachable for an unknown
+      period, so assume a scanner found it; password strength does not help
+      against a credential that was already captured, which is what the log
+      review is for.
 - [x] ~~Create the `DEBUG_KEY` repo secret (L1).~~ Done 2026-08-16. The value
       lives at `~/.maybeit-debug-key` on Ex's machine (mode 600); send it as the
       `x-debug-key` header. Verified: no header 404, wrong key 404, correct key
