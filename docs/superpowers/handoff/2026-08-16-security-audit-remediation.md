@@ -411,7 +411,7 @@ ongoing.
 The port sweep shows `22` only on all three nodes, the tunnel-served hostnames
 still work, and the rules survive a reboot of vps02.
 
-## Status — vps02 and vps01 done, vps00 outstanding
+## Status — all three nodes closed; two reboots outstanding
 
 Implemented in `harden-node.sh` (commit `ed3a43f`), both layers, with one
 deliberate departure from Plan A: **persistence is a systemd oneshot ordered
@@ -423,7 +423,7 @@ mechanism instead of a package plus a fallback.
 |---|---|---|---|---|
 | vps02 | active | **active** | yes | 22 only |
 | vps01 | active | written, inactive | not yet | 22 only |
-| vps00 | not applied | not applied | — | 22, 80, 443, 3000 |
+| vps00 | active | written, inactive | not yet | 22 only |
 
 - vps02 was rebooted: rules present after boot, unit `active`, and the Docker
   restart activated the loopback bind — `dokploy-traefik` now binds
@@ -440,9 +440,26 @@ mechanism instead of a package plus a fallback.
   interfaces, and those are correctly blocked by UFW. That is the clean proof
   UFW works fine and only Docker's *published* ports slip past it.
 
-**vps00 remains open on 3000** — Access gates `dokploy.maybeit.work`, but the
-direct-IP path does not go through Access. Until this runs on vps00, C1 is
-half a fix.
+- vps00's port 3000 closed with the `DOCKER-USER` rule alone — its `daemon.json`
+  layer is still inactive, Docker having not been restarted. That is the direct
+  empirical confirmation that **`DOCKER-USER` does cover a host-mode Swarm
+  publish**, which until now was inference from the publish mode rather than an
+  observed result. Re-verified at the same time:
+  `docker service inspect dokploy` still reports `"PublishMode":"host"`.
+- After vps00: `maybeit.work` `200`, `booking.maybeit.work` `200`,
+  `dokploy.maybeit.work` `302` to Access, all three nodes `up` on `/debug`, and
+  the Worker's service-token poll still reaches Dokploy — so the tunnel path to
+  a now-firewalled origin is intact.
+
+### Outstanding
+
+1. Reboot vps01 and vps00 (separately, scheduled) to activate their
+   `daemon.json` loopback bind and re-prove persistence. Not urgent: the drop
+   rules already close the ports and persist via the systemd unit. vps00's
+   reboot takes Dokploy, its Postgres, Traefik and every managed container down
+   for a minute or two.
+2. After each reboot, confirm `iptables -S DOCKER-USER` and
+   `ip6tables -S DOCKER-USER` still carry the rule and re-sweep the ports.
 
 ---
 
