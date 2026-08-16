@@ -411,6 +411,39 @@ ongoing.
 The port sweep shows `22` only on all three nodes, the tunnel-served hostnames
 still work, and the rules survive a reboot of vps02.
 
+## Status — vps02 and vps01 done, vps00 outstanding
+
+Implemented in `harden-node.sh` (commit `ed3a43f`), both layers, with one
+deliberate departure from Plan A: **persistence is a systemd oneshot ordered
+`After=docker.service`, not `iptables-persistent`.** The boot race this
+document warned about is designed out rather than survived, and it is one
+mechanism instead of a package plus a fallback.
+
+| node | `DOCKER-USER` v4+v6 | `daemon.json` | reboot-proven | open ports |
+|---|---|---|---|---|
+| vps02 | active | **active** | yes | 22 only |
+| vps01 | active | written, inactive | not yet | 22 only |
+| vps00 | not applied | not applied | — | 22, 80, 443, 3000 |
+
+- vps02 was rebooted: rules present after boot, unit `active`, and the Docker
+  restart activated the loopback bind — `dokploy-traefik` now binds
+  `127.0.0.1:80`/`127.0.0.1:443` instead of `0.0.0.0` and `::`.
+- **vps02 is not the empty node the directory map implies** — `dokploy-traefik`
+  runs there too, publishing 80/443 on `0.0.0.0` *and* `::`. The IPv6 rule is
+  load-bearing on every node, not belt-and-braces.
+- vps01 has the drop rules active and persistent but has not been rebooted, so
+  its `daemon.json` layer is inactive. Ports are closed regardless; the reboot
+  is for the second layer, not the first.
+- `booking.maybeit.work` still `200` after vps01, all three nodes still `up` on
+  `/debug`, `maybeit.work` still `200`.
+- Sanity note for whoever runs this next: `dockerd` listens on 2377/7946 on all
+  interfaces, and those are correctly blocked by UFW. That is the clean proof
+  UFW works fine and only Docker's *published* ports slip past it.
+
+**vps00 remains open on 3000** — Access gates `dokploy.maybeit.work`, but the
+direct-IP path does not go through Access. Until this runs on vps00, C1 is
+half a fix.
+
 ---
 
 # 3 — H1: real node IPs committed to a public repo

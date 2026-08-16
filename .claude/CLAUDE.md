@@ -58,7 +58,12 @@ Never silently pick one.
 ## Hard rails — never break these
 
 1. **No open inbound ports except SSH (22).** Public traffic goes through
-   Cloudflare Tunnel, never a direct port.
+   Cloudflare Tunnel, never a direct port. UFW alone does not enforce
+   this — Docker's published ports bypass it. Enforced by
+   `harden-node.sh` (`DOCKER-USER` drops + `daemon.json` loopback bind);
+   checked by sweeping ports from off-node after any provisioning run:
+   `nc -z -G 3 -w 3 <ip> <port>` over 22/80/443/2377/3000/19999 must
+   answer on 22 and nothing else.
 2. **One tunnel token per node, never shared.** A shared token means
    requests can land on the wrong node and 502.
 3. **`network_mode: host` on every `cloudflared` service.** Bridge mode

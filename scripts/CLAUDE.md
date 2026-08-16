@@ -63,3 +63,20 @@ run is a no-op, before calling a script change done.
   point at `infra/inventory.yaml` for the real ones. Enforced by the
   `no-real-ips` local pre-commit hook — rail 5 was a sentence with
   nothing checking it, same drift class as rail 9.
+- UFW does not govern Docker-published ports. Docker's `nat`/`DOCKER`
+  rules are evaluated before ufw's chains, so `ufw status` showing only
+  22 while 80/443/3000 answer from the internet is the expected
+  symptom, not a contradiction. Filter in `DOCKER-USER` (and
+  `DOCKER-INGRESS` for ingress-mode Swarm publishes, which
+  `harden-node.sh` does **not** cover). Never treat `ufw status` as a
+  statement about real exposure — sweep the ports from off-node.
+- Do not persist `DOCKER-USER` rules with `iptables-persistent`: its
+  boot-time restore races Docker creating the chain. `harden-node.sh`
+  installs a systemd oneshot ordered `After=docker.service`
+  (`docker-wan-drop.service`) instead, which cannot lose that race.
+  Verified across a real vps02 reboot, not assumed.
+- `harden-node.sh` writes `/etc/docker/daemon.json` but deliberately
+  never restarts Docker — on vps00 that restarts the Swarm control
+  plane and every container. The loopback-bind layer is therefore
+  inactive until the next Docker restart or reboot; the `DOCKER-USER`
+  drops are active immediately, so the node is closed either way.
