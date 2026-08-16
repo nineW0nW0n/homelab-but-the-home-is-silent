@@ -48,6 +48,25 @@ through that node's `cloudflared` route above). Config is split two ways:
 never committed — `docker compose config` doesn't need it to exist,
 `docker compose up` does).
 
+## No docker.sock in Netdata
+
+Netdata does **not** get `/var/run/docker.sock`. A `:ro` bind on a socket
+restricts nothing — anything that can talk to the Docker API can run
+`docker run -v /:/host`, i.e. host root. Mounting it turned any Netdata
+RCE into instant root on all three nodes at once.
+
+What that costs: Netdata's cgroup collector used the socket only to
+resolve container *names*, so per-container charts are labelled by
+cgroup ID instead of a friendly name. The per-container CPU/memory/IO
+data itself comes from `/sys/fs/cgroup`, mounted separately and
+unaffected, and none of the node-level metrics the status page consumes
+(`system.cpu`, `system.ram`, `disk_space./`, `system.load`, `mem.swap`)
+ever touched the socket.
+
+`/:/host/root:ro,rslave` **stays** — the disk collectors genuinely need
+it, it is read-only, and it grants no write anywhere. Don't remove it in
+the same spirit; it isn't the same thing.
+
 ## Why network_mode: host (rail 3)
 
 Bridge mode puts `cloudflared` in its own network namespace, so
