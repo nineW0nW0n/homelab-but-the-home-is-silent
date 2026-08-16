@@ -24,11 +24,14 @@ Neither can be done by the agent. Keep them in every status summary,
 unprompted, until Ex explicitly says the item is finished. Do not quietly
 drop them because they are old.
 
-- [ ] **GitHub GC request.** History was rewritten and force-pushed, but GitHub
-      still serves the pre-rewrite commits by SHA — verified after the push.
-      Open a GitHub Support request asking them to garbage-collect unreachable
-      objects on `nineW0nW0n/homelab-but-the-home-is-silent`. Keep
-      `~/homelab-pre-rewrite-backup.bundle` until they confirm.
+- [ ] **GitHub GC request — sent 2026-08-16, awaiting Support.** Filed under
+      the "Deletes" category. Still open until verified, not until they reply:
+      `gh api repos/nineW0nW0n/homelab-but-the-home-is-silent/commits/8265af4`
+      must return 404. It currently resolves. Keep
+      `~/homelab-pre-rewrite-backup.bundle` until that check passes.
+      Note this removes the objects from GitHub only — anything that scraped
+      or mirrored the repo while it was public is beyond reach, which is why
+      C1 and C2 were the actual fix.
 - [ ] **Dokploy account hygiene (from C1).** Password confirmed adequate by Ex
       (2026-08-16: random 32 chars, mixed case, alphanumeric plus a special
       character) — that part is closed. **Still open:** enable 2FA if that
