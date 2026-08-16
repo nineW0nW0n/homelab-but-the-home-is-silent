@@ -1,10 +1,11 @@
 # Handoff — maybeit.work status dashboard, post-push
 
 **State as of 2026-08-16 (later same day):** `main` pushed to origin
-(`1da5dec`, was `e25dc68..1da5dec`, 27 commits). Netdata is **live on
-all 3 nodes**, and the Worker is **live and routed to `maybeit.work`**
-— both blockers below were hit and fixed this session. See "Push
-results" for what broke and how it was fixed.
+(`1da5dec`, was `e25dc68..1da5dec`, 27 commits, plus several more this
+session fixing what the push surfaced). **The dashboard is fully live**
+— `https://maybeit.work` shows all 3 nodes + dokploy green with real
+cpu/mem/disk numbers. This took 5 separate bugs found and fixed after
+the push; see "Push results" for the full chain.
 
 This supersedes `2026-08-16-maybeit-work-status-dashboard.md` (the
 pre-push handoff) for "what's next" purposes; keep that file too, it
@@ -24,78 +25,81 @@ has the full feature history and Cloudflare account references.
 
 ## Push results
 
-Run IDs: `deploy` 31919749826, `Deploy Worker` 31919749732, `validate`
-31919749606
+Run IDs (first of several deploy-worker.yml runs that session, others
+in git log): `deploy` 31919749826, `Deploy Worker` 31919749732,
+`validate` 31919749606
 (`gh run view <id> --repo nineW0nW0n/homelab-but-the-home-is-silent`).
+All 3 workflows ended green — `validate.yml` and `deploy.yml` (Netdata
+live on vps00-02) passed clean on the first try; `Deploy Worker` took
+several rounds, detailed below.
 
-- [x] `validate.yml`: **success**.
-- [x] `deploy.yml`: **success**. Netdata containers are live on
-      vps00-02, sequential rollout completed clean.
-- [x] `Deploy Worker`: **success**, after 2 rounds of fixing
-      infra gaps this session (see below). Worker is live and routed to
-      `maybeit.work`.
+If any of this ever needs redoing on a fresh Cloudflare account: visit
+the Workers & Pages dashboard page once before the first `wrangler
+deploy`, and make sure the deploy token has `Zone > Workers Routes >
+Edit` for every zone it needs to route.
 
-### Deploy Worker — two blockers hit and fixed this session
+## Everything hit and fixed after the push, in order
 
-**Blocker 1 — route attach failed.** First run: `wrangler deploy`
-uploaded the Worker fine (bindings live: `env.STATUS_KV`,
-`env.NODE_HOSTS`, `env.DOKPLOY_HOST`; secrets
-`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` created), but failed
-attaching the route:
-```
-✘ A request to the Cloudflare API (/zones/9a13fac38c7078e576ed3260f9df9591/workers/routes) failed.
-  Authentication error [code: 10000]
-```
-Cause: `CLOUDFLARE_API_TOKEN` had account-level Worker-deploy
-permission but not `Zone > Workers Routes > Edit` scoped to
-`maybeit.work`. Fixed via Cloudflare dashboard (browser automation,
-with Ex's go-ahead): added a policy to the token
-(`falling-resonance-af51`) — Specified Domain `maybeit.work` →
-Developer Platform → Workers Routes → Edit.
+1. **`poll.js`'s Netdata dimension names were wrong.** Checked vps00's
+   live `/api/v1/charts` via browser (Cloudflare Access SSO). Two of
+   three guesses were wrong: `system.cpu` has **no `idle` dimension**
+   in this deployment's config (only busy-state ones, which already
+   sum to the busy percentage), and the root disk chart id is
+   `disk_space./` (literal `/`), not `disk_space._`. `system.ram`/`used`
+   was correct as guessed. Fixed in `poll.js` (`d8a8c39`) — CPU now
+   sums busy-state dimensions with a fallback to `100 - idle` for
+   configs that do report it. New test covers the no-`idle` shape.
 
-**Blocker 2 — no workers.dev subdomain.** Re-ran, route attach
-succeeded this time, but the cron-trigger step then failed:
-```
-- A request to the Cloudflare API (/accounts/***/workers/scripts/maybeit-status/schedules) failed.
-  - You need a workers.dev subdomain in order to proceed. [code: 10063]
-```
-Cause: the account had never opened the Workers dashboard, so no
-`workers.dev` subdomain existed yet (first-visit auto-provisions one).
-Fixed by visiting `dash.cloudflare.com/<account>/workers-and-pages`
-once in browser — subdomain `abcollado-28.workers.dev` was created
-automatically. Re-ran, **green**.
+2. **`CLOUDFLARE_API_TOKEN` missing `Zone > Workers Routes > Edit`.**
+   First `Deploy Worker` run uploaded the Worker fine but failed
+   attaching the route to `maybeit.work` (`Authentication error [code:
+   10000]`). Fixed via Cloudflare dashboard: added a policy to the
+   token (`falling-resonance-af51`) scoped to `maybeit.work` →
+   Developer Platform → Workers Routes → Edit.
 
-If this ever needs redoing on a fresh Cloudflare account: visit the
-Workers & Pages dashboard page once before the first `wrangler deploy`
-that includes a cron trigger, and make sure the deploy token has
-`Zone > Workers Routes > Edit` for every zone it needs to route.
+3. **No `workers.dev` subdomain existed yet.** Route attach then
+   succeeded, but the cron-trigger step failed (`[code: 10063]`) since
+   the account had never opened the Workers dashboard once. Fixed by
+   visiting `dash.cloudflare.com/<account>/workers-and-pages` once —
+   auto-provisioned `abcollado-28.workers.dev`.
 
-## Not yet done — next steps, in order
+4. **`CF_ACCESS_CLIENT_ID`/`SECRET` never actually authenticated.**
+   `status-worker` Access service token showed "Not Seen Yet" even
+   after both blockers above were fixed. Rotated the token secret
+   (kept the same Client ID) via Cloudflare dashboard, updated both
+   GitHub secrets. Confirmed working via direct curl and via a
+   `fetch()`-triggered request.
 
-1. ~~Verify `poll.js`'s Netdata dimension names against a real
-   node~~ — **done this session.** Checked vps00's live
-   `/api/v1/charts` via browser (Cloudflare Access SSO, no service
-   token needed). Two of three were wrong:
-   - `system.cpu` has **no `idle` dimension** in this deployment's
-     config — only busy-state ones (`user`, `system`, `nice`,
-     `iowait`, `irq`, `softirq`, `steal`, `guest`, `guest_nice`), which
-     already sum to the busy percentage.
-   - Root disk chart id is `disk_space./` (literal `/`), not
-     `disk_space._` as guessed.
-   - `system.ram`/`used` was correct as guessed.
+5. **Cloudflare Cron Triggers can't poll this account's own
+   Access-protected apps — at all.** Even with the token from #4
+   confirmed working, `scheduled()` calling the poll directly got a 403
+   from Access on every tick. Tried routing it through a self-fetch (so
+   the real poll ran inside a nested `fetch()` invocation) — still
+   403'd at the next real tick, despite manually triggering that same
+   route from outside Cloudflare working every time. Root cause is
+   Cloudflare-side and unconfirmed; anything in a request chain rooted
+   at a Cron Trigger gets hit, not just the top-level handler. **Fix:
+   dropped Cron Triggers entirely.** No `[triggers]` in `wrangler.toml`,
+   no `scheduled()` handler — `fetch()` polls fresh on every page load
+   instead. Trade-off (page load waits on live Netdata + Dokploy calls)
+   accepted deliberately, per Ex, for a low-traffic status page. Full
+   writeup: `worker/status/CLAUDE.md` failure log.
 
-   Fixed in `poll.js` (`d8a8c39`): CPU now sums the busy-state
-   dimensions, with a fallback to `100 - idle` if a Netdata config does
-   report one. Disk chart id corrected. New test covers the no-`idle`
-   shape. `node --test` in `worker/status/`: 10/10 pass. Pushed —
-   watch `deploy-worker.yml` for this path-scoped run before trusting
-   the live page's numbers.
+6. **vps02's Cloudflare Tunnel had never connected once.** Dashboard
+   showed `Inactive` / 0 replicas; Netdata calls to vps02 got a 530
+   (Cloudflare-level, not Access — a different bug from #4). Root cause
+   likely a bad token paste when it was first set. Fixed by rotating
+   the tunnel token in the Cloudflare dashboard, updating
+   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`, and re-running `deploy.yml`.
+   Confirmed healthy (1 active replica) after.
 
-2. **Confirm the page renders live data.** Wait one cron tick (~5 min)
-   after `Deploy Worker` succeeded, then load `https://maybeit.work` —
-   expect the status table, not "no data yet."
+**Verified live:** `https://maybeit.work` shows all 3 nodes 🟢 with real
+cpu/mem/disk numbers, plus dokploy 🟢, confirmed after every fix above
+landed.
 
-3. **Sanity-check Telegram alerting end-to-end.** The bot
+## Not yet done
+
+1. **Sanity-check Telegram alerting end-to-end.** The bot
    (`@maybeitwork_status_bot`) exists and the chat id is your personal
    account (`6637564124`, from `Ash Collado`'s Telegram). Default
    Netdata alert thresholds are still in effect (tightening was scoped
