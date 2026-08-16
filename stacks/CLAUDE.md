@@ -43,17 +43,18 @@ Bridge mode puts `cloudflared` in its own network namespace, so
 container, not the VPS itself — the origin app is unreachable, 502.
 `network_mode: host` makes `localhost` mean the node.
 
-## TODO — alert thresholds not tightened (spec/implementation gap)
+## Alert thresholds
 
-The design spec calls for tightening mem/disk warn thresholds (~80%/90%)
-below Netdata's defaults (~90%/98%) since a 2GB node fills fast. That
-was never implemented — `netdata.conf`/`health_alarm_notify.conf` ship
-Netdata's stock health config, no custom threshold overrides. No spec
-amendment recorded the deviation either. Deferred as a follow-up, not
-this branch — writing custom Netdata health config files without a real
-node to verify against is exactly the unverified-guess risk this repo
-already avoids elsewhere (see `worker/status/CLAUDE.md`'s Outstanding
-manual steps).
+`health.d/ram.conf` and `health.d/disks.conf` (identical across all 3
+nodes, mounted over Netdata's stock files of the same name — same
+directory, same override-by-filename as `netdata.conf`, not a merge, so
+each is a full copy with only the threshold lines changed) tighten
+`ram_in_use` and `disk_space_usage` warn/crit from Netdata's stock
+90%/98% to 80%/90%, per the design spec — a 2GB node fills fast. Inode
+usage and the other stock disk/ram alarms are untouched. No deploy.yml
+change needed — `rsync -az --delete stacks/vps0N/` already ships
+subdirectories, and the existing `docker compose restart netdata` step
+picks up the new mounts.
 
 ## Why one token per node (rail 2)
 

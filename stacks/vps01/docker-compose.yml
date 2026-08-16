@@ -40,6 +40,8 @@ services:
       - /:/host/root:ro,rslave
       - ./netdata.conf:/etc/netdata/netdata.conf:ro
       - ./health_alarm_notify.conf:/etc/netdata/health_alarm_notify.conf:ro
+      - ./health.d/ram.conf:/etc/netdata/health.d/ram.conf:ro
+      - ./health.d/disks.conf:/etc/netdata/health.d/disks.conf:ro
     mem_limit: 200m
     mem_reservation: 100m
 
