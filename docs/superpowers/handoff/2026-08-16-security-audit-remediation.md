@@ -498,6 +498,21 @@ decide. **Do not force-push history without explicit approval.**
 The grep above returns nothing, the guard demonstrably fails on a test IP, and
 Ex has made a call on history.
 
+## Status — DONE except the GitHub GC request
+
+- Five script usage examples now use `203.0.113.10/.11`, each with a pointer to
+  `infra/inventory.yaml`. Tree-wide grep returns nothing.
+- `.gitleaks.toml` adds the `real-node-ip` rule, verified in both directions:
+  `198.51.99.7` fails the hook, `203.0.113.10` passes.
+- History rewritten with `git filter-repo --replace-text` across all 67 commits
+  and force-pushed. Pre-rewrite backup bundle:
+  `~/homelab-pre-rewrite-backup.bundle` (outside the repo, keep until the GC
+  request is confirmed done).
+- **Still open:** GitHub still serves the pre-rewrite commits by SHA — verified
+  after the force-push. Ex must open a GitHub Support request asking them to
+  garbage-collect unreachable objects on this repo. Until that lands, the old
+  addresses remain retrievable by anyone who recorded an old SHA.
+
 ---
 
 # 4 — H3: Docker socket mounted into Netdata on all three nodes
