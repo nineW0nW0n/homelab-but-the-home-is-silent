@@ -5,7 +5,10 @@ import { isFresh, pollAll } from './poll.js'
 const SNAPSHOT_KEY = 'snapshot'
 
 // Defense in depth, not a fix for a live XSS: page.html takes no user
-// input and writes data with textContent, never innerHTML.
+// input and writes data with textContent and real elements, never
+// innerHTML. That is enforced upstream by the site repo's
+// scripts/check-rails.sh, not by convention -- this comment was silently
+// false for a while before that grep existed.
 //
 // 'unsafe-inline' is required for both script and style: page.html is a
 // vendored copy of the designed front-end with two inline <script> blocks
@@ -92,12 +95,16 @@ export default {
       ctx.waitUntil(env.STATUS_KV.put(SNAPSHOT_KEY, JSON.stringify(snapshot)))
     }
 
+    // nosniff on the JSON routes too, not just the page. Without it a
+    // browser is free to content-sniff a response body; the page headers
+    // already carry it, these did not.
+    const JSON_HEADERS = { 'x-content-type-options': 'nosniff' }
     // Raw snapshot (includes dokploy + per-node `error` on down nodes) --
     // not linked from the page, just a diagnostic escape hatch.
     if (pathname === '/debug') {
-      return Response.json(snapshot)
+      return Response.json(snapshot, { headers: JSON_HEADERS })
     }
     const nodeHosts = env.NODE_HOSTS ? env.NODE_HOSTS.split(',') : []
-    return Response.json(toStatusJson(snapshot, nodeHosts))
+    return Response.json(toStatusJson(snapshot, nodeHosts), { headers: JSON_HEADERS })
   },
 }

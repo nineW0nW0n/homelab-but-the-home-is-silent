@@ -125,3 +125,10 @@ first, then the workflow reference.
   origin gains an auth gate, re-check what the poller is actually
   proving — "up" must mean the origin answered, not that its login
   page did.
+- `src/index.js`'s `PAGE_HEADERS` comment claimed `page.html` "writes data
+  with textContent, never innerHTML" while the vendored page did use
+  `innerHTML` for the metric readout. A comment asserting a security
+  invariant is worthless unless something checks it — the site repo's
+  `scripts/check-rails.sh` greps for markup sinks now. When you re-copy
+  `page.html`, re-read any comment here that makes a claim about its
+  contents; the copy can falsify them silently.

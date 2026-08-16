@@ -198,7 +198,9 @@ let SERVICES = [
   try {
     const res = await fetch('/status.json', { signal: ctrl.signal });
     const data = await res.json();
-    const isNum = v => typeof v === 'number';
+    // Number.isFinite, not `typeof === 'number'` -- the latter accepts NaN
+    // and Infinity, which quant() then renders as the literal string "LNaN".
+    const isNum = v => Number.isFinite(v);
     const valid = Array.isArray(data) && data.length >= 1 && data.length <= 3 &&
       data.every(s => typeof s.name === 'string' &&
         isNum(s.load) && isNum(s.cpu) && isNum(s.mem) && isNum(s.swap) && isNum(s.disk));
@@ -253,6 +255,7 @@ class Scene {
       this.els[id] = document.getElementById(id);
     });
     this._w = new WeakMap();
+    this._m = new WeakMap(); // metric <span>s per value element, built once
   }
 
   eff() { return this._override || CFG.theme; }
@@ -653,13 +656,15 @@ class Scene {
     ctx.restore();
   }
 
+  // No 'html' branch, deliberately: this class must never have a way to
+  // write markup. The metric readout builds real <span>s instead, see
+  // chrome(). scripts/check-rails.sh has a rail to keep it that way.
   set(el, prop, v) {
     if (!el) return;
     let m = this._w.get(el); if (!m) { m = {}; this._w.set(el, m); }
     if (m[prop] === v) return;
     m[prop] = v;
     if (prop === 'text') el.textContent = v;
-    else if (prop === 'html') el.innerHTML = v;
     else el.style[prop] = v;
   }
 
@@ -719,16 +724,29 @@ class Scene {
         this.set(dot, 'background', T.ink3); this.set(dot, 'opacity', '.5');
         return;
       }
-      const html = METRIC_KEYS.map(([letter, key]) => {
+      // Five real <span>s, built once and then only ever written through
+      // textContent/style. The TAPPING branch above sets textContent on
+      // `val`, which wipes them, so re-create whenever they're gone --
+      // firstElementChild is the cheap way to notice.
+      let spans = this._m.get(val);
+      if (!spans || val.firstElementChild !== spans[0]) {
+        val.textContent = '';
+        spans = METRIC_KEYS.map((_, j) => {
+          if (j) val.appendChild(document.createTextNode(' '));
+          return val.appendChild(document.createElement('span'));
+        });
+        this._m.set(val, spans);
+      }
+      METRIC_KEYS.forEach(([letter, key], j) => {
         const target = quant(s[key]);
         let n;
         if (t < top) n = 10 * eo(seg(t, race, top));
         else n = 10 - (10 - target) * eo(seg(t, top, land));
         const v10 = Math.round(n);
-        const color = v10 <= 0 ? T.ink3 : v10 >= 8 ? T.badHex : T.okHex;
-        return `<span style="color:${color}">${letter}${String(v10).padStart(2, '0')}</span>`;
-      }).join(' ');
-      this.set(val, 'html', html);
+        const txt = `${letter}${String(v10).padStart(2, '0')}`;
+        if (spans[j].textContent !== txt) spans[j].textContent = txt;
+        spans[j].style.color = v10 <= 0 ? T.ink3 : v10 >= 8 ? T.badHex : T.okHex;
+      });
       this.set(val, 'opacity', '1');
       this.set(dot, 'opacity', '1');
       this.set(dot, 'background', isBad(s) ? T.badHex : T.okHex);
