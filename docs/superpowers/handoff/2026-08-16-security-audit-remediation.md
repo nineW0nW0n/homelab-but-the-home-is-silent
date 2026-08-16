@@ -36,6 +36,22 @@ drop them because they are old.
       No firewall or Access change can retroactively fix a credential that was
       already used.
 
+## Progress — 2026-08-16
+
+| # | Item | State | Commit |
+|---|---|---|---|
+| 1 | C1 Access on Dokploy | done, verified | `6e96d1a` |
+| 2 | C2 Docker bypasses UFW | done, all 3 nodes rebooted | `ed3a43f` |
+| 3 | H1 real IPs | done; GitHub GC request outstanding (Ex) | `2e8e44d`, `d63b331` |
+| 4 | H3 docker.sock in Netdata | done, verified on all 3 nodes | `e181556` |
+| 5 | H2 SSH key blast radius | **blocked — needs Ex's decision** | — |
+| 6 | M1 secrets in `run:` | done, deploy green, Telegram verified | `63ee827` |
+| 7 | M2 Worker polls per request | done, verified 50 requests → 0 polls | `8165384` |
+| 8 | M3 actions pinned by tag | done, Dependabot on | `bc46ba6` |
+| 9 | M4 `curl \| sh` bootstrap | done (apt path untested on a fresh node) | `45f18f1` |
+| 10 | L1 public `/debug` | **blocked — needs Ex's decision** | — |
+| 11 | L2 security headers | done, CSP verified clean in a browser | `43367b0` |
+
 ## Rules for the executor
 
 Non-negotiable, they exist because breaking them is how this list got written:
