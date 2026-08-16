@@ -90,3 +90,15 @@ run is a no-op, before calling a script change done.
   3000 is open to the internet with only the Dokploy admin password in
   front of it. Check `systemctl is-active docker-wan-drop` before
   trusting a port sweep taken from inside the node.
+- `install-docker.sh` no longer pipes `get.docker.com` into a root
+  shell; it configures Docker's apt repo and keyring directly. That is
+  the same end state the convenience script produced — verified against
+  a node it had already provisioned — but packages are GPG-verified and
+  upgrades come through apt. Untested on a fresh node (all three were
+  already provisioned when it changed): if a new node is ever built,
+  watch this step rather than assuming it.
+- `bootstrap-dokploy.sh` still runs a vendor installer — Dokploy has no
+  apt repo. It now downloads to a file and prints the sha256 before
+  executing. That is a *record*, not a verification: there is no
+  published checksum to compare a first run against. Don't upgrade the
+  claim when describing it.

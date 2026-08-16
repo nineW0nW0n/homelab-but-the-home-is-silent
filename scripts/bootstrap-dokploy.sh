@@ -26,8 +26,18 @@ ssh_port="${VPS00_SSH_PORT:-22}"
 
 echo "Bootstrapping Dokploy on ${ssh_user}@${VPS00_HOST}:${ssh_port} ..."
 
-ssh -p "$ssh_port" "${ssh_user}@${VPS00_HOST}" \
-  'curl -sSL https://dokploy.com/install.sh | sh'
+# Dokploy has no apt repository, so this stays a vendor installer fetched
+# over TLS. What changed: it lands in a file, its sha256 is printed to the
+# log, and only then does it run. That does not *verify* anything on a
+# first run -- there is no published checksum to compare against -- but it
+# makes the artifact reviewable and gives a hash to diff on the next run.
+# Do not describe this as a checksum check; it is a record.
+ssh -p "$ssh_port" "${ssh_user}@${VPS00_HOST}" 'set -eu
+  tmp=$(mktemp)
+  trap "rm -f \"$tmp\"" EXIT
+  curl -fsSL https://dokploy.com/install.sh -o "$tmp"
+  echo "installer sha256: $(sha256sum "$tmp" | cut -d" " -f1)"
+  sh "$tmp"'
 
 echo ""
 echo "Install finished."
