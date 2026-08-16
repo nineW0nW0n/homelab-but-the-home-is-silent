@@ -39,3 +39,15 @@ repos:
     hooks:
       - id: shellcheck
         args: ["-s", "sh"]
+
+  - repo: local
+    hooks:
+      - id: biome-ci
+        name: biome ci
+        # Pinned to match biome.json's $schema (2.5.8) -- the only
+        # existing version reference in this repo; no biome devDependency
+        # exists anywhere to reuse instead. Bump both together.
+        entry: biome ci .
+        language: node
+        additional_dependencies: ["@biomejs/biome@2.5.8"]
+        pass_filenames: false

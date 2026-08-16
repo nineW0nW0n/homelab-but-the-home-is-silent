@@ -15,3 +15,29 @@ services:
     command: tunnel run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+
+  netdata:
+    image: netdata/netdata:v2.11.0
+    container_name: netdata
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host/root:ro,rslave
+      - ./netdata.conf:/etc/netdata/netdata.conf:ro
+      - ./health_alarm_notify.conf:/etc/netdata/health_alarm_notify.conf:ro
+    mem_limit: 200m
+    mem_reservation: 100m
+
+volumes:
+  netdataconfig:
+  netdatalib:
+  netdatacache:

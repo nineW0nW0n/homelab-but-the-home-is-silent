@@ -32,3 +32,8 @@ __pycache__/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+
+# Node (worker/status/)
+node_modules/
+.wrangler/
+.dev.vars

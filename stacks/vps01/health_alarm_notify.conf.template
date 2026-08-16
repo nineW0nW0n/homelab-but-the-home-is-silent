@@ -1,0 +1,9 @@
+# Netdata alarm notifications -- Telegram only. Rendered into the real
+# file at deploy time (deploy.yml); the two placeholders below are
+# substituted from GitHub secrets, never committed as real values.
+# Every other notification method stays at alarm-notify.sh's own
+# built-in default (disabled) -- this file only needs to turn on what
+# we're using.
+SEND_TELEGRAM="YES"
+TELEGRAM_BOT_TOKEN="__TELEGRAM_BOT_TOKEN__"
+DEFAULT_RECIPIENT_TELEGRAM="__TELEGRAM_CHAT_ID__"

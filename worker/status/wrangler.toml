@@ -1,0 +1,18 @@
+name = "maybeit-status"
+main = "src/index.js"
+compatibility_date = "2026-08-15"
+
+routes = [
+  { pattern = "maybeit.work", custom_domain = true }
+]
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "STATUS_KV"
+id = "8fbd60e3276e4a40a63609f9ed56e1fd"
+
+[vars]
+NODE_HOSTS = "vps00-metrics.maybeit.work,vps01-metrics.maybeit.work,vps02-metrics.maybeit.work"
+DOKPLOY_HOST = "dokploy.maybeit.work"

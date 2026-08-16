@@ -35,6 +35,7 @@ belongs in `.claude/skills/`, not here.
 | `stacks/` | Per-node `docker-compose.yml` — cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy) | exists → `.github/workflows/CLAUDE.md` |
+| `worker/status/` | Cloudflare Worker: status page + health poller | exists → worker/status/CLAUDE.md |
 
 Keep this column current the same commit you add or remove a directory
 file.
@@ -88,9 +89,9 @@ Every change runs through this before you report it done.
 
 ```sh
 pre-commit run --all-files   # yamllint --strict, actionlint, gitleaks,
-                             # trailing-whitespace, large-file/private-key checks
+                             # trailing-whitespace, large-file/private-key
+                             # checks, biome ci . (local hook)
 shellcheck scripts/*.sh      # every script stays shellcheck-clean
-biome ci .                   # only if the repo has .js/.ts/.json/.jsonc/.css
 find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +
 ```
 
@@ -147,6 +148,22 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   the workflow file.
 - A `wc -l CLAUDE.md */CLAUDE.md */*/CLAUDE.md` budget check silently
   skips `.github/` — shell globs don't match dot-directories. Use `find`.
+- Biome 2.x's config schema moved fast: `files.ignore` → `files.includes`
+  with `!` negation, top-level `organizeImports` → `assist.actions.source`,
+  `linter.rules.recommended: true` → `linter.rules.preset: "recommended"`
+  (not `"none"` — `biome migrate --write` mis-converted `recommended: true`
+  to `preset: "none"`, which silently disables all lint rules; verify the
+  migrated `linter` block by hand, don't trust the tool output blindly).
+  Always resolve the exact Biome version being installed and pin
+  `biome.json`'s `$schema` and syntax to that version, not to whatever an
+  older doc/skill shows.
+- Rail 9 (Biome lints everything) existed in this file but was never
+  gate-enforced — no pre-commit hook, no validate.yml step. Fixed by
+  adding a `local` pre-commit hook (`language: node`,
+  `additional_dependencies: ["@biomejs/biome@2.5.8"]`, matching
+  `biome.json`'s `$schema`) so `pre-commit run --all-files` actually
+  runs it. A rail without a wired-in check is undetectable drift —
+  double-check new rails have an enforcement point, not just a sentence.
 
 ## Propagation protocol
 

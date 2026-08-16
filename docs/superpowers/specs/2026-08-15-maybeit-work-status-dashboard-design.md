@@ -1,5 +1,20 @@
 # `maybeit.work` status dashboard — design
 
+> **Implementation update (during execution, 2026-08-15):** Netdata is
+> deployed as a **Docker container via `stacks/<node>/` + `deploy.yml`**
+> (GitOps, matching this repo's stated deploy model), not the ad-hoc SSH
+> provisioning script this doc originally described below. Root cause:
+> the only SSH access available is the `deploy` CI user (no sudo, rail
+> 6) — a native install needs root, which isn't reachable. `deploy` is
+> already in the `docker` group, so a container fits the access that
+> actually exists, and folds Netdata into the same rollout as
+> `cloudflared` instead of a separate manual step. Resource overhead is
+> effectively identical to a native install (same process; container
+> packaging adds a few MB — see the implementation plan for sourcing).
+> The retention/tuning/alerting goals below are unchanged, only the
+> delivery mechanism. The implementation plan is the current source of
+> truth for exact files/steps.
+
 ## Goal
 
 A page at the apex domain `maybeit.work` showing live health of the
