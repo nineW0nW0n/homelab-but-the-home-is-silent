@@ -39,9 +39,11 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add known hosts
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Ensure remote stack dir
@@ -53,16 +55,21 @@ jobs:
             stacks/vps00/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps00/"
 
       - name: Write remote .env
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: |
-          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" | \
+          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$TUNNEL_TOKEN" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps00/.env'
 
       - name: Write remote health_alarm_notify.conf
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           sed \
-            -e "s/__TELEGRAM_BOT_TOKEN__/${{ secrets.TELEGRAM_BOT_TOKEN }}/" \
-            -e "s/__TELEGRAM_CHAT_ID__/${{ secrets.TELEGRAM_CHAT_ID }}/" \
+            -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
+            -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" \
             stacks/vps00/health_alarm_notify.conf.template | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps00/health_alarm_notify.conf'
@@ -96,9 +103,11 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add known hosts
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Ensure remote stack dir
@@ -110,16 +119,21 @@ jobs:
             stacks/vps01/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps01/"
 
       - name: Write remote .env
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING }}
         run: |
-          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING }}" | \
+          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING=%s\n' "$TUNNEL_TOKEN" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps01/.env'
 
       - name: Write remote health_alarm_notify.conf
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           sed \
-            -e "s/__TELEGRAM_BOT_TOKEN__/${{ secrets.TELEGRAM_BOT_TOKEN }}/" \
-            -e "s/__TELEGRAM_CHAT_ID__/${{ secrets.TELEGRAM_CHAT_ID }}/" \
+            -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
+            -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" \
             stacks/vps01/health_alarm_notify.conf.template | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps01/health_alarm_notify.conf'
@@ -153,9 +167,11 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add known hosts
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Ensure remote stack dir
@@ -167,16 +183,21 @@ jobs:
             stacks/vps02/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps02/"
 
       - name: Write remote .env
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS }}
         run: |
-          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\n' "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS }}" | \
+          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\n' "$TUNNEL_TOKEN" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps02/.env'
 
       - name: Write remote health_alarm_notify.conf
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           sed \
-            -e "s/__TELEGRAM_BOT_TOKEN__/${{ secrets.TELEGRAM_BOT_TOKEN }}/" \
-            -e "s/__TELEGRAM_CHAT_ID__/${{ secrets.TELEGRAM_CHAT_ID }}/" \
+            -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
+            -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" \
             stacks/vps02/health_alarm_notify.conf.template | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps02/health_alarm_notify.conf'
