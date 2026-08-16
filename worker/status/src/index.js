@@ -11,6 +11,23 @@ export default {
     if (new URL(request.url).pathname === '/debug') {
       return Response.json(snapshot)
     }
+    // On-demand live probe, bypasses waiting for the next cron tick.
+    if (new URL(request.url).pathname === '/debug/probe') {
+      const res = await fetch('https://vps00-metrics.maybeit.work/api/v1/charts', {
+        headers: {
+          'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
+          'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
+        },
+      })
+      const body = await res.text()
+      return Response.json({
+        status: res.status,
+        idPresent: Boolean(env.CF_ACCESS_CLIENT_ID),
+        idLen: env.CF_ACCESS_CLIENT_ID?.length,
+        secretLen: env.CF_ACCESS_CLIENT_SECRET?.length,
+        bodySnippet: body.slice(0, 300),
+      })
+    }
     return new Response(renderStatusPage(snapshot), {
       headers: { 'content-type': 'text/html; charset=utf-8' },
     })
