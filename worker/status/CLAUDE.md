@@ -50,7 +50,13 @@ Set via `wrangler secret put`, never in this directory.
 `x-debug-key`. Unset means the route 404s for everyone; the check fails
 closed by design, so a rolled-back or missing secret can never leave
 `/debug` public. `deploy-worker.yml` pushes it from the GitHub secret of
-the same name.
+the same name. Ex's copy of the value is at `~/.maybeit-debug-key`.
+
+Note `wrangler-action` **fails the whole deploy** if a name listed under
+`secrets:` has no value in `env:` — "Value for secret X not found in
+environment." So adding a secret to that list without creating the repo
+secret first breaks every Worker deploy until it exists. Add the secret
+first, then the workflow reference.
 
 ## Failure log
 
