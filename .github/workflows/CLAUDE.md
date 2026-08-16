@@ -51,7 +51,14 @@ Variables (optional, default in workflow): `VPS0N_SSH_USER`,
   input (PR titles, branch names) rather than interpolating directly.
 - New secret → add to `.env.example` (empty value) and this file's
   required-secrets list, add to GitHub repo secrets, never commit the
-  value.
+  value. Reference it under `env:` or `with:`, **never** inside a `run:`
+  script body — `${{ }}` is substituted before bash parses the script,
+  so a value containing a backtick or `$(` executes on the runner.
+- New action → pin to a full commit SHA with the version in a trailing
+  comment (`uses: owner/repo@<40-char-sha>  # v1.2.3`). Tags are
+  mutable; a retagged upstream runs with `SSH_PRIVATE_KEY` and
+  `CLOUDFLARE_API_TOKEN` in scope. Dependabot (`.github/dependabot.yml`)
+  bumps the pins weekly so they don't rot.
 
 ## Failure log
 

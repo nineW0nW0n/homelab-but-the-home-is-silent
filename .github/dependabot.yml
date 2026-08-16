@@ -1,0 +1,17 @@
+---
+# Actions are pinned to commit SHAs (M3), which is what stops a retagged
+# upstream v4 from running with SSH_PRIVATE_KEY and CLOUDFLARE_API_TOKEN in
+# scope. A SHA never moves on its own, so Dependabot is what keeps the pins
+# from silently rotting -- it opens a PR with the new SHA and the version in
+# the comment, and validate.yml gates it like any other change.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /worker/status
+    schedule:
+      interval: weekly
