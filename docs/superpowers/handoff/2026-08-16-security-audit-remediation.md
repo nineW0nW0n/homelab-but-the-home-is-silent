@@ -187,6 +187,30 @@ unless Ex says otherwise.
 `dokploy.maybeit.work` no longer serves a `200` login page to an unauthenticated
 request, and the change is written down in `stacks/CLAUDE.md`.
 
+## Status — DONE
+
+- Access application `dokploy` created (self-hosted, `dokploy.maybeit.work`,
+  24h session), policies mirroring the `*-metrics` apps: `status-worker service
+  auth` (service token `status-worker`) then `owner email allow` (Emails). Note
+  the account's existing policies are **per-app copies, not shared objects** —
+  each of the six listed shows "used by 1 application" — so dokploy got its own
+  pair rather than binding to another app's policy.
+- Verified: unauthenticated `GET https://dokploy.maybeit.work/` returns `302` to
+  `old-firefly-996b.cloudflareaccess.com`. The three metrics hosts still `302`,
+  `https://maybeit.work/` still `200`.
+- `pollDokploy` now sends the service token and uses `redirect: 'manual'` with
+  an explicit 2xx test, so the tile cannot go green on an Access login page.
+  Verified live after deploy: `/debug` shows `dokploy.up: true` reached through
+  the token.
+- **Not done, and it is C2's job:** the direct-IP path on `:3000` is still open.
+  Access does nothing for it.
+
+## Still open from "Also do, regardless of which plan"
+
+Ex to confirm the Dokploy admin password is strong and unique, enable 2FA if the
+version supports it, and check Dokploy's login log for unrecognised sessions —
+the UI was publicly reachable for an unknown period.
+
 ---
 
 # 2 — C2: Docker's published ports bypass UFW
