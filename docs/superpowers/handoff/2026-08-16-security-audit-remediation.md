@@ -86,6 +86,20 @@ Do them in order; do not batch them into one commit.
 | 10 | L1 — public `/debug` | LOW | worker |
 | 11 | L2 — no security headers | LOW | worker |
 
+### Decisions Ex has made — do not re-litigate these
+
+- **Item 1 (C1): Plan A.** Cloudflare Access application on
+  `dokploy.maybeit.work`, applied through the Zero Trust dashboard via browser
+  automation. Includes the service-token fix to `pollDokploy` so the status
+  check stays honest.
+- **Item 2 (C2): Plan C — both layers.** `DOCKER-USER` drop rules *and*
+  `"ip": "127.0.0.1"` in `/etc/docker/daemon.json`. Reasoning Ex gave: self-
+  inflicted breakage is recoverable, a stranger's is not, so pay the extra
+  layer. Node order stays vps02 → vps01 → vps00.
+- **Item 3 (H1): scrub the files *and* rewrite history.** Force-push approved
+  for this item specifically. Repo is public with 0 forks and 0 stars, so
+  collateral is limited to Ex's own clones.
+
 ---
 
 # 1 — C1: Dokploy control plane is publicly reachable
@@ -204,20 +218,30 @@ console to recover.
 **Mandatory safety procedure for every node, every time:**
 
 ```sh
-# 1. snapshot current rules
-iptables-save  > /root/iptables.backup.$(date +%s)
-ip6tables-save > /root/ip6tables.backup.$(date +%s)
+# 1. snapshot current rules to FIXED paths -- no timestamp, so step 2 can
+#    name the file it restores. A placeholder like ".backup.LATEST" is not a
+#    filename: the restore silently fails and the safety net is fake.
+iptables-save  > /root/iptables.backup
+ip6tables-save > /root/ip6tables.backup
+test -s /root/iptables.backup  || { echo "empty v4 backup, stop" >&2; exit 1; }
+test -s /root/ip6tables.backup || { echo "empty v6 backup, stop" >&2; exit 1; }
 
-# 2. arm a dead-man restore BEFORE applying anything
-setsid sh -c 'sleep 300; iptables-restore < /root/iptables.backup.LATEST; \
-              ip6tables-restore < /root/ip6tables.backup.LATEST' >/dev/null 2>&1 &
+# 2. arm a dead-man restore BEFORE applying anything, and keep its PID so
+#    step 5 can actually kill it.
+setsid sh -c 'sleep 300
+  iptables-restore  < /root/iptables.backup
+  ip6tables-restore < /root/ip6tables.backup' >/dev/null 2>&1 &
+deadman=$!
+echo "dead-man armed, pid $deadman, fires in 300s"
 
 # 3. apply the rules
 
 # 4. from a SECOND terminal, prove SSH still works:
 #    ssh deploy@<node> 'echo alive'
+#    If that fails, do NOTHING -- wait out the 300s and the restore undoes it.
 
-# 5. only then disarm: kill the sleep process, and persist
+# 5. only then disarm and persist
+kill "$deadman"
 ```
 
 Do vps02 first (no workload on it), then vps01, then vps00 (control plane, most
@@ -281,9 +305,15 @@ apt-get on a heredoc'd SSH session is annoying but not dangerous.
 **Caveat to verify, not assume:** restoring saved rules at boot can race Docker
 creating the `DOCKER-USER` chain. If `netfilter-persistent` fails at boot because
 the chain does not exist yet, fall back to a tiny systemd unit ordered
-`After=docker.service` that re-applies the two rules. **Reboot vps02 once and
-confirm the rules are present after boot** — an unverified persistence mechanism
-is the same as no persistence.
+`After=docker.service` that re-applies the two rules.
+
+> **Blocking step, not a nice-to-have.** Reboot vps02 once and confirm with
+> `iptables -S DOCKER-USER` / `ip6tables -S DOCKER-USER` that both rules are
+> present *after* boot, before touching vps01 or vps00. An unverified
+> persistence mechanism is the same as no persistence, and the failure mode is
+> silent: the node comes back up wide open and nothing reports it. This is the
+> step most likely to get skipped because everything already looks fixed —
+> do not report item 2 done without it.
 
 ### Verification (run from the laptop, not the node)
 
@@ -438,8 +468,13 @@ hook is five lines and has no schema risk:
         && { echo "real IP in tracked file -- rail 5"; exit 1; } || exit 0'
       language: system
       types: [text]
-      exclude: ^(worker/status/(node_modules|package-lock\.json)|docs/superpowers/handoff/)
+      exclude: ^worker/status/(node_modules|package-lock\.json)
 ```
+
+Do **not** exclude `docs/superpowers/handoff/` from the guard. Handoff documents
+are exactly where a real IP gets pasted in from a live investigation; excluding
+them creates the blind spot the guard exists to close. This document passes the
+guard as written — it uses `203.0.113.x` throughout.
 
 ## Plan B for the exposure itself — git history
 
