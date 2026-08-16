@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pollAll } from '../src/poll.js'
+import { isFresh, pollAll } from '../src/poll.js'
 
 function jsonResponse(labels, values, status = 200) {
   return new Response(JSON.stringify({ labels, data: [[0, ...values]] }), { status })
@@ -184,4 +184,35 @@ test('pollAll sends the Access service token to dokploy', async () => {
   assert.equal(seen.headers['CF-Access-Client-Id'], 'id')
   assert.equal(seen.headers['CF-Access-Client-Secret'], 'secret')
   assert.equal(seen.redirect, 'manual')
+})
+
+test('isFresh: missing, stale, and future-stamped snapshots all poll again', async () => {
+  const now = Date.parse('2026-08-16T12:00:00.000Z')
+  assert.equal(isFresh(null, now), false)
+  assert.equal(isFresh({}, now), false)
+  assert.equal(isFresh({ polledAt: 'not-a-date' }, now), false)
+  assert.equal(isFresh({ polledAt: '2026-08-16T11:59:00.000Z' }, now), false)
+  // Clock skew: a snapshot from the future is not "fresh", it's wrong.
+  assert.equal(isFresh({ polledAt: '2026-08-16T12:05:00.000Z' }, now), false)
+})
+
+test('isFresh: a snapshot inside the TTL is served without re-polling', async () => {
+  const now = Date.parse('2026-08-16T12:00:00.000Z')
+  assert.equal(isFresh({ polledAt: '2026-08-16T11:59:59.000Z' }, now), true)
+  assert.equal(isFresh({ polledAt: '2026-08-16T12:00:00.000Z' }, now), true)
+  // Exactly at the TTL boundary is stale, not fresh.
+  assert.equal(isFresh({ polledAt: '2026-08-16T11:59:30.000Z' }, now), false)
+})
+
+test('pollAll stamps a top-level polledAt the freshness check can use', async () => {
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: '',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  const fetchFn = async () => new Response('', { status: 200 })
+  const snapshot = await pollAll(env, fetchFn)
+  assert.ok(snapshot.polledAt, 'snapshot has polledAt')
+  assert.equal(isFresh(snapshot), true)
 })

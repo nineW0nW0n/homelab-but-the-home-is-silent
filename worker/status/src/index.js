@@ -1,5 +1,5 @@
 import page from './page.html'
-import { pollAll } from './poll.js'
+import { isFresh, pollAll } from './poll.js'
 
 const SNAPSHOT_KEY = 'snapshot'
 
@@ -31,22 +31,34 @@ function toStatusJson(snapshot, nodeHosts) {
 // instead sidesteps that entirely -- it always runs inside a real
 // fetch() invocation, which works every time.
 export default {
-  async fetch(request, env) {
-    const previousSnapshot = await env.STATUS_KV.get(SNAPSHOT_KEY, { type: 'json' })
-    const snapshot = await pollAll(env, fetch, previousSnapshot)
-    await env.STATUS_KV.put(SNAPSHOT_KEY, JSON.stringify(snapshot))
+  async fetch(request, env, ctx) {
     const pathname = new URL(request.url).pathname
+
+    // The HTML shell needs no data at all -- the page fetches
+    // /status.json itself on load. Serving `/`, /favicon.ico and every
+    // 404 path used to poll all three nodes and write KV first.
+    if (pathname !== '/status.json' && pathname !== '/debug') {
+      return new Response(page, {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })
+    }
+
+    const previousSnapshot = await env.STATUS_KV.get(SNAPSHOT_KEY, { type: 'json' })
+    let snapshot = previousSnapshot
+    if (!isFresh(previousSnapshot)) {
+      snapshot = await pollAll(env, fetch, previousSnapshot)
+      // waitUntil so the response isn't blocked on the KV write. The
+      // previous snapshot still threads through pollAll -- pollNode needs
+      // it to carry lastSeen forward on a node that's currently down.
+      ctx.waitUntil(env.STATUS_KV.put(SNAPSHOT_KEY, JSON.stringify(snapshot)))
+    }
+
     // Raw snapshot (includes dokploy + per-node `error` on down nodes) --
     // not linked from the page, just a diagnostic escape hatch.
     if (pathname === '/debug') {
       return Response.json(snapshot)
     }
-    if (pathname === '/status.json') {
-      const nodeHosts = env.NODE_HOSTS ? env.NODE_HOSTS.split(',') : []
-      return Response.json(toStatusJson(snapshot, nodeHosts))
-    }
-    return new Response(page, {
-      headers: { 'content-type': 'text/html; charset=utf-8' },
-    })
+    const nodeHosts = env.NODE_HOSTS ? env.NODE_HOSTS.split(',') : []
+    return Response.json(toStatusJson(snapshot, nodeHosts))
   },
 }

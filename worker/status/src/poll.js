@@ -151,6 +151,22 @@ async function pollDokploy(fetchFn, host, headers, previous) {
   }
 }
 
+// How long a snapshot is served without re-polling. Every poll is five
+// Netdata calls per node against 2 vCPU boxes plus a KV write, so an
+// unauthenticated request loop used to be a load generator pointed at the
+// homelab. Keyed on a top-level polledAt, deliberately not on a per-node
+// lastPolled -- a node may be missing from the snapshot entirely.
+export const POLL_TTL_MS = 30_000
+
+export function isFresh(snapshot, now = Date.now(), ttlMs = POLL_TTL_MS) {
+  if (!snapshot?.polledAt) return false
+  const polledAt = Date.parse(snapshot.polledAt)
+  if (!Number.isFinite(polledAt)) return false
+  const age = now - polledAt
+  // A snapshot stamped in the future is a clock problem, not freshness.
+  return age >= 0 && age < ttlMs
+}
+
 export async function pollAll(env, fetchFn = fetch, previousSnapshot = null) {
   const headers = {
     'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
@@ -165,5 +181,5 @@ export async function pollAll(env, fetchFn = fetch, previousSnapshot = null) {
     }),
   )
   const dokploy = await pollDokploy(fetchFn, env.DOKPLOY_HOST, headers, previousSnapshot?.dokploy)
-  return { nodes, dokploy }
+  return { nodes, dokploy, polledAt: new Date().toISOString() }
 }
