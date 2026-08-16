@@ -232,10 +232,16 @@ wasn't written down:**
 
 ## Self-audit — on demand
 
-Ex runs this manually. When asked: review every `CLAUDE.md` and skill for
-stale map rows, superseded-but-unreplaced log lines, rails that no longer
-match reality, and anything over budget. Report drift, fix what's
-unambiguous, ask before restructuring.
+Ex runs this manually. When asked: review every `CLAUDE.md` and skill —
+**and `README.md`** — for stale map rows, superseded-but-unreplaced log
+lines, rails that no longer match reality, and anything over budget.
+Report drift, fix what's unambiguous, ask before restructuring.
+
+`README.md` is in scope and easy to forget precisely because it isn't a
+`CLAUDE.md`. It is also the only public document here, so a stale claim
+in it is a claim made to strangers — it asserted "no open inbound port
+except SSH, enforced by UFW" while three ports answered from the
+internet.
 
 **Recommend one, unprompted, when:** the failure log gains 3+ entries in
 a session, a hard rail needed double-checking against real behavior, or
