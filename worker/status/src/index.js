@@ -3,6 +3,35 @@ import { isFresh, pollAll } from './poll.js'
 
 const SNAPSHOT_KEY = 'snapshot'
 
+// Defense in depth, not a fix for a live XSS: page.html takes no user
+// input and writes data with textContent, never innerHTML.
+//
+// 'unsafe-inline' is required for both script and style: page.html is a
+// vendored copy of the designed front-end with two inline <script> blocks
+// and one inline <style>, and there is no build step to hash them. Hashes
+// would be stricter but would silently break the page every time the
+// vendored file is re-copied, which is the worse failure. Fonts are
+// data: URIs, already inlined, so no external origin is needed anywhere.
+//
+// HSTS is deliberately absent -- Cloudflare terminates TLS and should set
+// it at the edge, not this Worker.
+const PAGE_HEADERS = {
+  'content-type': 'text/html; charset=utf-8',
+  'content-security-policy': [
+    "default-src 'none'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    'font-src data:',
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'none'",
+  ].join('; '),
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+}
+
 // Page's own DATA CONTRACT (see src/page.html): array of up to 3
 // { name, load, cpu, mem, swap, disk }, raw 0-100 percents. No dokploy --
 // the page hardcodes exactly 3 status-dot slots, mapped by ARRAY INDEX,
@@ -38,9 +67,7 @@ export default {
     // /status.json itself on load. Serving `/`, /favicon.ico and every
     // 404 path used to poll all three nodes and write KV first.
     if (pathname !== '/status.json' && pathname !== '/debug') {
-      return new Response(page, {
-        headers: { 'content-type': 'text/html; charset=utf-8' },
-      })
+      return new Response(page, { headers: PAGE_HEADERS })
     }
 
     const previousSnapshot = await env.STATUS_KV.get(SNAPSHOT_KEY, { type: 'json' })
