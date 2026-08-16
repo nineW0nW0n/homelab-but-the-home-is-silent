@@ -130,11 +130,22 @@ async function pollNode(fetchFn, host, headers, previous) {
   }
 }
 
-async function pollDokploy(fetchFn, host, previous) {
+async function pollDokploy(fetchFn, host, headers, previous) {
   const now = new Date().toISOString()
   try {
-    const res = await fetchWithTimeout(fetchFn, `https://${host}/`, { method: 'GET' })
-    return { up: res.status < 500, lastPolled: now, lastSeen: now }
+    // Dokploy is behind the same Access application as the Netdata
+    // hosts, so this needs the service token like every other call.
+    // `redirect: manual` + a 2xx requirement is what keeps the check
+    // honest: without it, an Access login redirect is followed to a
+    // 200 login page and Dokploy reports "up" when what is actually
+    // up is Access.
+    const res = await fetchWithTimeout(fetchFn, `https://${host}/`, {
+      method: 'GET',
+      headers,
+      redirect: 'manual',
+    })
+    const up = res.status >= 200 && res.status < 300
+    return { up, lastPolled: now, lastSeen: up ? now : (previous?.lastSeen ?? null) }
   } catch {
     return { up: false, lastPolled: now, lastSeen: previous?.lastSeen ?? null }
   }
@@ -153,6 +164,6 @@ export async function pollAll(env, fetchFn = fetch, previousSnapshot = null) {
       nodes[name] = await pollNode(fetchFn, host, headers, previousSnapshot?.nodes?.[name])
     }),
   )
-  const dokploy = await pollDokploy(fetchFn, env.DOKPLOY_HOST, previousSnapshot?.dokploy)
+  const dokploy = await pollDokploy(fetchFn, env.DOKPLOY_HOST, headers, previousSnapshot?.dokploy)
   return { nodes, dokploy }
 }

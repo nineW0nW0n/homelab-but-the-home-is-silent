@@ -148,3 +148,40 @@ test('pollAll marks dokploy down on a 5xx response', async () => {
   const snapshot = await pollAll(env, fetchFn)
   assert.equal(snapshot.dokploy.up, false)
 })
+
+test('pollAll marks dokploy down on an Access login redirect', async () => {
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: '',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  // Without redirect:manual the runtime follows this to a 200 login
+  // page and the check silently reports Access, not Dokploy.
+  const fetchFn = async () =>
+    new Response('', {
+      status: 302,
+      headers: { location: 'https://old-firefly-996b.cloudflareaccess.com/' },
+    })
+  const snapshot = await pollAll(env, fetchFn)
+  assert.equal(snapshot.dokploy.up, false)
+})
+
+test('pollAll sends the Access service token to dokploy', async () => {
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: '',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  let seen = null
+  const fetchFn = async (_url, options) => {
+    seen = options
+    return new Response('', { status: 200 })
+  }
+  const snapshot = await pollAll(env, fetchFn)
+  assert.equal(snapshot.dokploy.up, true)
+  assert.equal(seen.headers['CF-Access-Client-Id'], 'id')
+  assert.equal(seen.headers['CF-Access-Client-Secret'], 'secret')
+  assert.equal(seen.redirect, 'manual')
+})

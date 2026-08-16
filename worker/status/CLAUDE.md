@@ -19,9 +19,11 @@ why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`
   `Text` module rule (`import page from './page.html'` in `index.js`).
   Copy-paste, not a submodule — one static file doesn't justify the
   ceremony.
-- `src/poll.js` — polls each node's Netdata API (through the
-  Access-gated tunnel route) + a plain Dokploy reachability check,
-  returns a status snapshot. `fetch` is injectable for testing.
+- `src/poll.js` — polls each node's Netdata API and Dokploy, both
+  through Access-gated tunnel routes, returns a status snapshot.
+  `fetch` is injectable for testing. The Dokploy check sends the same
+  service token as the Netdata calls and uses `redirect: 'manual'` with
+  a 2xx requirement — see failure log.
 - `src/index.js` — the `fetch` handler polls fresh, writes the snapshot
   to KV, then serves `page.html` at `/`, the page's own JSON contract at
   `/status.json` (3 nodes, ordered from `NODE_HOSTS` — not
@@ -101,3 +103,13 @@ Set via `wrangler secret put`, never in this directory.
   guessed (see `queryRaw` vs `queryPercent` in `poll.js`); load1 is
   normalized to a 0-100 score by dividing by `NODE_VCPUS` (2, this
   homelab's fixed spec) instead.
+- A reachability check that accepts any non-5xx is not a reachability
+  check once the target sits behind Access. `pollDokploy` did a plain
+  `GET` with no service token and `up = res.status < 500`; putting
+  Access in front of `dokploy.maybeit.work` would have kept the tile
+  green forever, because the runtime follows the Access `302` to a
+  `200` login page. Fixed by sending the service token and using
+  `redirect: 'manual'` plus an explicit 2xx test. Whenever a polled
+  origin gains an auth gate, re-check what the poller is actually
+  proving — "up" must mean the origin answered, not that its login
+  page did.

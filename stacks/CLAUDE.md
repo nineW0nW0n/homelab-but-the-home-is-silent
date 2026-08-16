@@ -16,7 +16,12 @@ config file in this repo. Add or change routes there.
 
 Current routes:
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
-  `CLOUDFLARE_TUNNEL_TOKEN`.
+  `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
+  (`dokploy`, 24h session) since 2026-08-16 — policies mirror the
+  `*-metrics` apps exactly: `status-worker service auth` (service token,
+  so the status Worker can still poll it) then `owner email allow`. An
+  unauthenticated request must `302` to `old-firefly-996b.cloudflareaccess.com`;
+  a `200` means the policy detached and the control plane is open again.
 - `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
   Traefik, forwards to the app container per the Domain set in Dokploy's
   UI), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING` — its own dedicated
