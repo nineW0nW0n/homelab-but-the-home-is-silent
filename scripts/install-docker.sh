@@ -1,6 +1,6 @@
 #!/bin/sh
 # One-time (idempotent) per-node bootstrap: installs Docker Engine only
-# (no Dokploy control plane — that's scripts/bootstrap-dokploy.sh, vps00
+# (no Dokploy control plane; that's scripts/bootstrap-dokploy.sh, vps00
 # only). Use this for secondary nodes that just need to run
 # stacks/<node>/docker-compose.yml. Adds 'deploy' to the docker group.
 #

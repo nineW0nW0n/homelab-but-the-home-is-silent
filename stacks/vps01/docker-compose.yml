@@ -2,7 +2,7 @@
 # vps01 stack. Deployed by .github/workflows/deploy.yml to
 # /opt/stacks/vps01/docker-compose.yml.
 #
-# Own dedicated tunnel (CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING) — do NOT
+# Own dedicated tunnel (CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING). Do NOT
 # reuse vps00's shared CLOUDFLARE_TUNNEL_TOKEN. See infra note: one tunnel
 # token = one interchangeable connector pool; sharing across nodes with
 # different origins causes non-deterministic 502s (hit this once already).
@@ -10,7 +10,7 @@
 # network_mode: host so http://localhost:80 in the tunnel's Public
 # Hostname route resolves to this VPS's own Traefik (booking.maybeit.work
 # -> Dokploy's Traefik on :80 -> whatever app container Dokploy's UI has
-# the Domain pointed at — see stacks/CLAUDE.md), not the container's own
+# the Domain pointed at, see stacks/CLAUDE.md), not the container's own
 # network namespace.
 services:
   cloudflared:

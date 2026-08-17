@@ -2,9 +2,9 @@
 # vps02 stack. Deployed by .github/workflows/deploy.yml to
 # /opt/stacks/vps02/docker-compose.yml.
 #
-# Netdata is this node's first workload — it gets its own dedicated
+# Netdata is this node's first workload. It gets its own dedicated
 # tunnel + token (CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS), never vps00's
-# shared CLOUDFLARE_TUNNEL_TOKEN (see stacks/CLAUDE.md, rail 2 — a
+# shared CLOUDFLARE_TUNNEL_TOKEN (see stacks/CLAUDE.md, rail 2: a
 # shared token load-balances requests across nodes with different
 # origins and 502s).
 #

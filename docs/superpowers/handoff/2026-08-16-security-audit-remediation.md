@@ -1,43 +1,43 @@
-# Handoff — security audit remediation plan
+# Handoff, security audit remediation plan
 
 **Written:** 2026-08-16, after a full security audit of the repo, the three
 deployed nodes, the Cloudflare edge, and the status Worker.
 
 **Audience:** the next agent (Sonnet) executing these fixes. Read
 `.claude/CLAUDE.md` (root) and the relevant directory `CLAUDE.md` before
-touching anything — the hard rails there apply on top of this document.
+touching anything, the hard rails there apply on top of this document.
 
 **Audit report with the raw findings and evidence:**
 `/private/tmp/claude-501/-Users-excollado-homelab-but-the-home-is-silent/283c7136-8729-42c2-8103-303032adf4a8/scratchpad/security-audit-2026-08-16.md`
 
 That report contains **real node IPs**. It lives in the scratchpad deliberately.
-**Never commit it, never paste its IPs into any tracked file** (rail 5 — and this
+**Never commit it, never paste its IPs into any tracked file** (rail 5, and this
 repo is public). This handoff is written without real IPs on purpose; wherever a
 node address is needed, read it from `infra/inventory.yaml` (gitignored) at run
 time.
 
 ---
 
-## Ex's open items — surface these every session until Ex says done
+## Ex's open items, surface these every session until Ex says done
 
 Neither can be done by the agent. Keep them in every status summary,
 unprompted, until Ex explicitly says the item is finished. Do not quietly
 drop them because they are old.
 
-- [ ] **GitHub GC request — sent 2026-08-16, awaiting Support.** Filed under
+- [ ] **GitHub GC request, sent 2026-08-16, awaiting Support.** Filed under
       the "Deletes" category. Still open until verified, not until they reply:
       `gh api repos/nineW0nW0n/homelab-but-the-home-is-silent/commits/8265af4`
       must return 404. It currently resolves. Keep
       `~/homelab-pre-rewrite-backup.bundle` until that check passes.
-      Note this removes the objects from GitHub only — anything that scraped
+      Note this removes the objects from GitHub only, anything that scraped
       or mirrored the repo while it was public is beyond reach, which is why
       C1 and C2 were the actual fix.
-- [x] **Dokploy account hygiene (from C1) — CLOSED 2026-08-16.** Password
+- [x] **Dokploy account hygiene (from C1), CLOSED 2026-08-16.** Password
       rotated, host-level persistence check clean, and Ex confirmed no
       unrecognised API tokens or keys in the Dokploy UI. The exposure window
       leaves no residual action; what remains is preventive and already in
       place (Access in front, direct-IP path firewalled). Original ask was
-      rescoped because the version has neither control — detail kept below.
+      rescoped because the version has neither control, detail kept below.
 
       **Rescoped, the original ask was impossible.** Dokploy v0.29.14 (the version running) has no 2FA and no
       login/audit log, or they are license-gated. Confirmed empirically as well
@@ -51,7 +51,7 @@ drop them because they are old.
       - [x] **Rotate the admin password.** Done by Ex 2026-08-16. Note what
         rotation does *not* invalidate: existing Dokploy API tokens, and
         possibly existing sessions.
-      - [x] **Host-level persistence check — done 2026-08-16, clean.** Every
+      - [x] **Host-level persistence check, done 2026-08-16, clean.** Every
         container and Swarm service across all three nodes is accounted for
         (`cloudflared`, Netdata, `dokploy-traefik` everywhere; `dokploy` +
         `dokploy-postgres` on vps00; the booking app on vps01). No unexpected
@@ -61,11 +61,11 @@ drop them because they are old.
         unexplained listener. Absence of artifacts is not proof of absence of
         compromise, but this is the realistic check for a panel found by a
         scanner.
-      - [ ] **Dokploy-internal persistence check — only Ex can see this.** The
+      - [ ] **Dokploy-internal persistence check, only Ex can see this.** The
         UI state is not visible over SSH: unexpected users under Settings →
         Users, unrecognised API tokens under Settings → Profile → API Tokens,
         and any project, app, or registered Server that Ex did not create.
-        **API tokens are the important one** — they survive a password rotation
+        **API tokens are the important one**, they survive a password rotation
         entirely, which is exactly why this check outlives the rotation.
       - **MFA moves to Cloudflare Access**, which is strictly better than
         Dokploy 2FA would have been: it authenticates before the request ever
@@ -79,7 +79,7 @@ drop them because they are old.
       `x-debug-key` header. Verified: no header 404, wrong key 404, correct key
       200.
 
-## Progress — 2026-08-16
+## Progress, 2026-08-16
 
 | # | Item | State | Commit |
 |---|---|---|---|
@@ -102,7 +102,7 @@ Non-negotiable, they exist because breaking them is how this list got written:
 1. **Never write a real IP into a tracked file.** Not in a comment, not in a
    usage example, not in a commit message. Use `203.0.113.10` style RFC 5737
    documentation addresses, or read from `infra/inventory.yaml`.
-2. **Never print a secret in full** — tunnel tokens, SSH keys, Telegram tokens,
+2. **Never print a secret in full**, tunnel tokens, SSH keys, Telegram tokens,
    Access client secrets. Redact as `TUNNEL_TOKEN=***redacted***`.
 3. **Never touch the SSH allow rule or port 22.** Every firewall change in this
    document explicitly preserves SSH. If you cannot see how a rule preserves it,
@@ -118,7 +118,7 @@ Non-negotiable, they exist because breaking them is how this list got written:
 7. **Rollback is `git revert` + push.** Node-side firewall changes have their own
    rollback procedure, given per item below.
 
-### Facts already established — do not re-derive
+### Facts already established, do not re-derive
 
 Confirmed live on 2026-08-16, so you can skip the discovery:
 
@@ -129,16 +129,16 @@ Confirmed live on 2026-08-16, so you can skip the discovery:
   `docker service inspect dokploy --format '{{json .Endpoint.Ports}}'`
 - `dokploy-traefik` is a **plain container** (not a Swarm service) publishing
   `80/tcp`, `80/udp`… precisely: `443/tcp`, `443/udp`, `80/tcp`, each bound
-  `0.0.0.0` **and `::`**. **IPv6 is bound too — every firewall rule needs an
+  `0.0.0.0` **and `::`**. **IPv6 is bound too, every firewall rule needs an
   `ip6tables` twin or the fix is half a fix.**
 - WAN interface on vps00 is **`eth0`**. Verify per node with
   `ip -o -4 route show default`.
 - `vps00.maybeit.work` / `vps01.maybeit.work` / `vps02.maybeit.work` have **no
-  DNS records** — they are inventory labels only, not resolvable names. Do not
+  DNS records**, they are inventory labels only, not resolvable names. Do not
   use them as substitutes for IPs in scripts that actually connect.
 - Netdata binds `127.0.0.1:19999` on all three nodes and the three
   `*-metrics.maybeit.work` hostnames correctly `302` to Cloudflare Access
-  (`old-firefly-996b.cloudflareaccess.com`). **This part is right — do not
+  (`old-firefly-996b.cloudflareaccess.com`). **This part is right, do not
   "fix" it.**
 - `dokploy.maybeit.work` returns `200` with **no** Access redirect. That is C1.
 
@@ -151,25 +151,25 @@ Do them in order; do not batch them into one commit.
 
 | # | Item | Severity | Touches |
 |---|---|---|---|
-| 1 | C1 — Access policy on Dokploy | CRITICAL | Cloudflare only |
-| 2 | C2 — Docker bypasses UFW | CRITICAL | node firewall |
-| 3 | H1 — real IPs in public repo | HIGH | repo only |
-| 4 | H3 — Docker socket in Netdata | HIGH | stacks + deploy |
-| 5 | H2 — SSH key blast radius | HIGH | CI + nodes |
-| 6 | M1 — secrets in `run:` shell | MEDIUM | workflow |
-| 7 | M2 — Worker polls on every request | MEDIUM | worker |
-| 8 | M3 — actions pinned by tag | MEDIUM | workflows |
-| 9 | M4 — `curl \| sh` bootstrap | MEDIUM | scripts |
-| 10 | L1 — public `/debug` | LOW | worker |
-| 11 | L2 — no security headers | LOW | worker |
+| 1 | C1, Access policy on Dokploy | CRITICAL | Cloudflare only |
+| 2 | C2, Docker bypasses UFW | CRITICAL | node firewall |
+| 3 | H1, real IPs in public repo | HIGH | repo only |
+| 4 | H3, Docker socket in Netdata | HIGH | stacks + deploy |
+| 5 | H2, SSH key blast radius | HIGH | CI + nodes |
+| 6 | M1, secrets in `run:` shell | MEDIUM | workflow |
+| 7 | M2, Worker polls on every request | MEDIUM | worker |
+| 8 | M3, actions pinned by tag | MEDIUM | workflows |
+| 9 | M4, `curl \| sh` bootstrap | MEDIUM | scripts |
+| 10 | L1, public `/debug` | LOW | worker |
+| 11 | L2, no security headers | LOW | worker |
 
-### Decisions Ex has made — do not re-litigate these
+### Decisions Ex has made, do not re-litigate these
 
 - **Item 1 (C1): Plan A.** Cloudflare Access application on
   `dokploy.maybeit.work`, applied through the Zero Trust dashboard via browser
   automation. Includes the service-token fix to `pollDokploy` so the status
   check stays honest.
-- **Item 2 (C2): Plan C — both layers.** `DOCKER-USER` drop rules *and*
+- **Item 2 (C2): Plan C, both layers.** `DOCKER-USER` drop rules *and*
   `"ip": "127.0.0.1"` in `/etc/docker/daemon.json`. Reasoning Ex gave: self-
   inflicted breakage is recoverable, a stranger's is not, so pay the extra
   layer. Node order stays vps02 → vps01 → vps00.
@@ -179,7 +179,7 @@ Do them in order; do not batch them into one commit.
 
 ---
 
-# 1 — C1: Dokploy control plane is publicly reachable
+# 1, C1: Dokploy control plane is publicly reachable
 
 ## The problem
 
@@ -188,11 +188,11 @@ The three `*-metrics` hostnames sit behind Cloudflare Access; this one does not.
 Dokploy can create containers, read every app's environment variables, and open
 shells on all three nodes. The only thing in front of it is the admin password.
 
-There is a second, independent path to the same UI — direct IP on `:3000`. That
+There is a second, independent path to the same UI, direct IP on `:3000`. That
 one is C2's job, because closing it requires the firewall fix. **C1 does not
 close the IP path. Do C2 too, or the box is still open.**
 
-## Plan A — Cloudflare Access application on `dokploy.maybeit.work`
+## Plan A, Cloudflare Access application on `dokploy.maybeit.work`
 
 Preferred: same mechanism already proven working on the metrics hosts, zero node
 changes, no lockout risk to SSH.
@@ -200,16 +200,16 @@ changes, no lockout risk to SSH.
 1. Zero Trust dashboard → **Access → Applications → Add an application →
    Self-hosted**.
 2. Application name `dokploy`, session duration whatever the metrics apps use
-   (match them — check an existing app first so the fleet is consistent).
+   (match them, check an existing app first so the fleet is consistent).
 3. Public hostname: `dokploy` . `maybeit.work`, path empty.
 4. Policy: **Allow**, include **Emails** → Ex's address. Copy the metrics apps'
-   policy rather than inventing a new one — read it first, mirror it.
+   policy rather than inventing a new one, read it first, mirror it.
 5. Decide explicitly about a **service token bypass**: the status Worker does
    *not* poll Dokploy through Access (`pollDokploy` in `worker/status/src/poll.js`
    does a plain `GET https://dokploy.maybeit.work/` with no Access headers). Once
    Access is on, that GET will get a `302` to the login page. `res.status < 500`
    is still true for a 302, so **the dashboard will keep showing dokploy as "up"
-   and the check becomes meaningless** — it now proves Access is up, not Dokploy.
+   and the check becomes meaningless**, it now proves Access is up, not Dokploy.
    Two honest options:
    - add `CF-Access-Client-Id` / `CF-Access-Client-Secret` to `pollDokploy`'s
      request (the Worker already has both bound as secrets, used for Netdata) and
@@ -225,13 +225,13 @@ changes, no lockout risk to SSH.
    https://maybeit.work/debug | head -c 400`.
 
 Browser automation via `mcp__claude-in-chrome__*` is available if the dashboard
-work is easier driven that way — the previous session used it for GitHub secrets.
+work is easier driven that way, the previous session used it for GitHub secrets.
 Ask Ex first; it touches a live auth policy.
 
-## Plan B — remove the public hostname entirely
+## Plan B, remove the public hostname entirely
 
 Use this if Access cannot be applied (plan limits, policy conflict, or Ex would
-rather not have the control plane on the internet at all — a defensible position).
+rather not have the control plane on the internet at all, a defensible position).
 
 1. Zero Trust → Networks → Tunnels → vps00's tunnel → **Public Hostnames** →
    delete the `dokploy.maybeit.work` → `http://localhost:3000` route.
@@ -241,7 +241,7 @@ rather not have the control plane on the internet at all — a defensible positi
 3. Update `stacks/CLAUDE.md`'s "Current routes" list and
    `scripts/bootstrap-dokploy.sh`'s closing instructions (step 3 mentions adding
    that route) so the docs match reality.
-4. The Worker's `pollDokploy` then has nothing public to poll — either point
+4. The Worker's `pollDokploy` then has nothing public to poll, either point
    `DOKPLOY_HOST` at something else, or drop the dokploy tile. Coordinate with
    whatever the page expects; `toStatusJson` already excludes dokploy from
    `/status.json`, so only `/debug` and the page's fourth dot are affected.
@@ -255,7 +255,7 @@ unless Ex says otherwise.
 - Confirm the Dokploy admin account has a strong unique password, and enable 2FA
   if the version supports it.
 - Check Dokploy's own audit/login log for sessions Ex does not recognize. The UI
-  has been publicly reachable for an unknown period — assume it was found by a
+  has been publicly reachable for an unknown period, assume it was found by a
   scanner even if not exploited.
 - Note the Dokploy version and check it against upstream advisories.
 
@@ -264,13 +264,13 @@ unless Ex says otherwise.
 `dokploy.maybeit.work` no longer serves a `200` login page to an unauthenticated
 request, and the change is written down in `stacks/CLAUDE.md`.
 
-## Status — DONE
+## Status, DONE
 
 - Access application `dokploy` created (self-hosted, `dokploy.maybeit.work`,
   24h session), policies mirroring the `*-metrics` apps: `status-worker service
   auth` (service token `status-worker`) then `owner email allow` (Emails). Note
-  the account's existing policies are **per-app copies, not shared objects** —
-  each of the six listed shows "used by 1 application" — so dokploy got its own
+  the account's existing policies are **per-app copies, not shared objects**,
+  each of the six listed shows "used by 1 application", so dokploy got its own
   pair rather than binding to another app's policy.
 - Verified: unauthenticated `GET https://dokploy.maybeit.work/` returns `302` to
   `old-firefly-996b.cloudflareaccess.com`. The three metrics hosts still `302`,
@@ -285,16 +285,16 @@ request, and the change is written down in `stacks/CLAUDE.md`.
 ## Still open from "Also do, regardless of which plan"
 
 Ex to confirm the Dokploy admin password is strong and unique, enable 2FA if the
-version supports it, and check Dokploy's login log for unrecognised sessions —
+version supports it, and check Dokploy's login log for unrecognised sessions,
 the UI was publicly reachable for an unknown period.
 
 ---
 
-# 2 — C2: Docker's published ports bypass UFW
+# 2, C2: Docker's published ports bypass UFW
 
 ## The problem
 
-`harden-node.sh` configures UFW deny-incoming and that is genuinely correct — but
+`harden-node.sh` configures UFW deny-incoming and that is genuinely correct, but
 Docker inserts its own `nat`/`DOCKER` rules that are evaluated **before** UFW's
 `ufw-*` chains. Every published container port is internet-facing regardless of
 what UFW says. Observed live:
@@ -310,7 +310,7 @@ worse: **any app Dokploy deploys with a published port becomes internet-facing b
 default**, skipping the tunnel and Access. Today 80/443 return 404 for unknown
 Host headers so nothing is leaking; the next deployed app changes that.
 
-## ⚠️ Lockout warning — read before running anything here
+## ⚠️ Lockout warning, read before running anything here
 
 You are editing the firewall of a remote machine whose only management path is
 SSH. A wrong rule ends the session permanently and requires the provider's
@@ -348,13 +348,13 @@ kill "$deadman"
 Do vps02 first (no workload on it), then vps01, then vps00 (control plane, most
 to lose). Never all three in one go.
 
-## Plan A — `DOCKER-USER` drop rules, IPv4 + IPv6
+## Plan A, `DOCKER-USER` drop rules, IPv4 + IPv6
 
 `DOCKER-USER` is the chain Docker guarantees it will not overwrite, and it is
 traversed before Docker's own accept rules. Because `dokploy` publishes `3000` in
 **host** mode (verified) and `dokploy-traefik` is a plain container, **all** the
 exposed ports on these nodes go through `DOCKER-USER`. No `DOCKER-INGRESS`
-special-casing is needed today — but if Dokploy later deploys a Swarm service
+special-casing is needed today, but if Dokploy later deploys a Swarm service
 with an *ingress*-mode publish, that traffic uses `DOCKER-INGRESS` instead and
 this rule will not cover it. Note that in the script's comments.
 
@@ -397,7 +397,7 @@ DEBIAN_FRONTEND=noninteractive apt-get -y -qq install iptables-persistent
 netfilter-persistent save
 ```
 
-`iptables-persistent`'s install prompts on a fresh box —
+`iptables-persistent`'s install prompts on a fresh box,
 `DEBIAN_FRONTEND=noninteractive` plus preseeding
 `iptables-persistent iptables-persistent/autosave_v4 boolean true` (and `_v6`)
 via `debconf-set-selections` avoids a hang. Test this on vps02 first; a hung
@@ -413,7 +413,7 @@ the chain does not exist yet, fall back to a tiny systemd unit ordered
 > present *after* boot, before touching vps01 or vps00. An unverified
 > persistence mechanism is the same as no persistence, and the failure mode is
 > silent: the node comes back up wide open and nothing reports it. This is the
-> step most likely to get skipped because everything already looks fixed —
+> step most likely to get skipped because everything already looks fixed,
 > do not report item 2 done without it.
 
 ### Verification (run from the laptop, not the node)
@@ -438,7 +438,7 @@ The tunnel keeps working because `cloudflared` runs `network_mode: host` and
 reaches origins over `127.0.0.1`, which never traverses `DOCKER-USER` with
 `-i $wan_if`.
 
-## Plan B — bind Docker's default publish IP to loopback
+## Plan B, bind Docker's default publish IP to loopback
 
 Use if `DOCKER-USER` turns out to be unreliable on this Docker version, or if the
 persistence problem proves nastier than it is worth.
@@ -459,7 +459,7 @@ explicit `HostIp` binds to loopback only, which covers `dokploy-traefik`
 - Restarting the Docker daemon on vps00 restarts the Swarm control plane and
   every container. Schedule it.
 - It does **not** apply to Swarm *ingress*-mode publishes, nor to any container
-  that explicitly requests `0.0.0.0:PORT:PORT` — Dokploy's UI can generate
+  that explicitly requests `0.0.0.0:PORT:PORT`, Dokploy's UI can generate
   exactly that. So it is a weaker rail than Plan A: it fixes today's exposure but
   a future Dokploy-deployed app can still punch through.
 - IPv6 needs `"ip6"` handling separately and support is version-dependent.
@@ -467,19 +467,19 @@ explicit `HostIp` binds to loopback only, which covers `dokploy-traefik`
 If Plan B is chosen, say plainly in `scripts/CLAUDE.md` that rail 1 is enforced
 by a *default*, not a *deny*, so the next person knows the guarantee is weaker.
 
-## Plan C — belt and braces (recommended if Ex wants this closed for good)
+## Plan C, belt and braces (recommended if Ex wants this closed for good)
 
 Do Plan A *and* Plan B. They are independent layers and neither costs anything
 ongoing.
 
 ## Also update
 
-- `scripts/CLAUDE.md` failure log: one imperative line — "UFW does not govern
+- `scripts/CLAUDE.md` failure log: one imperative line, "UFW does not govern
   Docker-published ports; they bypass it via the nat/DOCKER chain. Filter in
   `DOCKER-USER` (and `DOCKER-INGRESS` for ingress-mode Swarm publishes), never
   assume `ufw status` reflects real exposure."
 - Root `.claude/CLAUDE.md`: rail 1 currently states an intent that nothing
-  enforced. Add the enforcement point, same as was done for rail 9 — the failure
+  enforced. Add the enforcement point, same as was done for rail 9, the failure
   log already records that "a rail without a wired-in check is undetectable
   drift". A `nc` sweep after each provisioning run is the check.
 
@@ -488,7 +488,7 @@ ongoing.
 The port sweep shows `22` only on all three nodes, the tunnel-served hostnames
 still work, and the rules survive a reboot of vps02.
 
-## Status — all three nodes closed; two reboots outstanding
+## Status, all three nodes closed; two reboots outstanding
 
 Implemented in `harden-node.sh` (commit `ed3a43f`), both layers, with one
 deliberate departure from Plan A: **persistence is a systemd oneshot ordered
@@ -503,9 +503,9 @@ mechanism instead of a package plus a fallback.
 | vps00 | active | **active** (partial, see below) | yes | 22 only |
 
 - vps02 was rebooted: rules present after boot, unit `active`, and the Docker
-  restart activated the loopback bind — `dokploy-traefik` now binds
+  restart activated the loopback bind, `dokploy-traefik` now binds
   `127.0.0.1:80`/`127.0.0.1:443` instead of `0.0.0.0` and `::`.
-- **vps02 is not the empty node the directory map implies** — `dokploy-traefik`
+- **vps02 is not the empty node the directory map implies**, `dokploy-traefik`
   runs there too, publishing 80/443 on `0.0.0.0` *and* `::`. The IPv6 rule is
   load-bearing on every node, not belt-and-braces.
 - vps01 has the drop rules active and persistent but has not been rebooted, so
@@ -517,7 +517,7 @@ mechanism instead of a package plus a fallback.
   interfaces, and those are correctly blocked by UFW. That is the clean proof
   UFW works fine and only Docker's *published* ports slip past it.
 
-- vps00's port 3000 closed with the `DOCKER-USER` rule alone — its `daemon.json`
+- vps00's port 3000 closed with the `DOCKER-USER` rule alone, its `daemon.json`
   layer is still inactive, Docker having not been restarted. That is the direct
   empirical confirmation that **`DOCKER-USER` does cover a host-mode Swarm
   publish**, which until now was inference from the publish mode rather than an
@@ -525,10 +525,10 @@ mechanism instead of a package plus a fallback.
   `docker service inspect dokploy` still reports `"PublishMode":"host"`.
 - After vps00: `maybeit.work` `200`, `booking.maybeit.work` `200`,
   `dokploy.maybeit.work` `302` to Access, all three nodes `up` on `/debug`, and
-  the Worker's service-token poll still reaches Dokploy — so the tunnel path to
+  the Worker's service-token poll still reaches Dokploy, so the tunnel path to
   a now-firewalled origin is intact.
 
-### C2 is complete — all three nodes rebooted and re-verified
+### C2 is complete, all three nodes rebooted and re-verified
 
 Rules present after boot, unit `active`, ports 22-only, and every public route
 still serving (`maybeit.work` 200, `booking` 200, `dokploy` 302 to Access, three
@@ -543,17 +543,17 @@ port 3000 still binds `0.0.0.0` *and* `[::]`.
 Consequence: **on vps00, port 3000 is held closed by the `DOCKER-USER` rule
 alone.** The second layer does not back it up there. If
 `docker-wan-drop.service` fails to start, 3000 is exposed with only the Dokploy
-admin password in front of it. That single point is worth a monitor — the
+admin password in front of it. That single point is worth a monitor, the
 status Worker already polls Dokploy through Access and would not notice, since
 it tests the tunnel path, not the direct-IP path.
 
 This also corrects Plan B's stated weakness in this document: it is not only
-*ingress*-mode Swarm publishes that escape the daemon default — host-mode ones
+*ingress*-mode Swarm publishes that escape the daemon default, host-mode ones
 do too.
 
 ---
 
-# 3 — H1: real node IPs committed to a public repo
+# 3, H1: real node IPs committed to a public repo
 
 ## The problem
 
@@ -570,7 +570,7 @@ scripts/provision-deploy-user.sh:9
 Published next to a full description of what runs on each node and which ports it
 exposes. This is what turns C1 and C2 from theoretical into findable.
 
-## Plan A — replace with RFC 5737 documentation addresses
+## Plan A, replace with RFC 5737 documentation addresses
 
 `203.0.113.0/24` exists exactly for this. Non-routable, unmistakably fake, reads
 naturally in a usage line.
@@ -579,7 +579,7 @@ naturally in a usage line.
    examples) / `203.0.113.11` (vps01-shaped). Keep the surrounding wording.
 2. Add one line to each script's header pointing at the real source:
    `# Real addresses live in infra/inventory.yaml (gitignored).`
-3. **Do not** substitute `vps00.maybeit.work` — those names have no DNS records
+3. **Do not** substitute `vps00.maybeit.work`, those names have no DNS records
    (verified), so a copy-pasted example would fail confusingly.
 4. Grep the whole tree, not just `scripts/`, before declaring it clean:
    ```sh
@@ -593,7 +593,7 @@ naturally in a usage line.
 
 `gitleaks` is already in `.pre-commit-config.yaml` but has no rule for this.
 
-**Plan A guard —** `.gitleaks.toml` with a custom rule:
+**Plan A guard:** `.gitleaks.toml` with a custom rule:
 
 ```toml
 [extend]
@@ -613,12 +613,12 @@ regexes = [
 paths = ['''package-lock\.json''', '''node_modules/''']
 ```
 
-Verify it actually fires — write a real-looking IP into a scratch file, `git add`
+Verify it actually fires, write a real-looking IP into a scratch file, `git add`
 it, confirm `pre-commit run gitleaks --all-files` fails, then remove it. **A guard
 you did not watch fail is not a guard** (see the rail 9 entry in root's failure
 log).
 
-**Plan B guard —** if the gitleaks config format fights back, a `local` pre-commit
+**Plan B guard:** if the gitleaks config format fights back, a `local` pre-commit
 hook is five lines and has no schema risk:
 
 ```yaml
@@ -638,18 +638,18 @@ hook is five lines and has no schema risk:
 Do **not** exclude `docs/superpowers/handoff/` from the guard. Handoff documents
 are exactly where a real IP gets pasted in from a live investigation; excluding
 them creates the blind spot the guard exists to close. This document passes the
-guard as written — it uses `203.0.113.x` throughout.
+guard as written, it uses `203.0.113.x` throughout.
 
-## Plan B for the exposure itself — git history
+## Plan B for the exposure itself, git history
 
 The IPs are also in git history. Options, in order of laziness:
 
 1. **Accept it and rely on C1/C2.** Recommended. IPs cannot be rotated cheaply,
    the repo is public and likely mirrored/indexed already, and secrecy of an IP
    was never a real control. What matters is that nothing behind those IPs is
-   exploitable — which is what items 1 and 2 fix.
+   exploitable, which is what items 1 and 2 fix.
 2. **Rewrite history** (`git filter-repo`) and force-push. The repo's own root
-   `CLAUDE.md` says "expect force-pushes", so this is permitted — but it does not
+   `CLAUDE.md` says "expect force-pushes", so this is permitted, but it does not
    un-publish anything already scraped, breaks every existing clone, and costs an
    afternoon. Only worth it if Ex wants a clean history for its own sake.
 3. **Rebuild the nodes on new IPs.** Only if Ex was going to rebuild anyway.
@@ -662,47 +662,47 @@ decide. **Do not force-push history without explicit approval.**
 The grep above returns nothing, the guard demonstrably fails on a test IP, and
 Ex has made a call on history.
 
-## Status — DONE except the GitHub GC request
+## Status, DONE except the GitHub GC request
 
 - Five script usage examples now use `203.0.113.10/.11`, each with a pointer to
   `infra/inventory.yaml`. Tree-wide grep returns nothing.
 - Guard is the `no-real-ips` **local** pre-commit hook, not a custom gitleaks
   rule. The gitleaks hook runs `gitleaks protect --staged`, which scans staged
-  changes only — in CI nothing is staged, so a custom rule there is a no-op and
+  changes only, in CI nothing is staged, so a custom rule there is a no-op and
   `validate.yml` would never have caught anything. The local hook takes
   filenames, so it fires identically at commit time and under `--all-files`.
   Verified in both directions: a routable address in a tracked file fails,
   `203.0.113.10` passes. (Do not paste the failing test address into a tracked
-  file to document it — the guard correctly rejects that too.)
+  file to document it, the guard correctly rejects that too.)
 - `pre-commit install` had never been run in this clone, so `git commit` was
   running no checks locally at all. Installed.
 - History rewritten with `git filter-repo --replace-text` across all 67 commits
   and force-pushed. Pre-rewrite backup bundle:
   `~/homelab-pre-rewrite-backup.bundle` (outside the repo, keep until the GC
   request is confirmed done).
-- **Still open:** GitHub still serves the pre-rewrite commits by SHA — verified
+- **Still open:** GitHub still serves the pre-rewrite commits by SHA, verified
   after the force-push. Ex must open a GitHub Support request asking them to
   garbage-collect unreachable objects on this repo. Until that lands, the old
   addresses remain retrievable by anyone who recorded an old SHA.
 
 ---
 
-# 4 — H3: Docker socket mounted into Netdata on all three nodes
+# 4, H3: Docker socket mounted into Netdata on all three nodes
 
 ## The problem
 
 Every `stacks/*/docker-compose.yml` mounts `/var/run/docker.sock:ro`. The `:ro`
-restricts nothing meaningful — it is a socket, and any process that can talk to
+restricts nothing meaningful, it is a socket, and any process that can talk to
 it has full Docker API access, which is host root (`docker run -v /:/host`).
 Netdata is only reachable via localhost and an Access-gated tunnel, so this needs
 a second bug to reach; but it converts any Netdata RCE into instant root on all
 three nodes simultaneously.
 
-`/:/host/root:ro,rslave` is a different matter — Netdata's disk collectors
+`/:/host/root:ro,rslave` is a different matter, Netdata's disk collectors
 genuinely need it, it is read-only, and it does not grant write anywhere. **Keep
 it.**
 
-## Plan A — remove the socket mount
+## Plan A, remove the socket mount
 
 Laziest fix that actually removes the capability.
 
@@ -714,15 +714,15 @@ Laziest fix that actually removes the capability.
    `/sys/fs/cgroup`, which is mounted separately and unaffected.
 3. Ask Ex whether anyone actually reads the per-container charts by name. If the
    dashboard is only used for the node-level metrics the status page consumes
-   (`system.cpu`, `system.ram`, `disk_space./`, `system.load`, `mem.swap` — see
+   (`system.cpu`, `system.ram`, `disk_space./`, `system.load`, `mem.swap`, see
    `worker/status/src/poll.js`), nothing of value is lost at all.
 4. `docker compose config` on each stack, `pre-commit run --all-files`, push,
    let `deploy.yml` roll it out.
-5. Verify after deploy: `curl -s https://maybeit.work/debug` — all three nodes
+5. Verify after deploy: `curl -s https://maybeit.work/debug`, all three nodes
    still `"up":true` with real numbers. That is the actual contract; it does not
    depend on the socket.
 
-## Plan B — front it with a socket proxy
+## Plan B, front it with a socket proxy
 
 If the container names turn out to matter.
 
@@ -752,7 +752,7 @@ and on the `netdata` service:
 
 **Be honest about what this buys:** the proxy container still holds the raw
 socket, so a compromise *of the proxy* is still host root. What it removes is
-Netdata's — a far larger, far more exposed piece of software — access to
+Netdata's, a far larger, far more exposed piece of software, access to
 anything beyond read-only container listing. That is a real reduction, not a
 complete one. Say so in the compose comment.
 
@@ -770,7 +770,7 @@ Either the mount is gone, or it is behind a `CONTAINERS=1` proxy, and
 
 ---
 
-# 5 — H2: one SSH key = root on the whole fleet
+# 5, H2: one SSH key = root on the whole fleet
 
 ## The problem
 
@@ -783,10 +783,10 @@ every node, and rail 6's "no sudo" restriction buys nothing.
 and granting `sudo docker compose` instead does **not** help. `deploy` owns
 `/opt/stacks/<node>/docker-compose.yml`, so it can write any compose file it
 likes and have root run it. Any path that lets CI deploy containers is
-root-equivalent by construction. **Do not sell a sudoers rule as a fix — it is
+root-equivalent by construction. **Do not sell a sudoers rule as a fix, it is
 theatre.** The only honest levers are blast radius and secret protection.
 
-## Plan A — per-node SSH keys
+## Plan A, per-node SSH keys
 
 Reduces one compromise from three nodes to one.
 
@@ -795,7 +795,7 @@ Reduces one compromise from three nodes to one.
    (and `_vps01`, `_vps02`).
 2. Install each on its node: `PUBKEY_FILE=~/.ssh/id_ed25519_vps00 \
    scripts/provision-deploy-user.sh vps00 "$(ip from inventory)"`.
-   The script already reads `PUBKEY_FILE` — no script change needed. Note it
+   The script already reads `PUBKEY_FILE`, no script change needed. Note it
    **overwrites** `authorized_keys` (`>` not `>>`), so run it once per node with
    the right key and verify login before moving on.
 3. Add `SSH_PRIVATE_KEY_VPS00` / `_VPS01` / `_VPS02` as GitHub secrets
@@ -807,7 +807,7 @@ Reduces one compromise from three nodes to one.
 6. Revoke the old key everywhere and delete `SSH_PRIVATE_KEY` from GitHub.
 7. Update `scripts/CLAUDE.md` and `.github/workflows/CLAUDE.md`.
 
-## Plan B — keep one key, protect it harder
+## Plan B, keep one key, protect it harder
 
 Cheaper, less protection. Legitimate for a homelab if Ex prefers it.
 
@@ -815,7 +815,7 @@ Cheaper, less protection. Legitimate for a homelab if Ex prefers it.
    The deploy jobs already declare `environment: production`, so this gates every
    run behind a manual approval with no workflow change.
 2. Branch protection on `main`: no force-push, require `validate` to pass. Note
-   this conflicts with the root `CLAUDE.md`'s "expect force-pushes" line —
+   this conflicts with the root `CLAUDE.md`'s "expect force-pushes" line,
    raise it with Ex rather than silently picking one.
 3. Rotate the key now on the assumption it may be older than the repo's hygiene.
 4. Document plainly, in `.github/workflows/CLAUDE.md`, that `SSH_PRIVATE_KEY` is
@@ -823,18 +823,18 @@ Cheaper, less protection. Legitimate for a homelab if Ex prefers it.
    treats it accordingly.
 
 Plan A and Plan B compose. If Ex wants one thing only, Plan B step 1 is the
-single highest-value action — required reviewers stop an automated exfiltration
+single highest-value action, required reviewers stop an automated exfiltration
 path cold.
 
 ## Done when
 
 Either the fleet uses per-node keys, or the `production` environment requires
-approval — and either way the credential's real privilege level is written down
+approval, and either way the credential's real privilege level is written down
 where the next reader will find it.
 
 ---
 
-# 6 — M1: secrets interpolated into `run:` shell in `deploy.yml`
+# 6, M1: secrets interpolated into `run:` shell in `deploy.yml`
 
 ## The problem
 
@@ -851,7 +851,7 @@ quote executes as shell on the runner. Self-inflicted-only (Ex controls the
 secret values), but it is the standard GitHub Actions script-injection footgun and
 the fix is two lines per step.
 
-## Plan A — pass through `env:`, reference as `"$VAR"`
+## Plan A, pass through `env:`, reference as `"$VAR"`
 
 The value then reaches the process through the environment and never enters the
 script text.
@@ -878,11 +878,11 @@ script text.
             'umask 077 && cat > /opt/stacks/vps00/health_alarm_notify.conf'
 ```
 
-Note the `|` delimiter instead of `/` — Telegram bot tokens contain `:` and `-`
+Note the `|` delimiter instead of `/`, Telegram bot tokens contain `:` and `-`
 but a `/` in any future secret would still break a `/`-delimited `sed`.
 Repeat for all three jobs (six steps total).
 
-## Plan B — `envsubst`, no delimiter problem at all
+## Plan B, `envsubst`, no delimiter problem at all
 
 If any secret could contain `|` as well:
 
@@ -903,10 +903,10 @@ completely delimiter-proof. Either is fine; Plan A is the smaller change.
 ## Verification
 
 `actionlint` via pre-commit must pass. Then push and confirm the deploy run is
-green and Telegram alerts still fire — the previous session verified alerting with
+green and Telegram alerts still fire, the previous session verified alerting with
 Netdata's test command; reuse that method rather than inventing one. Check
 `/opt/stacks/vps00/health_alarm_notify.conf` on the node contains a real token
-(do not print it — `grep -c 'TELEGRAM_BOT_TOKEN=""' ` or check length only).
+(do not print it, `grep -c 'TELEGRAM_BOT_TOKEN=""' ` or check length only).
 
 ## Done when
 
@@ -916,21 +916,21 @@ or `with:` keys.
 
 ---
 
-# 7 — M2: the Worker polls the whole fleet on every request
+# 7, M2: the Worker polls the whole fleet on every request
 
 ## The problem
 
 `worker/status/src/index.js` calls `pollAll` **and** `STATUS_KV.put` on every
-single fetch — including `/`, `/favicon.ico`, and any 404 path. Each poll is five
+single fetch, including `/`, `/favicon.ico`, and any 404 path. Each poll is five
 Netdata API calls per node (fifteen total) against 2 vCPU boxes, plus a KV write.
 Anyone with `curl` in a loop turns the public status page into a load generator
 against the homelab and a Workers-KV bill.
 
 The comment above the handler explains *why* it polls per-request (Cron Triggers
 get a 403 from Access; documented in `worker/status/CLAUDE.md`). **That reasoning
-is sound — do not undo it.** The fix is caching, not going back to cron.
+is sound, do not undo it.** The fix is caching, not going back to cron.
 
-## Plan A — staleness check on the cached snapshot
+## Plan A, staleness check on the cached snapshot
 
 ```js
 const POLL_TTL_MS = 30_000
@@ -964,19 +964,19 @@ export default {
 
 Points to get right:
 - Add a top-level `polledAt` in `pollAll`'s return rather than digging into
-  `nodes.vps00.lastPolled` — a per-node field is the wrong thing to key cache
+  `nodes.vps00.lastPolled`, a per-node field is the wrong thing to key cache
   freshness on, and `vps00` may not exist in the snapshot.
 - `ctx.waitUntil` for the KV write so the response is not blocked on it. This
   means adding `ctx` to the handler signature.
-- Keep the `previous` snapshot threading — `pollNode` needs it for `lastSeen`
+- Keep the `previous` snapshot threading, `pollNode` needs it for `lastSeen`
   carry-forward on a down node. Do not break that.
 
 **Tests are mandatory here.** `worker/status/test/poll.test.js` exists and
 `npm test` runs in `deploy-worker.yml`. Add cases: a fresh snapshot does **not**
 call `pollAll`'s fetch; a stale one does; a missing snapshot does. `pollAll`
-already takes an injectable `fetchFn` — count calls on a stub.
+already takes an injectable `fetchFn`, count calls on a stub.
 
-## Plan B — Cache API on `/status.json`, static shell on `/`
+## Plan B, Cache API on `/status.json`, static shell on `/`
 
 If the KV-staleness approach gets fiddly:
 
@@ -993,7 +993,7 @@ if (pathname === '/status.json') {
 }
 ```
 
-Cheaper to write, but the cache is per-colo — with traffic from many regions you
+Cheaper to write, but the cache is per-colo, with traffic from many regions you
 get one poll per colo per 30s rather than one globally. For this traffic volume
 that is fine, and it is a smaller diff. **Either plan is acceptable; do not do
 both.**
@@ -1009,18 +1009,18 @@ the page still renders live numbers, and `npm test` is green.
 
 ---
 
-# 8 — M3: actions pinned by mutable tag
+# 8, M3: actions pinned by mutable tag
 
 ## The problem
 
 `actions/checkout@v4`, `webfactory/ssh-agent@v0.9.0`,
 `cloudflare/wrangler-action@v3`, `actions/setup-node@v4`, `actions/cache@v4`.
-Tags are mutable — a compromised upstream tag runs with `SSH_PRIVATE_KEY` and
+Tags are mutable, a compromised upstream tag runs with `SSH_PRIVATE_KEY` and
 `CLOUDFLARE_API_TOKEN` in scope. The repo already pins every pre-commit hook rev
 exactly, and root's failure log says to pin exact versions and never `latest`;
 this is the same rule, unapplied.
 
-## Plan A — pin to full commit SHAs
+## Plan A, pin to full commit SHAs
 
 ```sh
 gh api repos/actions/checkout/git/ref/tags/v4 --jq .object.sha
@@ -1033,11 +1033,11 @@ gh api repos/actions/checkout/git/ref/tags/v4 --jq .object.sha
       - uses: actions/checkout@<40-char-sha>  # v4.2.2
 ```
 
-The trailing comment is what makes this maintainable — without it nobody can tell
+The trailing comment is what makes this maintainable, without it nobody can tell
 what version is pinned. Do all five, in both `deploy.yml` and
 `deploy-worker.yml` and `validate.yml`.
 
-Then enable Dependabot so the SHAs still get bumped —
+Then enable Dependabot so the SHAs still get bumped,
 `.github/dependabot.yml`:
 
 ```yaml
@@ -1057,7 +1057,7 @@ updates:
 The npm entry also covers `wrangler`, which is currently the only runtime
 dependency and is already pinned exactly in `package.json`. Good.
 
-## Plan B — Dependabot only, keep tags
+## Plan B, Dependabot only, keep tags
 
 If SHA pinning is judged too noisy for a homelab. Weaker: Dependabot tells you
 about *published* new versions, it does nothing about a retagged malicious `v4`.
@@ -1070,20 +1070,20 @@ State that limitation rather than presenting it as equivalent.
 
 ---
 
-# 9 — M4: `curl | sh` root bootstrap
+# 9, M4: `curl | sh` root bootstrap
 
 ## The problem
 
 `scripts/install-docker.sh` pipes `https://get.docker.com` into a root shell;
 `scripts/bootstrap-dokploy.sh` pipes `https://dokploy.com/install.sh`. Both are
 unverified remote code executed as root, on an unpinned URL. One-time bootstrap,
-vendor-documented path, small window — but it is a decision that should be
+vendor-documented path, small window, but it is a decision that should be
 recorded rather than inherited by accident.
 
 Note `bootstrap-dokploy.sh` runs as `deploy` (default `VPS00_SSH_USER=deploy`),
 who is in the `docker` group, i.e. effectively root anyway (see item 5).
 
-## Plan A — Docker from Debian's official apt repository
+## Plan A, Docker from Debian's official apt repository
 
 This is also what the global convention asks for ("prefer platform defaults,
 native tools over abstractions"). Replace the `curl | sh` in
@@ -1110,7 +1110,7 @@ command -v docker >/dev/null 2>&1 || {
 
 Every subsequent package comes GPG-verified through apt, and upgrades arrive
 through the normal channel. The initial key fetch is still trust-on-first-use over
-TLS — that residual is unavoidable short of shipping the key in the repo, which
+TLS, that residual is unavoidable short of shipping the key in the repo, which
 is a reasonable Plan A+ if Ex wants it.
 
 The script must stay idempotent (`command -v docker` guard already handles it) and
@@ -1128,11 +1128,11 @@ ssh ... 'set -eu
   rm -f "$tmp"'
 ```
 
-This does not *verify* anything on first run — it makes the artifact
+This does not *verify* anything on first run, it makes the artifact
 reviewable and gives a hash to compare on the next run. Say that plainly in the
 comment rather than implying it is a checksum check.
 
-## Plan B — document the decision, change nothing
+## Plan B, document the decision, change nothing
 
 Entirely defensible for a homelab. Add three comment lines to each script
 recording that this is an accepted, deliberate trust-on-first-use of the vendor's
@@ -1149,17 +1149,17 @@ root `CLAUDE.md`'s loop is done and stated.
 
 ---
 
-# 10 — L1: `/debug` is public
+# 10, L1: `/debug` is public
 
 `https://maybeit.work/debug` returns the raw snapshot, including per-node `error`
 strings (Netdata internals, HTTP status codes) and Dokploy reachability. Minor
 recon aid, no secrets.
 
-**Plan A — delete the route.** It was a diagnostic escape hatch; `wrangler tail`
+**Plan A, delete the route.** It was a diagnostic escape hatch; `wrangler tail`
 covers live debugging and the same data is one `wrangler kv key get` away. Lazy,
 removes the surface entirely, costs a little convenience.
 
-**Plan B — gate it.** Require a header matched against a Worker secret:
+**Plan B, gate it.** Require a header matched against a Worker secret:
 
 ```js
 if (pathname === '/debug') {
@@ -1171,7 +1171,7 @@ if (pathname === '/debug') {
 ```
 
 Add `DEBUG_KEY` to the `secrets:` list in `deploy-worker.yml` and as a GitHub
-secret. Return `404`, not `403` — do not confirm the route exists.
+secret. Return `404`, not `403`, do not confirm the route exists.
 
 Keep whichever choice consistent with item 7: if `/debug` survives, it is one of
 the two `needsData` paths.
@@ -1180,14 +1180,14 @@ the two `needsData` paths.
 
 ---
 
-# 11 — L2: no security headers on the status page
+# 11, L2: no security headers on the status page
 
 The Worker's HTML response sets only `content-type`. The page has no user input
-and does not inject data as HTML — verified: the only `innerHTML` reference is a
+and does not inject data as HTML, verified: the only `innerHTML` reference is a
 static `html:not(.js)` CSS selector at `page.html:68`, and data goes through
 `textContent` at `page.html:661`. So this is defense in depth, not a live XSS.
 
-**Plan A — add headers to the HTML response:**
+**Plan A, add headers to the HTML response:**
 
 ```js
 return new Response(page, {
@@ -1201,16 +1201,16 @@ return new Response(page, {
 })
 ```
 
-**Check the page's actual inline content before committing to that CSP** — read
+**Check the page's actual inline content before committing to that CSP**, read
 `page.html` and confirm whether the script is inline (needs `'unsafe-inline'` for
 `script-src`, or a nonce/hash) and whether any font or image is remote. A CSP that
 breaks the page is worse than none. Test with `wrangler dev` and watch the browser
 console for violations before pushing.
 
-HSTS is unnecessary — Cloudflare terminates TLS and can set it at the edge; if Ex
+HSTS is unnecessary, Cloudflare terminates TLS and can set it at the edge; if Ex
 wants it, do it in the dashboard, not in the Worker.
 
-**Plan B — set them as Cloudflare Transform Rules** (Rules → Response Header
+**Plan B, set them as Cloudflare Transform Rules** (Rules → Response Header
 Transform) instead of in code. Same effect, no deploy needed to tweak, but the
 config then lives outside the repo, which cuts against GitOps. Prefer Plan A.
 
@@ -1243,11 +1243,11 @@ curl -s https://maybeit.work/debug   # or its gated replacement
 ```
 
 Budget check: root `.claude/CLAUDE.md` is capped at ~500 lines and each directory
-file at ~250. Items 2, 4, 5, 6 and 9 all add failure-log lines — if a file goes
+file at ~250. Items 2, 4, 5, 6 and 9 all add failure-log lines, if a file goes
 over, that is a signal to move content into a skill, not to trim the log. Ask
 before restructuring.
 
 Finally: recommend a self-audit to Ex when this is done. Root's rule is to
 recommend one when the failure log gains 3+ entries in a session or a hard rail
-needed double-checking against real behaviour. This work does both — rail 1 was
+needed double-checking against real behaviour. This work does both, rail 1 was
 false in production and rail 5 was broken in five files.

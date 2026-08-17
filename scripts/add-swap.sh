@@ -1,7 +1,7 @@
 #!/bin/sh
 # One-time (idempotent) per-node: adds a swap file. 2GB nodes with no swap
 # turn a transient memory spike (app startup, migrations) into a hard
-# OOM-kill instead of a slowdown. Idempotent — skips if swap already exists.
+# OOM-kill instead of a slowdown. Idempotent: skips if swap already exists.
 #
 # Usage: scripts/add-swap.sh <host> [size_gb]
 #   scripts/add-swap.sh 203.0.113.11 2
@@ -16,7 +16,7 @@ ssh_user="${SSH_USER:-root}"
 
 echo "Adding ${size_gb}G swap on ${ssh_user}@${host}:${ssh_port} ..."
 
-# SC2087: intentional — $size_gb must expand client-side here.
+# SC2087: intentional; $size_gb must expand client-side here.
 # shellcheck disable=SC2087
 ssh -p "$ssh_port" "${ssh_user}@${host}" "sh -s" <<EOF
 set -eu

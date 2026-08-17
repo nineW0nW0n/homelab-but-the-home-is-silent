@@ -4,7 +4,7 @@
 #
 # vps01 and vps02 do NOT use this script. They join the cluster later via
 # the Dokploy dashboard (Settings > Servers > Add Server), which uses a
-# different join flow than the initial install — see docs.dokploy.com.
+# different join flow than the initial install. See docs.dokploy.com.
 #
 # Usage: scripts/bootstrap-dokploy.sh
 # Reads VPS00_HOST / VPS00_SSH_USER / VPS00_SSH_PORT from .env if present,

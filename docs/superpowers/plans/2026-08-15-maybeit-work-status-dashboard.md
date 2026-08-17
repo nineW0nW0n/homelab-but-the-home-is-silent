@@ -10,14 +10,14 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a status page at `maybeit.work` showing red/green health and
-CPU/mem/disk % for vps00, vps01, vps02, and Dokploy — backed by tuned
+CPU/mem/disk % for vps00, vps01, vps02, and Dokploy, backed by tuned
 Netdata agents, a Cloudflare Worker that polls and renders, and Netdata's
 own Telegram alerting.
 
 **Architecture:** Netdata runs as a Docker container (`network_mode:
 host`, same pattern as this repo's `cloudflared` services) in each
 node's `stacks/<node>/docker-compose.yml`, deployed by the existing
-`deploy.yml` GitOps pipeline — not an ad-hoc SSH script (revised
+`deploy.yml` GitOps pipeline, not an ad-hoc SSH script (revised
 mid-execution: the only SSH access available, `deploy`, has no sudo,
 rail 6; it's already in the `docker` group). Reachable only through a
 new Access-gated Cloudflare Tunnel route. A Cloudflare Worker's Cron
@@ -34,36 +34,36 @@ JS, no framework), Workers KV, `wrangler`, `node:test` for unit tests.
 
 ## Global Constraints
 
-- One tunnel token per node, never shared (rail 2) — vps00 and vps01
+- One tunnel token per node, never shared (rail 2), vps00 and vps01
   reuse their *existing* `cloudflared` token/connector for the new
   metrics Public Hostname. vps02 has **no** `cloudflared` yet
-  (`services: {}`) — Netdata is its first workload, so it needs a
+  (`services: {}`), Netdata is its first workload, so it needs a
   brand-new dedicated tunnel + `CLOUDFLARE_TUNNEL_TOKEN_VPS02_*` secret,
   never vps00's shared token (see `stacks/vps02/docker-compose.yml`'s
   own comment, written for exactly this moment).
-- Real IPs never committed (rail 5) — nothing in this revised plan
+- Real IPs never committed (rail 5), nothing in this revised plan
   takes a host argument directly; deploy targets come from the existing
   `VPS0N_HOST` GitHub secrets, same as every other `deploy.yml` job.
-- CI deploy user stays key-only, no sudo (rail 6) — confirmed live
+- CI deploy user stays key-only, no sudo (rail 6), confirmed live
   during execution: root SSH is refused, `deploy` connects fine and is
   already in the `docker` group. This is *why* Netdata is a Docker
   service through `deploy.yml` rather than a native install over SSH.
-- Explicit `mem_limit`/`mem_reservation` on every app service (rail 4)
-  — the new `netdata` service in each `docker-compose.yml` is no
+- Explicit `mem_limit`/`mem_reservation` on every app service (rail 4),
+  the new `netdata` service in each `docker-compose.yml` is no
   exception.
-- `validate.yml` passes before any deploy runs (rail 8) — the new
+- `validate.yml` passes before any deploy runs (rail 8), the new
   `deploy-worker.yml` calls it via `workflow_call`, same pattern as
   `deploy.yml`.
-- Biome lints all JS/TS/JSON (rail 9) — this plan adds the repo's first
+- Biome lints all JS/TS/JSON (rail 9), this plan adds the repo's first
   JS files, so `biome.json` is created as part of Task 4, per
   `tooling-setup`'s instruction to set it up on first real contact.
-- Never print secret material in full (rail 11) — Access service-token
+- Never print secret material in full (rail 11), Access service-token
   credentials, the Telegram bot token, and Worker secrets are referenced
   by name only, never pasted as literal values anywhere in this plan,
   a commit, or chat output.
 - Retention is **1 week**, not 1 month (per the approved spec, revised
   down from the design's initial draft).
-- Alerts go to **Telegram only** — no mail server exists in this repo
+- Alerts go to **Telegram only**, no mail server exists in this repo
   and none is being added.
 
 ---
@@ -71,14 +71,14 @@ JS, no framework), Workers KV, `wrangler`, `node:test` for unit tests.
 ### Task 1: Netdata as a Docker service (vps00, vps01, vps02) + vps02's first Cloudflare Tunnel
 
 Revised mid-execution (see the spec's "Implementation update" note):
-native root-SSH install isn't reachable — `deploy` (the only key that
+native root-SSH install isn't reachable, `deploy` (the only key that
 authenticates) has no sudo, but is already in the `docker` group. This
 task instead adds Netdata as a container in each node's existing
 `stacks/<node>/docker-compose.yml`, deployed by the existing
-`deploy.yml` pipeline — no new script, no SSH access beyond what
+`deploy.yml` pipeline, no new script, no SSH access beyond what
 `deploy.yml` already uses.
 
-vps02 currently has `services: {}` — no `cloudflared` at all. Netdata
+vps02 currently has `services: {}`, no `cloudflared` at all. Netdata
 is its first workload, so this task also gives vps02 its own dedicated
 tunnel wiring (its compose file's own comment already prescribes this
 exact pattern).
@@ -90,7 +90,7 @@ exact pattern).
 - Modify: `stacks/vps00/docker-compose.yml`,
   `stacks/vps01/docker-compose.yml` (add the `netdata` service)
 - Modify: `stacks/vps02/docker-compose.yml` (add `netdata` **and**
-  `cloudflared` — replace the stale "no cloudflared here" comment)
+  `cloudflared`, replace the stale "no cloudflared here" comment)
 - Modify: `.github/workflows/deploy.yml` (vps02's job gains a "Write
   remote .env" step, same shape as vps01's)
 - Modify: `.env.example` (add `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`,
@@ -104,20 +104,20 @@ exact pattern).
   container reachable at `127.0.0.1:19999` on each node (`network_mode:
   host`, same pattern as `cloudflared`), plus vps02's own tunnel
   connector. Task 3 (Cloudflare dashboard) and Task 6 (`poll.js`)
-  depend on the hostnames/ports this defines — not on a live deploy;
+  depend on the hostnames/ports this defines, not on a live deploy;
   nothing in this task touches production, it only adds commits to
   this worktree branch.
 - Consumes: none from earlier tasks.
 - Note: the compose files reference `/opt/stacks/<node>/health_alarm_notify.conf`
   (Task 2 generates this file at deploy time; it is never committed).
-  `docker compose config` — this task's own verification bar — doesn't
+  `docker compose config`, this task's own verification bar, doesn't
   care that the file doesn't exist yet; `docker compose up` would, so
   don't attempt a real deploy until Task 2 is also done.
 
 - [ ] **Step 1: Resolve and pin the exact Netdata image tag**
 
 Run: `curl -fsSL "https://registry.hub.docker.com/v2/repositories/netdata/netdata/tags?page_size=25&ordering=last_updated" | grep -o '"name":"v2\.[0-9]*\.[0-9]*"' | head -1`
-Note the resolved tag (e.g. `v2.11.0`) — used verbatim below instead of
+Note the resolved tag (e.g. `v2.11.0`), used verbatim below instead of
 `latest`, per this repo's pinning convention.
 
 - [ ] **Step 2: Create the three `netdata.conf` files (identical content)**
@@ -180,7 +180,7 @@ volumes:
 ```
 
 (The bind-mounted `/proc`, `/sys` etc. are what let a containerized
-Netdata see the *host's* metrics instead of just the container's own —
+Netdata see the *host's* metrics instead of just the container's own,
 required for this to mean anything. `docker.sock` read-only is for
 container-name enrichment in the cgroups plugin, not control.)
 
@@ -189,7 +189,7 @@ container-name enrichment in the cgroups plugin, not control.)
 Identical block to Step 3, appended under vps01's existing `cloudflared`
 service and its own `volumes:` top-level key.
 
-- [ ] **Step 5: vps02 — add both `netdata` and its first `cloudflared`**
+- [ ] **Step 5: vps02, add both `netdata` and its first `cloudflared`**
 
 Replace vps02's `services: {}` and its stale explanatory comment
 (the one starting "No cloudflared here...") with:
@@ -199,9 +199,9 @@ Replace vps02's `services: {}` and its stale explanatory comment
 # vps02 stack. Deployed by .github/workflows/deploy.yml to
 # /opt/stacks/vps02/docker-compose.yml.
 #
-# Netdata is this node's first workload — it gets its own dedicated
+# Netdata is this node's first workload, it gets its own dedicated
 # tunnel + token (CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS), never vps00's
-# shared CLOUDFLARE_TUNNEL_TOKEN (see stacks/CLAUDE.md, rail 2 — a
+# shared CLOUDFLARE_TUNNEL_TOKEN (see stacks/CLAUDE.md, rail 2, a
 # shared token load-balances requests across nodes with different
 # origins and 502s).
 #
@@ -268,7 +268,7 @@ Add `netdata` to the "Current routes" / service description section:
 note it runs on all 3 nodes, `network_mode: host`, config in
 `netdata.conf` (committed, no secrets) + `health_alarm_notify.conf`
 (generated at deploy time by Task 2, never committed). Update or remove
-the vps02-specific old guidance that said "no cloudflared here yet" —
+the vps02-specific old guidance that said "no cloudflared here yet",
 it now has one.
 
 - [ ] **Step 9: Validate compose syntax**
@@ -276,7 +276,7 @@ it now has one.
 Run: `cd stacks/vps00 && docker compose config >/dev/null` (repeat for
 `vps01`, `vps02`).
 Expected: no errors (a warning about the missing
-`health_alarm_notify.conf` file, if any, is fine — see the Interfaces
+`health_alarm_notify.conf` file, if any, is fine, see the Interfaces
 note above; `docker compose config` validates syntax/interpolation,
 not that bind-mount source files exist).
 
@@ -303,9 +303,9 @@ git commit -m "feat: run Netdata as a Docker service on all 3 nodes; vps02's fir
 - Create: `stacks/vps00/health_alarm_notify.conf.template`,
   `stacks/vps01/health_alarm_notify.conf.template`,
   `stacks/vps02/health_alarm_notify.conf.template` (identical content,
-  placeholders only — no secrets)
+  placeholders only, no secrets)
 - Modify: `.github/workflows/deploy.yml` (one new step per node: render
-  the template with the real secrets, write it to the remote host —
+  the template with the real secrets, write it to the remote host,
   same shape as the existing "Write remote .env" step)
 - Modify: `.github/workflows/CLAUDE.md` (required-secrets list)
 - Modify: `.env.example` (add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
@@ -314,12 +314,12 @@ git commit -m "feat: run Netdata as a Docker service on all 3 nodes; vps02's fir
 - Consumes: the `netdata` service definitions from Task 1 (this task's
   files are what fills the bind mount Task 1 left pointing at a
   not-yet-existing file).
-- Produces: once deployed, Netdata's default health alarms (unmodified
-  — see the note below) notify Telegram on breach. Nothing else in
+- Produces: once deployed, Netdata's default health alarms (unmodified,
+  see the note below) notify Telegram on breach. Nothing else in
   `health_alarm_notify.conf` needs to be set: `alarm-notify.sh` already
   has its own internal default (disabled) for every notification method
   it doesn't find configured, so a minimal file that only turns on
-  Telegram is a complete, valid file — not a partial one.
+  Telegram is a complete, valid file, not a partial one.
 
 Before this task: create a Telegram bot via `@BotFather` (`/newbot`),
 save the bot token; message the bot once, then read
@@ -380,7 +380,7 @@ TELEGRAM_CHAT_ID=
 
 Add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
 `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` (the last one belongs to Task 1
-but wasn't yet documented there — pick it up here too) to the
+but wasn't yet documented there, pick it up here too) to the
 "Required GitHub Secrets / Variables" line.
 
 - [ ] **Step 6: yamllint**
@@ -402,27 +402,27 @@ git commit -m "feat: wire Netdata alerts to Telegram via GitOps deploy"
 
 ### Task 3: Cloudflare Tunnel routes + Access gating (manual, dashboard)
 
-This step is dashboard-driven, not code — ingress routing for this
+This step is dashboard-driven, not code, ingress routing for this
 repo's tunnels has always lived in the Cloudflare Zero Trust dashboard,
 never a local config file (`stacks/CLAUDE.md`). This is the one task in
-this plan that touches your real Cloudflare account — do it yourself,
+this plan that touches your real Cloudflare account, do it yourself,
 at your own pace; nothing later in this plan needs it done before Tasks
 4-8 (Worker code) proceed.
 
 **Interfaces:**
 - Produces: `vps00-metrics.maybeit.work`, `vps01-metrics.maybeit.work`,
-  `vps02-metrics.maybeit.work` — each reachable only with a valid
+  `vps02-metrics.maybeit.work`, each reachable only with a valid
   Cloudflare Access service-token header pair, or your own logged-in
   session. Task 6 (`poll.js`) and Task 8 (Worker secrets) consume the
   service token this step creates. `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`
-  (Step 1 below) is also what unblocks vps02's actual deploy from Task 1
-  — until this secret exists in GitHub, vps02's `cloudflared` container
+  (Step 1 below) is also what unblocks vps02's actual deploy from Task 1;
+  until this secret exists in GitHub, vps02's `cloudflared` container
   can't start (empty `TUNNEL_TOKEN`).
 
 - [ ] **Step 1: Create vps02's first Cloudflare Tunnel**
 
 Zero Trust dashboard → Networks → Tunnels → Create a tunnel → Cloudflared
-→ name it (e.g. `vps02`). Copy the generated token — this becomes the
+→ name it (e.g. `vps02`). Copy the generated token, this becomes the
 GitHub secret `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` referenced by
 Task 1's compose change. Add it now: repo Settings → Secrets and
 variables → Actions → New repository secret.
@@ -431,7 +431,7 @@ variables → Actions → New repository secret.
 
 Access → Service Auth → Service Tokens → Create Service Token. Name:
 `status-worker`. Save the generated **Client ID** and **Client Secret**
-immediately (shown once) — these become `CF_ACCESS_CLIENT_ID` /
+immediately (shown once), these become `CF_ACCESS_CLIENT_ID` /
 `CF_ACCESS_CLIENT_SECRET` in Task 8. Do not paste them into any file in
 this repo.
 
@@ -451,9 +451,9 @@ For each of the 3 new hostnames: Access → Applications → Add an
 application → Self-hosted.
 - Application name: `<node> Netdata metrics`
 - Application domain: `<node>-metrics.maybeit.work`
-- Policy 1 — name: `worker-service-token`, Action: `Service Auth`,
+- Policy 1, name: `worker-service-token`, Action: `Service Auth`,
   Include: Service Token → `status-worker` (from Step 2).
-- Policy 2 — name: `owner-access`, Action: `Allow`, Include: Emails →
+- Policy 2, name: `owner-access`, Action: `Allow`, Include: Emails →
   your own account email (lets you open the raw Netdata dashboard
   yourself later; not required by the Worker).
 
@@ -479,7 +479,7 @@ Repeat both checks for vps01-metrics and vps02-metrics.
 - [ ] **Step 6: Note in commit trail**
 
 No files change in this repo for this task (Step 1's secret excepted,
-added directly in GitHub, never committed). Nothing to `git add` here —
+added directly in GitHub, never committed). Nothing to `git add` here,
 dashboard state isn't tracked by this repo.
 
 ---
@@ -487,7 +487,7 @@ dashboard state isn't tracked by this repo.
 ### Task 4: Worker project scaffold + Biome setup
 
 **Files:**
-- Create: `biome.json` (repo root — first JS/TS/JSON in this repo)
+- Create: `biome.json` (repo root, first JS/TS/JSON in this repo)
 - Create: `worker/status/package.json`
 - Create: `worker/status/wrangler.toml`
 - Create: `worker/status/CLAUDE.md`
@@ -501,7 +501,7 @@ dashboard state isn't tracked by this repo.
 - [ ] **Step 1: Resolve and pin the exact `wrangler` version**
 
 Run: `npm view wrangler version`
-Note the resolved version (e.g. `4.x.y`) — used verbatim in Step 3, per
+Note the resolved version (e.g. `4.x.y`), used verbatim in Step 3, per
 this repo's "never `latest`" convention.
 
 - [ ] **Step 2: Create `biome.json`** (hard-railed content, per
@@ -578,21 +578,21 @@ replacing the placeholder.
 ```markdown
 Parent: ../../.claude/CLAUDE.md
 
-# worker/status/ — maybeit.work status dashboard (Cloudflare Worker)
+# worker/status/, maybeit.work status dashboard (Cloudflare Worker)
 
 Serves the status page at the `maybeit.work` apex and polls node health
-on a Cron Trigger. Deliberately **not** deployed via Dokploy/VPS — see
+on a Cron Trigger. Deliberately **not** deployed via Dokploy/VPS, see
 the design spec for why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`).
 
 ## Layout
 
-- `src/render.js` — pure function, status JSON in, HTML out. No fetch,
-  no KV — this is the only part with real branching logic, and the only
+- `src/render.js`, pure function, status JSON in, HTML out. No fetch,
+  no KV, this is the only part with real branching logic, and the only
   part with a test.
-- `src/poll.js` — polls each node's Netdata API (through the
+- `src/poll.js`, polls each node's Netdata API (through the
   Access-gated tunnel route) + a plain Dokploy reachability check,
   returns a status snapshot. `fetch` is injectable for testing.
-- `src/index.js` — wires `fetch` (render from KV) and `scheduled` (poll,
+- `src/index.js`, wires `fetch` (render from KV) and `scheduled` (poll,
   write to KV) handlers together. No logic of its own.
 
 ## Local dev
@@ -603,7 +603,7 @@ fire the poll locally before hitting `http://localhost:8787/`.
 
 ## Secrets
 
-`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` — the Cloudflare
+`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`, the Cloudflare
 Access service token created in the design's Cloudflare dashboard step.
 Set via `wrangler secret put`, never in this directory.
 
@@ -619,7 +619,7 @@ poller | exists → worker/status/CLAUDE.md |`
 - [ ] **Step 8: Verify lint passes on the skeleton**
 
 Run: `biome ci .`
-Expected: passes (nothing to flag yet — `wrangler.toml` is TOML, not
+Expected: passes (nothing to flag yet, `wrangler.toml` is TOML, not
 JSON/JS, so Biome doesn't touch it; `package.json` is valid JSON).
 
 - [ ] **Step 9: Commit**
@@ -632,7 +632,7 @@ git commit -m "chore: scaffold status Worker project + Biome setup"
 
 ---
 
-### Task 5: `render.js` — status JSON to HTML
+### Task 5: `render.js`, status JSON to HTML
 
 **Files:**
 - Create: `worker/status/src/render.js`
@@ -684,7 +684,7 @@ test('renders a dokploy row', () => {
 - [ ] **Step 2: Run, verify it fails**
 
 Run: `cd worker/status && node --test test/render.test.js`
-Expected: FAIL — `Cannot find module '../src/render.js'`.
+Expected: FAIL, `Cannot find module '../src/render.js'`.
 
 - [ ] **Step 3: Implement**
 
@@ -756,7 +756,7 @@ Expected: 4 passing.
 - [ ] **Step 5: Lint**
 
 Run: `biome ci worker/status/src/render.js worker/status/test/render.test.js`
-Expected: clean (or auto-fixable — run `biome check --write` if so, then
+Expected: clean (or auto-fixable, run `biome check --write` if so, then
 re-run tests).
 
 - [ ] **Step 6: Commit**
@@ -768,7 +768,7 @@ git commit -m "feat: add status page render function"
 
 ---
 
-### Task 6: `poll.js` — collect node + Dokploy status
+### Task 6: `poll.js`, collect node + Dokploy status
 
 **Files:**
 - Create: `worker/status/src/poll.js`
@@ -848,7 +848,7 @@ test('pollAll marks dokploy down on a 5xx response', async () => {
 - [ ] **Step 2: Run, verify it fails**
 
 Run: `cd worker/status && node --test test/poll.test.js`
-Expected: FAIL — `Cannot find module '../src/poll.js'`.
+Expected: FAIL, `Cannot find module '../src/poll.js'`.
 
 - [ ] **Step 3: Implement**
 
@@ -948,7 +948,7 @@ git commit -m "feat: add node/dokploy status polling"
 
 ---
 
-### Task 7: `index.js` — wire fetch + scheduled handlers
+### Task 7: `index.js`, wire fetch + scheduled handlers
 
 **Files:**
 - Create: `worker/status/src/index.js`
@@ -1001,7 +1001,7 @@ Expected: HTML page, "No data yet" (KV is empty locally).
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 curl http://localhost:8787/
 ```
-Expected: second `curl /` now renders a table — node polls will show
+Expected: second `curl /` now renders a table, node polls will show
 red (no real Access creds in local dev unless you've set `.dev.vars`),
 Dokploy may show green if your dev machine reaches the real internet.
 This confirms the fetch → poll → KV → render loop works end to end
@@ -1035,7 +1035,7 @@ In the repo's GitHub Settings → Secrets and variables → Actions, add:
 `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` (values from Task 3
 Step 1). Confirm `CLOUDFLARE_API_TOKEN` has `Account.Workers
 Scripts:Edit` permission in the Cloudflare dashboard (My Profile → API
-Tokens → edit the token) — it was reserved but unused before this task,
+Tokens → edit the token), it was reserved but unused before this task,
 so its scope has never been exercised.
 
 - [ ] **Step 2: Add `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` to `.env.example`**
@@ -1130,7 +1130,7 @@ or a populated table if 5+ minutes have passed since deploy.
 
 - [ ] **Step 9: Verify alerts still independent**
 
-No action needed — Netdata's Telegram alerting (Task 2) doesn't depend
+No action needed, Netdata's Telegram alerting (Task 2) doesn't depend
 on the Worker at all. Confirmed already in Task 2 Step 4.
 
 ---
@@ -1139,10 +1139,10 @@ on the Worker at all. Confirmed already in Task 2 Step 4.
 
 - **Spec coverage:** data collection (Task 1), alerting (Task 2),
   transport/Access (Task 3), delivery/Worker (Tasks 4-7), deploy
-  pipeline (Task 8) — every section of the design spec maps to a task.
+  pipeline (Task 8), every section of the design spec maps to a task.
 - **Placeholder scan:** the only two literal `REPLACE_*` markers
   (`wrangler.toml`'s KV id, `package.json`'s wrangler version) are
-  filled in by the task's own steps before it's considered done — not
+  filled in by the task's own steps before it's considered done, not
   left open-ended.
 - **Type/name consistency:** `renderStatusPage(snapshot)` (Task 5) and
   `pollAll(env, fetchFn)` (Task 6) are used with matching

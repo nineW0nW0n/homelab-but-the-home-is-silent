@@ -1,4 +1,4 @@
-# Handoff — maybeit.work status dashboard
+# Handoff, maybeit.work status dashboard
 
 > **Commit SHAs in this document are dangling (2026-08-16).** History was
 > rewritten with `git filter-repo` to remove real node IPs and
@@ -8,7 +8,7 @@
 
 
 **State as of 2026-08-16:** feature merged locally to `main` (commit
-`29cbfb8`), **not pushed**. Nothing is live yet — no Netdata container
+`29cbfb8`), **not pushed**. Nothing is live yet, no Netdata container
 running anywhere, Worker not deployed, KV namespace exists but empty.
 
 ## What's done
@@ -17,9 +17,9 @@ running anywhere, Worker not deployed, KV namespace exists but empty.
   vps02 gained its first `cloudflared` tunnel.
 - Telegram alerting config (`health_alarm_notify.conf.template` +
   `deploy.yml` render step), default Netdata thresholds still in
-  effect — tightening was scoped out, documented as deferred
+  effect, tightening was scoped out, documented as deferred
   (`stacks/CLAUDE.md`), not a blocker.
-- Cloudflare Tunnel routes + Access apps — **live in the dashboard
+- Cloudflare Tunnel routes + Access apps, **live in the dashboard
   already**, done via browser automation this session, verified with
   unauthenticated curls (all 3 `<node>-metrics.maybeit.work` return
   302 to Access login): `vps00-metrics`, `vps01-metrics`,
@@ -34,11 +34,11 @@ running anywhere, Worker not deployed, KV namespace exists but empty.
   values never seen by the assistant): `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`,
   `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`.
 
-## Not yet done — next steps, in order
+## Not yet done, next steps, in order
 
 1. **Verify GitHub secrets before pushing.** Confirmed present this
    session: the 3 above. **Not confirmed this session:**
-   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — check
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, check
    `github.com/nineW0nW0n/homelab-but-the-home-is-silent/settings/secrets/actions`;
    if missing, `deploy.yml`'s Telegram render step will silently write
    an empty token (Minor finding from the final review, still valid).
@@ -46,13 +46,13 @@ running anywhere, Worker not deployed, KV namespace exists but empty.
    exist (they're listed as required in `.github/workflows/CLAUDE.md`
    but `deploy-worker.yml` is their first real consumer).
 
-2. **Push `main` to origin.** This is production-touching — fires
+2. **Push `main` to origin.** This is production-touching, fires
    `deploy.yml` (Netdata containers go live on vps00-02, sequential)
    and `deploy-worker.yml` (Worker deploys for the first time). Get
    explicit go-ahead before this, then watch both Action runs.
 
 3. **Verify `poll.js`'s Netdata dimension names against a real node**
-   (Important #5 from the final review — this is the "prep for next
+   (Important #5 from the final review, this is the "prep for next
    session" item). Can't be done until step 2 lands. Once Netdata is
    live:
    ```
@@ -68,16 +68,16 @@ running anywhere, Worker not deployed, KV namespace exists but empty.
    triggers `deploy-worker.yml`, not the full node deploy).
 
 4. **Confirm the page renders live data.** Wait one cron tick (~5 min)
-   after Worker deploy, then load `https://maybeit.work` — expect the
+   after Worker deploy, then load `https://maybeit.work`, expect the
    status table, not "no data yet."
 
 ## Useful references
 
 - Cloudflare account id: `acb24619a369506235663e8cb25e7d1f`, Zero
   Trust team name `old-firefly-996b` (from the Access login redirect
-  hostname) — use these to jump straight to the right dashboard pages.
+  hostname), use these to jump straight to the right dashboard pages.
 - Spec: `docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`
-  (has an "Implementation update" note at the top — read that first).
+  (has an "Implementation update" note at the top, read that first).
 - Plan: `docs/superpowers/plans/2026-08-15-maybeit-work-status-dashboard.md`.
 - Worker code: `worker/status/` (own `CLAUDE.md` there).
 
@@ -87,9 +87,9 @@ This feature was built via subagent-driven-development in a worktree;
 the SDD execution ledger (`.superpowers/sdd/.../progress.md`, every
 task's review verdict, the final whole-branch review's full findings
 list, and the fix-wave verification) lived in that worktree's
-gitignored scratch dir and was **not** preserved — the worktree was
+gitignored scratch dir and was **not** preserved, the worktree was
 removed as part of merging. The code state itself reflects every
 finding that was addressed (see git log on `main` from
 `e25dc68`..`29cbfb8`); only the meta-commentary is gone. If a detailed
 post-mortem of that process is ever needed, it isn't recoverable from
-disk — the conversation transcript is the only record.
+disk, the conversation transcript is the only record.

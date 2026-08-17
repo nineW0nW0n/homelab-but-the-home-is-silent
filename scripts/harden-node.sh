@@ -27,7 +27,7 @@ ssh_user="${SSH_USER:-root}"
 
 echo "Hardening ${ssh_user}@${host}:${ssh_port} ..."
 
-# SC2087: intentional — $ssh_port must expand client-side here.
+# SC2087: intentional; $ssh_port must expand client-side here.
 # shellcheck disable=SC2087
 ssh -p "$ssh_port" "${ssh_user}@${host}" 'sh -s' <<EOF
 set -eu

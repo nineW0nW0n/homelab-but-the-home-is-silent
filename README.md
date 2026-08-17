@@ -10,7 +10,8 @@ inbound ports, GitHub Actions as the only path to production.
 > [!NOTE]
 > **Status: work in progress.** Nodes are provisioned, hardened, and
 > deployable via CI. Dokploy, Cloudflare Tunnel and the first workload
-> are live. Expect rough edges and force-pushed fixes.
+> are live. Expect rough edges. `main` is protected against force-push
+> and deletion, so fixes land as new commits, not rewrites.
 
 ## 🗺️ Topology
 
@@ -21,17 +22,17 @@ inbound ports, GitHub Actions as the only path to production.
 | vps02 | secondary | Dokploy Remote Server, metrics only so far + own `cloudflared` |
 
 All three also run Netdata (bound to loopback) and a Dokploy-installed
-Traefik. Each node runs its **own single-node Swarm** — three independent
+Traefik. Each node runs its **own single-node Swarm**: three independent
 swarms, not one cluster.
 
-2 vCPU / 2GB RAM each. Real IPs are never committed —
+2 vCPU / 2GB RAM each. Real IPs are never committed.
 `infra/inventory.example.yaml` is the redacted template, usage examples in
 `scripts/` use RFC 5737 documentation addresses (`203.0.113.x`), and a
 pre-commit hook fails the commit if a routable address appears in a tracked
 file. Note the `vps0N.maybeit.work` names are inventory labels with no DNS
 records; they are not substitutes for an address.
 
-vps01/vps02 are managed as Dokploy **Remote Servers**, not Swarm workers —
+vps01/vps02 are managed as Dokploy **Remote Servers**, not Swarm workers:
 each node stays independent and hosts its own apps rather than pooling
 resources, which fits three boxes this small a lot better than clustering
 them.
@@ -39,9 +40,9 @@ them.
 ```mermaid
 flowchart LR
     internet(("Public traffic")) --> tunnel["Cloudflare Tunnel\n(outbound-only)"]
-    tunnel --> vps00["vps00 — primary\nDokploy control plane"]
-    tunnel --> vps01["vps01 — secondary\nDokploy app"]
-    tunnel --> vps02["vps02 — secondary\nmetrics"]
+    tunnel --> vps00["vps00, primary\nDokploy control plane"]
+    tunnel --> vps01["vps01, secondary\nDokploy app"]
+    tunnel --> vps02["vps02, secondary\nmetrics"]
 
     subgraph ci["GitHub Actions"]
         validate["validate.yml\nlint gate"] --> deploy["deploy.yml"]
@@ -55,8 +56,8 @@ flowchart LR
 ## 🔒 Network model
 
 > [!IMPORTANT]
-> No node has an open inbound port except SSH (22). All public traffic —
-> the Dokploy dashboard, deployed apps — arrives through Cloudflare
+> No node has an open inbound port except SSH (22). All public traffic
+> (the Dokploy dashboard, deployed apps) arrives through Cloudflare
 > Tunnel, which is outbound-only from each node's side.
 
 **UFW alone does not deliver that**, and for a while this README claimed
@@ -67,7 +68,7 @@ what `ufw status` says. Two layers close it, both applied by
 `harden-node.sh`:
 
 - a drop for all new inbound traffic on the WAN interface in
-  `DOCKER-USER`, the one chain Docker will not rewrite — IPv4 and IPv6,
+  `DOCKER-USER`, the one chain Docker will not rewrite, IPv4 and IPv6,
   reapplied at boot by a systemd unit ordered after `docker.service`;
 - `"ip": "127.0.0.1"` in `/etc/docker/daemon.json`, so newly published
   ports do not land on `0.0.0.0` by default.
@@ -83,11 +84,11 @@ authentication at the edge, before the tunnel.
 `cloudflared` runs in token mode (`tunnel run` + `TUNNEL_TOKEN`), and
 public-hostname routing is configured in the Cloudflare Zero Trust
 dashboard, not a file in this repo. `network_mode: host` is required on
-every `cloudflared` service — bridge mode puts it in its own network
+every `cloudflared` service: bridge mode puts it in its own network
 namespace, breaking `localhost:PORT` origin URLs.
 
 **One tunnel token per node, never shared.** Cloudflare load-balances a
-hostname's requests across every connector registered to its tunnel — a
+hostname's requests across every connector registered to its tunnel: a
 route isn't pinned to a specific node. Two nodes sharing one token means
 requests for either node's app can land on the wrong node and 502. Each
 node that serves something gets its own tunnel and its own token.
@@ -119,23 +120,23 @@ scripts/
 ```
 
 All scripts are idempotent, POSIX `sh`, shellcheck-clean, and safe to
-re-run — most matter again if a node ever gets rebuilt from scratch.
+re-run; most matter again if a node ever gets rebuilt from scratch.
 
 ## CI/CD
 
 - `validate.yml` runs on every PR and push to `main`: pre-commit over all
-  files — `yamllint --strict`, `actionlint`, `shellcheck`, `gitleaks`,
+  files: `yamllint --strict`, `actionlint`, `shellcheck`, `gitleaks`,
   `biome ci`, a no-real-IP check, trailing-whitespace, large-file and
   private-key checks.
 - `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`) or
-  manual dispatch. It calls `validate.yml` first — nothing deploys unless
-  lint passes — then waits for a **manual approval** on the `production`
+  manual dispatch. It calls `validate.yml` first (nothing deploys unless
+  lint passes), then waits for a **manual approval** on the `production`
   environment, then runs three sequential jobs, never in parallel, so a
   bad deploy can't take all three nodes down at once. Per node: SSH in via
   `webfactory/ssh-agent` with that node's own key and a pinned
   `known_hosts`, `rsync --delete` the node's stack files, write that
   node's tunnel token to a remote `.env` over stdin, then a guarded
-  `docker compose pull && up -d` — guarded because a stack with no
+  `docker compose pull && up -d`, guarded because a stack with no
   services defined makes plain `compose pull` error out otherwise.
 - Every action is pinned to a full commit SHA, not a tag. Tags are
   mutable, and these workflows run with SSH keys and a Cloudflare API
@@ -143,7 +144,7 @@ re-run — most matter again if a node ever gets rebuilt from scratch.
 
 ## 🧯 Security
 
-- UFW: deny-all-incoming except SSH, on every node — plus `DOCKER-USER`
+- UFW: deny-all-incoming except SSH, on every node, plus `DOCKER-USER`
   drops, because UFW does not govern container-published ports (see
   [Network model](#-network-model)).
 - sshd: key-only auth (`PasswordAuthentication no`, `UsePAM no`).
@@ -155,7 +156,7 @@ re-run — most matter again if a node ever gets rebuilt from scratch.
 - One CI key **per node**, so a leaked Actions secret reaches one node
   rather than three, and deploys require a human approval.
 - Netdata does not get the Docker socket. A `:ro` bind on a socket
-  restricts nothing — anything that can reach the Docker API can start a
+  restricts nothing: anything that can reach the Docker API can start a
   container with the host filesystem mounted.
 - Dokploy manages the other nodes over its own separate, dedicated SSH
   credential, scoped to that purpose only.
@@ -170,16 +171,16 @@ re-run — most matter again if a node ever gets rebuilt from scratch.
 
 ## Resource constraints
 
-Two vCPU, 2GB RAM, no swap by default — small enough that an unbounded
+Two vCPU, 2GB RAM, no swap by default: small enough that an unbounded
 container can take the whole node down, not just itself.
 
 - `add-swap.sh` provisions a 2GB swapfile (`vm.swappiness=10`) on every
   node, so a transient memory spike during app startup or a DB migration
   degrades instead of triggering a hard OOM-kill.
-- Every app service — in this repo's `stacks/` or deployed through
-  Dokploy — gets an explicit `mem_limit`/`mem_reservation`. Deliberately
+- Every app service (in this repo's `stacks/` or deployed through
+  Dokploy) gets an explicit `mem_limit`/`mem_reservation`. Deliberately
   the classic Compose key, not `deploy.resources`, which is Swarm-oriented
-  and isn't reliably honored by plain `docker compose up` — the command
+  and isn't reliably honored by plain `docker compose up`, the command
   both `deploy.yml` and Dokploy actually run.
 - Dokploy's own control plane was uncapped by default, consuming a
   disproportionate share of a small node's memory on its own before
