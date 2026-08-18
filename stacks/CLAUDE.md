@@ -74,6 +74,27 @@ Bridge mode puts `cloudflared` in its own network namespace, so
 container, not the VPS itself: the origin app is unreachable, 502.
 `network_mode: host` makes `localhost` mean the node.
 
+## Alert delivery
+
+`health_alarm_notify.conf` carries the Telegram bot token, so it is
+generated at deploy time and never committed. It is **not** bind-mounted
+from the stack directory: `deploy.yml` pipes it into the node's
+`<node>_netdataconfig` volume through a throwaway `alpine` container that
+also does `chown 201:201` and `chmod 600`.
+
+That indirection exists because the in-container Netdata runs as uid 201
+while the deploy user is uid 1000. A bind-mounted `600 deploy:deploy` file
+is unreadable to uid 201, and Netdata's failure mode is silent: it logs
+"Failed to load config file", forgets Telegram entirely, and falls back to
+emailing root on a box with no sendmail.
+
+Verify delivery as the netdata user, never as root (root can read the file
+regardless, so a root test passes on a broken setup):
+
+```sh
+docker exec -u netdata netdata /usr/libexec/netdata/plugins.d/alarm-notify.sh test sysadmin
+```
+
 ## Alert thresholds
 
 `health.d/ram.conf` and `health.d/disks.conf` (identical across all 3
@@ -128,6 +149,17 @@ the database without `EBK_SECURITY_SECRET_KEY` (Dokploy env tab, also in
 Ex's password manager) gets you the books but invalidates every session.
 
 ## Failure log
+
+- Netdata notifications were dead on **all three nodes** from setup until
+  2026-08-18 and nothing surfaced it: `deploy.yml` wrote
+  `health_alarm_notify.conf` with `umask 077`, giving `600 deploy:deploy`
+  (uid 1000), and the container's netdata user (uid 201) could not read it.
+  Every alarm since then failed to deliver, including the tightened 80/90
+  RAM and disk alarms. The config looked present and correct on the host,
+  which is exactly why it went unnoticed for so long. Fixed by writing the
+  file into the netdataconfig volume as uid 201 (see alert delivery above).
+  When a container reads a secret file, check the *in-container* uid, and
+  test as that user rather than root.
 
 - rclone's S3 backend calls `CreateBucket` before uploading, to create the
   bucket if it is missing. An R2 token scoped to Object Read & Write cannot

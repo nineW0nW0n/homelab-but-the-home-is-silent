@@ -38,7 +38,10 @@ services:
       - /etc/os-release:/host/etc/os-release:ro
       - /:/host/root:ro,rslave
       - ./netdata.conf:/etc/netdata/netdata.conf:ro
-      - ./health_alarm_notify.conf:/etc/netdata/health_alarm_notify.conf:ro
+      # health_alarm_notify.conf is deliberately NOT bind-mounted: it is
+      # written into the netdataconfig volume by deploy.yml as uid 201 so
+      # the in-container netdata user can actually read it. See
+      # stacks/CLAUDE.md, alerting section.
       - ./health.d/ram.conf:/etc/netdata/health.d/ram.conf:ro
       - ./health.d/disks.conf:/etc/netdata/health.d/disks.conf:ro
       - ./health.d/backup.conf:/etc/netdata/health.d/backup.conf:ro
