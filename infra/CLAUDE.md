@@ -47,3 +47,21 @@ hand-edit it with a real value. Tracked files reference the hostname or
   3 static nodes don't justify a yaml-parsing layer in POSIX `sh`
   scripts. If node config needs to be data-driven again, that's a real
   design decision, not a resurrection of these files as-is.
+
+## Human SSH access
+
+Each node accepts **one key, named after it**: `~/.ssh/id_ed25519_vps0N`
+(public-key comment `ci-deploy`), user `deploy`. `~/.ssh/config` has a host
+alias per node, so `ssh vps01` is the normal way in. The same keypair is what
+`deploy.yml` uses from CI, so a key that works here works there.
+
+Do not reach for `~/.ssh/id_ed25519_vps` (comment `vps-maybeit`): it is
+rejected by all three nodes, verified 2026-08-18. It predates the per-node
+keys and is not in any node's `authorized_keys`; the ssh config pointed every
+host at it until then, which made `ssh vps01` fail while an explicit
+`-i ~/.ssh/id_ed25519_vps01` worked.
+
+`deploy` has **no sudo** (rail 6). For anything needing root, use Docker (the
+user is in the `docker` group) or Dokploy, which connects as root with its own
+keypair generated during Remote Server setup, held on vps00 and not on any
+laptop.
