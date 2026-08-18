@@ -41,6 +41,11 @@ hand-edit it with a real value. Tracked files reference the hostname or
 
 ## Failure log
 
+- "Key X is rejected by all three nodes" was recorded on 2026-08-18 after
+  testing `~/.ssh/id_ed25519_vps` as `deploy@` only. It is the root key and
+  works as `root@` on every node. A key is rejected *for a user*, never in
+  general: name the user in the finding, and test both before writing one
+  down.
 - `common/base.yaml`/`nodes/*/node.yaml` existed as declarative config
   for OS/firewall/resources/dokploy but nothing ever read them; scripts
   hardcoded the same values independently. Deleted rather than wired up:
@@ -55,13 +60,25 @@ Each node accepts **one key, named after it**: `~/.ssh/id_ed25519_vps0N`
 alias per node, so `ssh vps01` is the normal way in. The same keypair is what
 `deploy.yml` uses from CI, so a key that works here works there.
 
-Do not reach for `~/.ssh/id_ed25519_vps` (comment `vps-maybeit`): it is
-rejected by all three nodes, verified 2026-08-18. It predates the per-node
-keys and is not in any node's `authorized_keys`; the ssh config pointed every
-host at it until then, which made `ssh vps01` fail while an explicit
-`-i ~/.ssh/id_ed25519_vps01` worked.
+`~/.ssh/id_ed25519_vps` (comment `vps-maybeit`) is the **root** key, not a
+dead one: `root@` on all three nodes accepts it (verified 2026-08-18 on
+`vps00`, `vps01` and `vps02`). It is rejected as `deploy@`, which is what an
+earlier check tested, and why the ssh config pointing every deploy alias at it
+made `ssh vps01` fail while `-i ~/.ssh/id_ed25519_vps01` worked. Use it only
+for the provisioning scripts; the per-node keys are the day-to-day path.
 
-`deploy` has **no sudo** (rail 6). For anything needing root, use Docker (the
-user is in the `docker` group) or Dokploy, which connects as root with its own
-keypair generated during Remote Server setup, held on vps00 and not on any
-laptop.
+`deploy` has **no sudo** (rail 6). Anything needing root has three paths, in
+order of preference:
+
+1. **Docker**, for app-level work: `deploy` is in the `docker` group, which is
+   how the vps01 backup script reads volumes without root.
+2. **`root@` with `~/.ssh/id_ed25519_vps`**, for the provisioning scripts.
+   `scripts/*.sh` default to `SSH_USER=root` and that default is correct;
+   `sshd` keeps Debian's `PermitRootLogin prohibit-password`, which
+   `harden-node.sh` does not change, so root is key-only. Add a
+   `Host vps0N-root` alias per node pointing at this key, since the plain
+   `vps0N` aliases force the deploy key with `IdentitiesOnly yes`.
+3. **Dokploy**, which connects as root with its own keypair generated during
+   Remote Server setup, held on vps00 and not on any laptop. It is the second
+   key in `/root/.ssh/authorized_keys` on vps01 and vps02; vps00 has only the
+   `vps-maybeit` key.
