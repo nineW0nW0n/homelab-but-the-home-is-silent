@@ -118,7 +118,10 @@ sends some requests to a node with nothing listening on that origin port.
 ## ezBookkeeping backups (vps01)
 
 Nightly at **03:00 Asia/Manila** to Cloudflare R2 bucket `homelab-backups`.
-Four moving parts, all in `stacks/vps01/`:
+Cron fires the script **hourly** in the node's own zone; the script exits
+immediately unless it is 03:00 in Manila, because Debian's cron ignores
+`CRON_TZ` (see failure log). `FORCE_BACKUP=1` bypasses that gate for a
+manual run. Four moving parts, all in `stacks/vps01/`:
 
 | File | Role |
 |---|---|
@@ -142,6 +145,13 @@ thing to check when a backup starts failing after Dokploy work.
 Retention lives in **R2 lifecycle rules**, not in the script: `daily/`
 expires at 7 days, `weekly/` (Sundays) at 28. Deletion is server-side so a
 script bug cannot erase history.
+
+**Restore drill last passed: 2026-08-18.** Archive pulled from R2, extracted
+into throwaway volumes, booted as a second container on `127.0.0.1:18080`:
+SQLite `integrity_check` ok, row counts identical to production, app served
+200. Not proven: a receipt image rendering, because both the production and
+the restored `storage` volume are still empty (0 accounts, 0 transactions,
+0 pictures at drill time). Re-run the drill once there is real data.
 
 **Restore:** pull the archive, `tar xzf` it, and copy `data/` and `storage/`
 back into the two volumes with the same throwaway-container trick. Restoring
@@ -203,3 +213,19 @@ Ex's password manager) gets you the books but invalidates every session.
   nothing on that origin port, so ~2/3 of requests 502'd. Fixed by giving
   vps01 its own tunnel + token (rail 2). Never reuse another node's token
   when adding a service here.
+
+- Debian 12's cron **ignores `CRON_TZ`** (verified empirically on vps01,
+  2026-08-18: a `CRON_TZ=Asia/Manila` entry scheduled to fire 3 minutes out
+  in Manila time never ran). The backup was therefore scheduled for 03:00
+  *node-local*, not Manila, and `deploy.yml`'s comment claimed otherwise.
+  Fixed by running the script hourly and gating on `TZ=Asia/Manila date +%H`
+  inside the script. Never trust a timezone-aware cron entry here without
+  testing it with a near-term throwaway entry.
+
+- `deploy.yml`'s `rsync -az --delete stacks/vps01/` **deleted
+  `/opt/stacks/vps01/backup/`** on every deploy: the run log, the local
+  archive, and the `.last-success` stamp the Netdata age alarm reads. The
+  alarm did its job and sat CRIT for ~13.7h unnoticed. Fixed with
+  `--exclude 'backup/'`. Any node-side state living under a directory an
+  rsync `--delete` targets needs an exclude, added in the same commit as the
+  state.
