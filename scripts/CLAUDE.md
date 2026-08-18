@@ -26,6 +26,13 @@ run is a no-op, before calling a script change done.
 - `cap-dokploy-resources.sh <host>`: memory-caps Dokploy's own control
   plane (not app workloads; those get `mem_limit` in their own compose,
   rail 4).
+- `setup-maintenance.sh <host>` — caps docker container log growth
+  (`daemon.json` log-opts, 10m x 3 files/container), caps journald disk
+  use (`SystemMaxUse=200M`, restarted immediately), drops a weekly
+  `/etc/cron.d/docker-prune` (Sunday 03:00, images/containers/build
+  cache older than 7d, never touches volumes). No RAM-freeing cron —
+  dropping page cache doesn't free anything real; swap
+  (`add-swap.sh`) + Dokploy caps already cover memory pressure.
 
 ## Failure log
 
