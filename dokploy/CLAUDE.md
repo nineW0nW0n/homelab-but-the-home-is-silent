@@ -27,6 +27,36 @@ UI (logs, redeploy button, env editor, backups) live here.
   nodes, and Dokploy's own control plane already takes a bite.
 - **Pin image tags exactly.** No `latest`, no `1.6`.
 
+## Autodeploy and Cloudflare Access
+
+Dokploy redeploys these apps on push through a per-app webhook GitHub calls
+at `https://dokploy.maybeit.work/api/deploy/<secret>`. `dokploy.maybeit.work`
+sits behind Cloudflare Access, which bounced that POST with a `302` to the
+Access login and `auth_status: NONE`: GitHub never reached Dokploy and
+nothing surfaced it, so autodeploy simply never fired.
+
+Fixed 2026-08-18 with a **second Access application** scoped to
+`dokploy.maybeit.work/api/deploy`, holding one Bypass/Everyone policy named
+`webhook-bypass`. A bypass policy inside the existing `dokploy` application
+would have unprotected the whole dashboard, so the narrow second app is
+load-bearing, not stylistic. It lives only in Cloudflare; nothing in this
+repo creates it.
+
+That leaves `/api/deploy/*` guarded by the per-app secret in the webhook URL
+alone. **Treat those URLs (Dokploy app → Deployments tab) as secrets.**
+
+When autodeploy silently stops, check Access before touching Dokploy: its
+failure mode is a redirect, not an error.
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' https://dokploy.maybeit.work/            # 302, Access
+curl -s -o /dev/null -w '%{http_code}\n' https://dokploy.maybeit.work/api/trpc/x  # 302, Access
+curl -s -o /dev/null -w '%{http_code}\n' https://dokploy.maybeit.work/api/deploy/test  # 404, reaches Dokploy
+```
+
+A `302` on the third line means the bypass app is gone or reordered. A `200`
+on the first means the dashboard itself is unprotected.
+
 ## Workloads
 
 - `ezbookkeeping/` → vps01, `budget.maybeit.work`, SQLite, 256m cap.

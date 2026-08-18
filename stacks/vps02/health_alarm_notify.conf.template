@@ -1,9 +1,12 @@
 # Netdata alarm notifications -- Telegram only. Rendered into the real
 # file at deploy time (deploy.yml); the two placeholders below are
 # substituted from GitHub secrets, never committed as real values.
-# Every other notification method stays at alarm-notify.sh's own
-# built-in default (disabled) -- this file only needs to turn on what
-# we're using.
+# Email is the one method alarm-notify.sh enables by default, and these
+# nodes have no MTA, so every alert also tried sendmail and logged
+# "account default not found" (error 78). Telegram still delivered, but the
+# noise is what hid a genuinely broken notification config for weeks.
+# Every other method stays at its built-in default (disabled).
+SEND_EMAIL="NO"
 SEND_TELEGRAM="YES"
 TELEGRAM_BOT_TOKEN="__TELEGRAM_BOT_TOKEN__"
 DEFAULT_RECIPIENT_TELEGRAM="__TELEGRAM_CHAT_ID__"
