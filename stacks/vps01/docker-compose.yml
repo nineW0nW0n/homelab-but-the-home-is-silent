@@ -41,6 +41,8 @@ services:
       - ./health_alarm_notify.conf:/etc/netdata/health_alarm_notify.conf:ro
       - ./health.d/ram.conf:/etc/netdata/health.d/ram.conf:ro
       - ./health.d/disks.conf:/etc/netdata/health.d/disks.conf:ro
+      - ./health.d/backup.conf:/etc/netdata/health.d/backup.conf:ro
+      - ./backup_age.plugin:/usr/libexec/netdata/plugins.d/backup_age.plugin:ro
     mem_limit: 200m
     mem_reservation: 100m
 
