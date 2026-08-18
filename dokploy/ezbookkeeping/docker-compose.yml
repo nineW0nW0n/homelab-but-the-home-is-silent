@@ -11,6 +11,10 @@
 #
 # SQLite, single container. No published ports (rail 1): reachable only
 # over dokploy-network via Traefik.
+#
+# Two named volumes: `data` holds the SQLite file, `storage` holds
+# transaction pictures. Both must be volumes: anything written to the
+# container's own layer is destroyed on the next redeploy.
 services:
   ezbookkeeping:
     image: mayswind/ezbookkeeping:1.6.1
@@ -23,6 +27,10 @@ services:
       EBK_DATABASE_TYPE: sqlite3
       EBK_DATABASE_DB_PATH: /ezbookkeeping/data/ezbookkeeping.db
       EBK_LOG_MODE: console
+      # Upload ceiling, not the usual size. Set the app's upload quality
+      # to 1080p per device and receipts land near 500 KB; this only
+      # stops a full-resolution phone photo (3-6 MB from an iPhone).
+      EBK_USER_MAX_TRANSACTION_PICTURE_SIZE: "10485760"
       # Registration stays off. To create the first account, set
       # EBK_USER_ENABLE_REGISTER=true in Dokploy's environment tab,
       # redeploy, sign up, then remove it and redeploy again.
@@ -32,6 +40,7 @@ services:
       EBK_SECURITY_SECRET_KEY: ${EBK_SECURITY_SECRET_KEY:?set in Dokploy environment}
     volumes:
       - data:/ezbookkeeping/data
+      - storage:/ezbookkeeping/storage
       - /etc/localtime:/etc/localtime:ro
     networks:
       - dokploy-network
@@ -50,6 +59,7 @@ services:
 
 volumes:
   data:
+  storage:
 
 networks:
   dokploy-network:
