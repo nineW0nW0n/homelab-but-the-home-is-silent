@@ -129,6 +129,19 @@ Ex's password manager) gets you the books but invalidates every session.
 
 ## Failure log
 
+- rclone's S3 backend calls `CreateBucket` before uploading, to create the
+  bucket if it is missing. An R2 token scoped to Object Read & Write cannot
+  do that, so every upload died with `403 AccessDenied: CreateBucket` while
+  the credentials were in fact fine. Fix is
+  `RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true`, not a wider token. Read the API
+  call named in a 403 before assuming the key is wrong.
+
+- vps01's system clock is **UTC-4**, not UTC (seen in the backup log's
+  `-04:00` stamps while rclone logged UTC). Any cron entry written as plain
+  UTC would fire four hours off. The backup crontab pins `CRON_TZ` for this
+  reason; do the same for anything else scheduled here, and do not assume
+  these nodes are UTC.
+
 - `deploy.yml`'s "Install backup cron" step pipes into `crontab -`, which
   **replaces the deploy user's entire crontab**, it does not append. That is
   fine while the backup is its only entry; the moment a second scheduled job
