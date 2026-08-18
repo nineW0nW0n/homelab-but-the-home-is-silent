@@ -9,16 +9,19 @@ inbound ports, GitHub Actions as the only path to production.
 
 > [!NOTE]
 > **Status: work in progress.** Nodes are provisioned, hardened, and
-> deployable via CI. Dokploy, Cloudflare Tunnel and the first workload
-> are live. Expect rough edges. `main` is protected against force-push
-> and deletion, so fixes land as new commits, not rewrites.
+> deployable via CI. Dokploy, Cloudflare Tunnel and two workloads are
+> live: `booking.maybeit.work` (EasyAppointments) and
+> `budget.maybeit.work` (ezBookkeeping), both on vps01. Only the latter is
+> backed up off-site so far. Expect rough edges. `main` is protected
+> against force-push and deletion, so fixes land as new commits, not
+> rewrites.
 
 ## 🗺️ Topology
 
 | Node  | Role      | Notes                                                     |
 |-------|-----------|-----------------------------------------------------------|
 | vps00 | primary   | Dokploy control plane + own `cloudflared`                  |
-| vps01 | secondary | Dokploy Remote Server, hosts the app + own `cloudflared`   |
+| vps01 | secondary | Dokploy Remote Server, hosts both apps + own `cloudflared` |
 | vps02 | secondary | Dokploy Remote Server, metrics only so far + own `cloudflared` |
 
 All three also run Netdata (bound to loopback) and a Dokploy-installed
@@ -41,7 +44,7 @@ them.
 flowchart LR
     internet(("Public traffic")) --> tunnel["Cloudflare Tunnel\n(outbound-only)"]
     tunnel --> vps00["vps00, primary\nDokploy control plane"]
-    tunnel --> vps01["vps01, secondary\nDokploy app"]
+    tunnel --> vps01["vps01, secondary\nDokploy apps"]
     tunnel --> vps02["vps02, secondary\nmetrics"]
 
     subgraph ci["GitHub Actions"]
@@ -109,7 +112,11 @@ infra/
 stacks/
   vps0N/docker-compose.yml           per-node cloudflared connector + Netdata
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
+  vps01/backup-ezbookkeeping.sh      nightly off-site backup + its Netdata age alarm
+dokploy/
+  ezbookkeeping/, booking/           compose apps Dokploy clones from this repo itself
 worker/status/                       Cloudflare Worker: maybeit.work status page + health poller
+docs/superpowers/                    handoffs, plans and specs from past sessions
 scripts/
   bootstrap-dokploy.sh               install Dokploy control plane (vps00 only)
   provision-deploy-user.sh           create the CI deploy user, key-only, rsync installed
@@ -117,7 +124,12 @@ scripts/
   harden-node.sh                     UFW, key-only sshd, Fail2Ban, DOCKER-USER drops
   add-swap.sh                        swap file (these nodes ship with none)
   cap-dokploy-resources.sh           memory-cap Dokploy's own control plane
+  setup-maintenance.sh               cap container logs and journald, weekly docker prune
 ```
+
+Two deploy paths, one repo: `deploy.yml` rsyncs `stacks/` to the nodes and
+never touches `dokploy/`, while Dokploy clones `dokploy/` itself from GitHub
+and redeploys through a per-app webhook.
 
 All scripts are idempotent, POSIX `sh`, shellcheck-clean, and safe to
 re-run; most matter again if a node ever gets rebuilt from scratch.
@@ -128,7 +140,8 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   files: `yamllint --strict`, `actionlint`, `shellcheck`, `gitleaks`,
   `biome ci`, a no-real-IP check, trailing-whitespace, large-file and
   private-key checks.
-- `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`) or
+- `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`,
+  `deploy.yml` itself) or
   manual dispatch. It calls `validate.yml` first (nothing deploys unless
   lint passes), then waits for a **manual approval** on the `production`
   environment, then runs three sequential jobs, never in parallel, so a
@@ -168,6 +181,27 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 > containers is root-equivalent by construction. The controls that
 > actually bound this are the per-node keys and the approval gate, not
 > the absence of sudo.
+
+## 💾 Backups
+
+`budget.maybeit.work`'s data (a SQLite database plus uploaded receipt
+images) is archived nightly at 03:00 Asia/Manila to a Cloudflare R2 bucket.
+The app container is stopped for the few seconds the archive takes, so
+SQLite checkpoints its write-ahead log and the copy is provably consistent;
+a shell trap starts it again even when the backup fails, because
+availability outranks the backup.
+
+Retention lives in R2 lifecycle rules rather than in the script: `daily/`
+expires after 7 days, `weekly/` after 28. Deletion is server-side, so a bug
+in the script cannot erase history.
+
+A backup that is never restored is a guess. A Netdata alarm charts the age
+of the last successful run and fires at 36 hours, and the restore path is
+drilled by hand: pull the newest archive, extract it into throwaway volumes,
+boot a second container against them, then delete all of it. That drill is
+what caught the schedule silently never firing.
+
+`booking.maybeit.work`'s MySQL volume is not covered yet.
 
 ## Resource constraints
 

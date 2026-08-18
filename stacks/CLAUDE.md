@@ -161,6 +161,16 @@ Ex's password manager) gets you the books but invalidates every session.
   When a container reads a secret file, check the *in-container* uid, and
   test as that user rather than root.
 
+- `alarm-notify.sh` enables **email by default**, so with Telegram configured
+  and no MTA installed every alert also ran sendmail and logged
+  `account default not found` (error 78) — three errors per alarm
+  transition, and `alarm-notify.sh` exiting non-zero. Telegram still
+  delivered, so nothing was lost, but that steady error stream is what hid
+  the genuinely broken config above. `SEND_EMAIL="NO"` in the templates.
+  The templates' claim that every unlisted method "stays at its built-in
+  default (disabled)" was simply wrong about email; check a notifier's
+  default before writing that sentence.
+
 - rclone's S3 backend calls `CreateBucket` before uploading, to create the
   bucket if it is missing. An R2 token scoped to Object Read & Write cannot
   do that, so every upload died with `403 AccessDenied: CreateBucket` while

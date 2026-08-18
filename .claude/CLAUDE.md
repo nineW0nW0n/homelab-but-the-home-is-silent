@@ -44,6 +44,7 @@ belongs in `.claude/skills/`, not here.
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
 | `dokploy/` | Compose apps Dokploy pulls from git (not `deploy.yml`) | exists → `dokploy/CLAUDE.md` |
 | `worker/status/` | Cloudflare Worker: status page + health poller | exists → worker/status/CLAUDE.md |
+| `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`); read-only history, nothing deploys from here | none: no rails of its own |
 
 Keep this column current the same commit you add or remove a directory
 file.
