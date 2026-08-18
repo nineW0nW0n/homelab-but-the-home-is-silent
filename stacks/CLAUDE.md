@@ -94,7 +94,46 @@ registered to its tunnel: a route isn't pinned to a specific node.
 Sharing one token across nodes with different origins means Cloudflare
 sends some requests to a node with nothing listening on that origin port.
 
+## ezBookkeeping backups (vps01)
+
+Nightly at **03:00 Asia/Manila** to Cloudflare R2 bucket `homelab-backups`.
+Four moving parts, all in `stacks/vps01/`:
+
+| File | Role |
+|---|---|
+| `backup-ezbookkeeping.sh` | stop container, tar both volumes, start container, upload, stamp |
+| `backup_age.plugin` | Netdata external plugin charting hours since last success |
+| `health.d/backup.conf` | alarm: warn >36h, crit >72h |
+| `.r2.env` (never committed) | written by `deploy.yml` from `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` |
+
+The container is **stopped** for the tar so SQLite checkpoints its WAL and
+closes cleanly: a few seconds of downtime buys a provably consistent
+database file. The script starts it again from an `EXIT` trap, so a failed
+tar or upload never leaves the app down.
+
+Volumes are read through a throwaway `alpine` container rather than from
+`/var/lib/docker/volumes`, because the deploy user has Docker access but no
+sudo (rail 6). Volume names carry the Dokploy project prefix
+(`vps01booking-ezbookkeeping-rqdyxo_{data,storage}`); they change if the
+Dokploy app is recreated, so `VOLUME_PREFIX` in the script is the first
+thing to check when a backup starts failing after Dokploy work.
+
+Retention lives in **R2 lifecycle rules**, not in the script: `daily/`
+expires at 7 days, `weekly/` (Sundays) at 28. Deletion is server-side so a
+script bug cannot erase history.
+
+**Restore:** pull the archive, `tar xzf` it, and copy `data/` and `storage/`
+back into the two volumes with the same throwaway-container trick. Restoring
+the database without `EBK_SECURITY_SECRET_KEY` (Dokploy env tab, also in
+Ex's password manager) gets you the books but invalidates every session.
+
 ## Failure log
+
+- `deploy.yml`'s "Install backup cron" step pipes into `crontab -`, which
+  **replaces the deploy user's entire crontab**, it does not append. That is
+  fine while the backup is its only entry; the moment a second scheduled job
+  exists on vps01, this step will silently delete it. Add the second entry to
+  the same step rather than installing it by hand.
 
 - Dokploy v0.29.14 has **no 2FA and no login/audit log** (absent or
   license-gated). Verified empirically, not just from docs: 30 days of
