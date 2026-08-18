@@ -42,6 +42,7 @@ belongs in `.claude/skills/`, not here.
 | `stacks/` | Per-node `docker-compose.yml`: cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
+| `dokploy/` | Compose apps Dokploy pulls from git (not `deploy.yml`) | exists → `dokploy/CLAUDE.md` |
 | `worker/status/` | Cloudflare Worker: status page + health poller | exists → worker/status/CLAUDE.md |
 
 Keep this column current the same commit you add or remove a directory

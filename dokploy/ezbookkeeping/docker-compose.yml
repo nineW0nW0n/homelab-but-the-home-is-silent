@@ -1,0 +1,56 @@
+---
+# ezBookkeeping on vps01, budget.maybeit.work.
+#
+# Deployed as a Dokploy Compose application pulling this repo, NOT by
+# .github/workflows/deploy.yml (that owns stacks/ only). Dokploy's own
+# Traefik on vps01 routes the host; vps01's existing cloudflared tunnel
+# (CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING -> http://localhost:80) already
+# carries budget.maybeit.work once the Public Hostname exists in Zero
+# Trust. No new tunnel, no new token: rail 2 is one token per node, not
+# per service.
+#
+# SQLite, single container. No published ports (rail 1): reachable only
+# over dokploy-network via Traefik.
+services:
+  ezbookkeeping:
+    image: mayswind/ezbookkeeping:1.6.1
+    container_name: ezbookkeeping
+    restart: unless-stopped
+    environment:
+      EBK_SERVER_DOMAIN: budget.maybeit.work
+      EBK_SERVER_ROOT_URL: https://budget.maybeit.work/
+      EBK_SERVER_ENABLE_GZIP: "true"
+      EBK_DATABASE_TYPE: sqlite3
+      EBK_DATABASE_DB_PATH: /ezbookkeeping/data/ezbookkeeping.db
+      EBK_LOG_MODE: console
+      # Registration stays off. To create the first account, set
+      # EBK_USER_ENABLE_REGISTER=true in Dokploy's environment tab,
+      # redeploy, sign up, then remove it and redeploy again.
+      EBK_USER_ENABLE_REGISTER: ${EBK_USER_ENABLE_REGISTER:-false}
+      # 32+ random chars, generated once, stored in Dokploy's
+      # environment tab. Changing it invalidates every session.
+      EBK_SECURITY_SECRET_KEY: ${EBK_SECURITY_SECRET_KEY:?set in Dokploy environment}
+    volumes:
+      - data:/ezbookkeeping/data
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - dokploy-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    mem_reservation: 128m
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.ezbookkeeping.rule: Host(`budget.maybeit.work`)
+      traefik.http.routers.ezbookkeeping.entrypoints: web
+      traefik.http.services.ezbookkeeping.loadbalancer.server.port: "8080"
+
+volumes:
+  data:
+
+networks:
+  dokploy-network:
+    external: true
