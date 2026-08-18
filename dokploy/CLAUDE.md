@@ -38,3 +38,12 @@ UI (logs, redeploy button, env editor, backups) live here.
   Public Hostname.
 
 ## Failure log
+
+- Cloudflare caches ezBookkeeping's `/server_settings.js` (origin sends
+  `cache-control: max-age=14400`), so after flipping an env-driven
+  feature flag the login page can keep showing the old state for up to
+  4 hours. Do not conclude the env change failed: check the container
+  (`env | grep EBK_`) and `curl` the origin file, then purge by hostname
+  in Caching -> Configuration -> Custom Purge. Verified 2026-08-18 while
+  turning `EBK_USER_ENABLE_REGISTER` off: container read `false` and
+  `_['r']=0` while the browser still offered "Create an account".
