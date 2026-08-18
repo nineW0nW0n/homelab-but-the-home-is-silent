@@ -13,6 +13,12 @@
 # /var/lib/docker/volumes, so this needs Docker access but not root.
 set -eu
 
+# Debian's cron ignores CRON_TZ (verified on vps01, 2026-08-18), so cron runs
+# this hourly in the node's own zone and the schedule lives here instead:
+# 03:00 Asia/Manila, correct year-round without root or a host timezone change.
+# FORCE_BACKUP=1 runs it now, for manual runs and restore drills.
+[ "${FORCE_BACKUP:-}" = "1" ] || [ "$(TZ=Asia/Manila date +%H)" = "03" ] || exit 0
+
 APP_CONTAINER=ezbookkeeping
 VOLUME_PREFIX=vps01booking-ezbookkeeping-rqdyxo
 WORK_DIR=/opt/stacks/vps01/backup
