@@ -30,6 +30,9 @@ UI (logs, redeploy button, env editor, backups) live here.
 ## Workloads
 
 - `ezbookkeeping/` → vps01, `budget.maybeit.work`, SQLite, 256m cap.
+  Two named volumes: `data` (SQLite file) and `storage` (transaction
+  pictures). The app writes pictures to `/ezbookkeeping/storage`, so
+  without that volume every receipt photo dies on the next redeploy.
   Registration disabled by default; flip `EBK_USER_ENABLE_REGISTER=true`
   in Dokploy's env tab only long enough to create the first account.
   Routed through vps01's existing tunnel
@@ -39,6 +42,12 @@ UI (logs, redeploy button, env editor, backups) live here.
 
 ## Failure log
 
+- ezBookkeeping writes transaction pictures to `/ezbookkeeping/storage`,
+  a path the first version of its compose file never mounted, so any
+  receipt photo would have lived in the container layer and vanished on
+  redeploy. When adding a container that accepts uploads, check where it
+  writes them (`du -sh /<appdir>/*` in the running container) rather than
+  assuming the database volume covers user data.
 - Cloudflare caches ezBookkeeping's `/server_settings.js` (origin sends
   `cache-control: max-age=14400`), so after flipping an env-driven
   feature flag the login page can keep showing the old state for up to
