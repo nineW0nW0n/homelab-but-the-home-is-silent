@@ -40,6 +40,16 @@ UI (logs, redeploy button, env editor, backups) live here.
   `http://localhost:80`; the only Cloudflare-side step is adding the
   Public Hostname.
 
+- `booking/` → vps01, `booking.maybeit.work`, EasyAppointments + MySQL.
+  Migrated into this repo 2026-08-18 by switching the **existing** Dokploy
+  app's provider from Raw to GitHub, not by creating a new app. That
+  matters: the compose project name (`booking-ptpwn8`) is derived from the
+  Dokploy app, and the MySQL volume `booking-ptpwn8_mysql-data` (~200MB of
+  real appointments) is named after it. Renaming or recreating the app
+  silently brings MySQL up on an empty database while the old volume sits
+  orphaned on disk. `MYSQL_ROOT_PASSWORD` and `DB_PASSWORD` stay in
+  Dokploy's environment tab.
+
 ## Failure log
 
 - ezBookkeeping writes transaction pictures to `/ezbookkeeping/storage`,
