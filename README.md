@@ -249,7 +249,11 @@ here without an off-site copy. It is not much data: 14 tables and about 126
 rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
 own tablespaces and binlogs, not appointments. Real customer bookings all the
 same. A forced end-to-end run of the backup passed on 2026-08-19 and the
-archive is in R2. No restore drill has been run against it yet.
+archive is in R2. A restore drill passed the same day: the archive was pulled
+back down from R2 and restored into a throwaway MySQL container, and all 14
+tables and every per-table row count matched production. The throwaway
+container and its volume were deleted afterwards; production was never written
+to.
 
 ## Resource constraints
 
