@@ -4,12 +4,12 @@
 > makes the agent more reliable, not because it reads nicely. If a rule
 > helps the agent but confuses Ex, keep it and add one clarifying line.
 
-Map, not manual. Budgets apply to what is always in context: directory
-`CLAUDE.md` files ~250 lines, this root ~500 (it carries the map, rails,
-and protocol). Skills are exempt: they load on demand, so their cost is
-paid only when used; keep them scannable, not short. Anything longer than
-a couple of lines of install commands, config, or multi-step workflow
-belongs in `.claude/skills/`, not here.
+Map, not manual. Budgets apply to what is always in context: ~500 lines
+each, for this root and for every directory `CLAUDE.md`. Skills are exempt:
+they load on demand, so their cost is paid only when used; keep them
+scannable, not short. Anything longer than a couple of lines of install
+commands, config, or multi-step workflow belongs in `.claude/skills/`, not
+here.
 
 ## What / where / when / why / how
 
@@ -111,9 +111,9 @@ shellcheck scripts/*.sh      # every script stays shellcheck-clean
 find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +
 ```
 
-- The `find` line prints but never fails; acting on it is on you: root
-  over ~500 or a directory file over ~250 gets fixed before you report
-  done. Plain globs miss `.github/`; `find` doesn't.
+- The `find` line prints but never fails; acting on it is on you: any
+  `CLAUDE.md` over ~500 lines gets fixed before you report done. Plain
+  globs miss `.github/`; `find` doesn't.
 - `biome ci .` finding nothing to lint is a pass, not a skip.
 - Scripts stay idempotent: trace or run twice, confirm the second is a
   no-op.
@@ -238,7 +238,7 @@ wasn't written down:**
 
 **Keeping this current:**
 
-- A directory file past ~250 lines signals splitting the directory, not
+- A directory file past ~500 lines signals splitting the directory, not
   trimming the file; ask before restructuring.
 - Anything long and reusable → a skill, referenced by one line, never
   inlined. Never create a directory's `CLAUDE.md` speculatively.
