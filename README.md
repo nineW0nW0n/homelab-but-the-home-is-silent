@@ -233,8 +233,8 @@ Staleness is alerted by `check-backup-age.sh`: an hourly cron job that reads
 the same stamp file the backup writes and calls the Telegram API directly.
 First alert at 36 hours, re-alert every 12 hours while stale, one message on
 recovery. **It deliberately does not go through Netdata.** A Netdata alarm
-charts the same age for the dashboard, but its notifications are not a proven
-delivery path and nothing depends on them.
+charts the same age for the dashboard, but it silently stopped notifying
+once and nothing depends on it any more.
 
 A backup that is never restored is a guess, so the restore path is drilled by
 hand: pull the newest archive, extract it into throwaway volumes, boot a

@@ -134,12 +134,13 @@ change needed: `rsync -az --delete stacks/vps0N/` already ships
 subdirectories, and the existing `docker compose restart netdata` step
 picks up the new mounts.
 
-**Whether these alarms actually reach anyone is unverified.** Both use
-`to: sysadmin`, and the health engine stopped executing notification scripts
-on 2026-08-18 (see failure log). Nobody has forced a real RAM or disk
-transition and watched Telegram, so treat the thresholds as a dashboard
-signal, not as protection, until someone does. Nothing else alerts on RAM or
-disk by a proven path.
+**These alarms do deliver.** The `to: sysadmin` path is proven by positive
+control: a throwaway alarm with that same recipient on vps02 fired
+`UNINITIALIZED -> WARNING`, carried the `EXEC_RUN` flag and exited 0.
+`ram_in_use`, `disk_space_usage` and `disk_inode_usage` have never executed
+a notification, so they sit in the "no prior `EXEC_RUN`" branch and will
+fire on their first real transition. The backup alarm's silence was specific
+to its own dedup state (see failure log), not a property of the recipient.
 
 ## Why one token per node (rail 2)
 
@@ -222,21 +223,33 @@ Ex's password manager) gets you the books but invalidates every session.
   default (disabled)" was simply wrong about email; check a notifier's
   default before writing that sentence.
 
-- Netdata's health engine **stopped executing the notification script**, and
-  has not run one since 2026-08-18 07:31:50Z. First written up as "never
-  executed for `ezbookkeeping_backup_age`, while stock alarms always did";
-  corrected 2026-08-19 against fuller transition data.
-  `/api/v2/alert_transitions` carries the `EXEC_RUN` flag on 8 transitions up
-  to that timestamp and on none of the 11 since, and the stock
-  `cgroup_ram_in_use` alarm stopped at the same moment — so it is neither
-  specific to our alarm nor to `to: sysadmin`, as first assumed. The cutoff
-  coincides with the deploy that fixed `health_alarm_notify.conf`
-  permissions. Script, config and token are fine — replaying netdata's exact
-  real-mode arguments by hand delivers, as `netdata` and as `root`. Root
-  cause still not found. Fixed by not depending on it. Never make a Netdata alarm
-  the *only* delivery path for something that matters without proving a real
-  transition reaches Telegram: an interactive `alarm-notify.sh test` passes
-  on a setup where real alerts are silently dropped, which is how this hid.
+- `ezbookkeeping_backup_age` has executed no notification since 2026-08-18
+  07:31:50Z. Written up wrongly twice before the cause was found: first as
+  "never executed, while stock alarms always did", then as a node-wide
+  stoppage. **Root cause (2026-08-19):** netdata's `health_alarm_execute()`
+  suppresses a notification when the most recent entry for the same
+  `alarm_id` that carried `EXEC_RUN` has the **same status** as the new
+  transition — its "don't send the same notification twice" rule. That alarm
+  last executed at 07:31:50Z with status CRITICAL, so every CRITICAL since
+  is dropped as a duplicate. The state persists across netdata restarts,
+  which is why restarting never helped. The escape hatch would be a CLEAR
+  that executes and resets the chain, and `delay: down 1h multiplier 1.5 max
+  4h` in `health.d/backup.conf` blocks exactly that: every CLEAR is held an
+  hour, the alarm re-fires first, and the CLEAR is superseded (`UPDATED`)
+  before its delay expires. The two mechanisms interlock. **Not**
+  recipient-specific, contrary to the first two write-ups: a throwaway
+  `to: sysadmin` alarm on vps02 fired and carried `EXEC_RUN` with
+  `exec_code=0`. Script, config and token were never at fault — replaying
+  netdata's real-mode arguments by hand delivers, as `netdata` and as
+  `root`. The lesson: **an alarm can look armed on the dashboard while being
+  permanently silent for one status.** Verify with a real transition, never
+  an interactive `alarm-notify.sh test`, and never make a Netdata alarm the
+  only delivery path for something that matters.
+
+- `sed -i` does **not** propagate into a bind-mounted single file: it writes
+  a new inode and the container keeps reading the old one. Use
+  `cat new > file` for in-place edits of mounted configs (`netdata.conf`,
+  `health.d/*.conf`) on these nodes.
 
 - `delay: down 1h multiplier 1.5 max 4h` in `health.d/backup.conf` holds
   every CLEAR for an hour and cancels it outright if the alarm re-fires
