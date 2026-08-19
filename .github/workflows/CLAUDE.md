@@ -2,7 +2,7 @@ Parent: ../../.claude/CLAUDE.md
 
 # .github/workflows/: CI/CD
 
-`validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy to
+`validate.yml` (lint gate), `deploy.yml` (parallel deploy to
 the three nodes), and `deploy-worker.yml` (the `maybeit.work` status
 Worker: `npm test` then `wrangler deploy`, entirely separate from the
 node deploy path; see `worker/status/CLAUDE.md`).
@@ -18,8 +18,15 @@ node deploy path; see `worker/status/CLAUDE.md`).
 2. `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`,
    itself) or manual dispatch. `concurrency: deploy-production`,
    `cancel-in-progress: false`: a second push queues, doesn't abort a
-   deploy in flight. Deploys sequentially: vps00, then vps01, then vps02
-   (rail 7), each `needs:` the previous job. Per node: SSH key via
+   deploy in flight. A single `approve` job holds the `production`
+   environment and the three deploy jobs `needs:` it, so one approval
+   covers the run and all three nodes deploy in parallel (rail 7). Do not
+   put `environment: production` back on the deploy jobs: GitHub prompts
+   once per job, which is what made this three clicks. A `verify` job then
+   probes every node and app through its public hostname and fails the run
+   if anything is down; it runs even when a deploy job failed, so a partial
+   failure still says which nodes are serving. It reports only, never
+   reverts. Per node: SSH key via
    `webfactory/ssh-agent`, pinned `known_hosts`, `mkdir -p` the remote
    stack dir, `rsync --delete` the stack files, write that node's tunnel
    token into a remote `.env` (piped over SSH stdin, never a CLI arg,

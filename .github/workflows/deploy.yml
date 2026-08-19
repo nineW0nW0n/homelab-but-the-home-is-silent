@@ -21,10 +21,21 @@ jobs:
   validate:
     uses: ./.github/workflows/validate.yml
 
-  deploy-vps00:
+  # The single production gate. It exists so one approval covers the whole
+  # run: an 'environment:' on each deploy job would prompt three times.
+  # Every secret these jobs use is repository-scoped, so the deploy jobs
+  # lose nothing by not declaring the environment themselves.
+  approve:
     needs: validate
     runs-on: ubuntu-latest
     environment: production
+    steps:
+      - name: Gate
+        run: echo "approved - deploying vps00, vps01 and vps02 in parallel"
+
+  deploy-vps00:
+    needs: approve
+    runs-on: ubuntu-latest
     env:
       SSH_PORT: ${{ vars.VPS00_SSH_PORT || 22 }}
       SSH_USER: ${{ vars.VPS00_SSH_USER || 'deploy' }}
@@ -94,9 +105,8 @@ jobs:
              fi'
 
   deploy-vps01:
-    needs: deploy-vps00
+    needs: approve
     runs-on: ubuntu-latest
-    environment: production
     env:
       SSH_PORT: ${{ vars.VPS01_SSH_PORT || 22 }}
       SSH_USER: ${{ vars.VPS01_SSH_USER || 'deploy' }}
@@ -206,9 +216,8 @@ jobs:
              fi'
 
   deploy-vps02:
-    needs: deploy-vps01
+    needs: approve
     runs-on: ubuntu-latest
-    environment: production
     env:
       SSH_PORT: ${{ vars.VPS02_SSH_PORT || 22 }}
       SSH_USER: ${{ vars.VPS02_SSH_USER || 'deploy' }}
@@ -276,3 +285,59 @@ jobs:
              else \
                echo "no services defined, skipping compose pull/up"; \
              fi'
+
+  # Post-deploy health check. Parallel deploys mean a bad change reaches all
+  # three nodes at once, so this is the thing that tells you, loudly, that
+  # something is down. It only reports: it never tries to fix or roll back,
+  # because a revert cannot undo node-side state and an automated retry loop
+  # against three nodes with no human awake is worse than an alert.
+  #
+  # Runs even when a deploy job failed (but not when the run was cancelled),
+  # so a partial failure still tells you which nodes are actually serving.
+  #
+  # Each probe goes through the public hostname, so a pass means the whole
+  # path is alive: Cloudflare edge, the tunnel, cloudflared on the node, and
+  # the origin service. The Netdata endpoints sit behind Cloudflare Access,
+  # reached with the same service token the status Worker uses.
+  verify:
+    needs: [deploy-vps00, deploy-vps01, deploy-vps02]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe every node and app through its public hostname
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          fail=0
+          probe() {
+            name=$1
+            url=$2
+            want=$3
+            shift 3
+            got=$(curl -sS -o /dev/null -w '%{http_code}' -m 20 \
+                    --retry 5 --retry-delay 5 --retry-all-errors \
+                    "$@" "$url" || echo 000)
+            if [ "$got" = "$want" ]; then
+              echo "ok    $name ($got)"
+            else
+              echo "FAIL  $name: got $got, want $want"
+              fail=1
+            fi
+          }
+
+          for n in vps00 vps01 vps02; do
+            probe "$n netdata" \
+              "https://$n-metrics.maybeit.work/api/v1/data?chart=system.cpu&after=-60&points=1" \
+              200 \
+              -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+              -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"
+          done
+
+          probe "booking app" https://booking.maybeit.work/ 200
+          probe "budget app" https://budget.maybeit.work/ 200
+          # Access must still be in front of the dashboard: a 200 here would
+          # mean the policy detached and the control plane is open.
+          probe "dokploy behind Access" https://dokploy.maybeit.work/ 302
+
+          exit $fail
