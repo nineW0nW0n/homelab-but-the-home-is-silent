@@ -57,8 +57,13 @@ jobs:
       - name: Write remote .env
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
+          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
         run: |
-          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$TUNNEL_TOKEN" | \
+          # One file, one write: this is 'cat >', not '>>', so every value
+          # the stack needs has to be printed here or it is lost.
+          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\nNETDATA_CLAIM_TOKEN=%s\nNETDATA_CLAIM_ROOMS=%s\n' \
+            "$TUNNEL_TOKEN" "$NETDATA_CLAIM_TOKEN" "$NETDATA_CLAIM_ROOMS" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps00/.env'
 
@@ -127,8 +132,13 @@ jobs:
       - name: Write remote .env
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING }}
+          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
+          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
         run: |
-          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING=%s\n' "$TUNNEL_TOKEN" | \
+          # One file, one write: this is 'cat >', not '>>', so every value
+          # the stack needs has to be printed here or it is lost.
+          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING=%s\nNETDATA_CLAIM_TOKEN=%s\nNETDATA_CLAIM_ROOMS=%s\n' \
+            "$TUNNEL_TOKEN" "$NETDATA_CLAIM_TOKEN" "$NETDATA_CLAIM_ROOMS" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps01/.env'
 
@@ -231,8 +241,13 @@ jobs:
       - name: Write remote .env
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS }}
+          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
+          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
         run: |
-          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\n' "$TUNNEL_TOKEN" | \
+          # One file, one write: this is 'cat >', not '>>', so every value
+          # the stack needs has to be printed here or it is lost.
+          printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\nNETDATA_CLAIM_TOKEN=%s\nNETDATA_CLAIM_ROOMS=%s\n' \
+            "$TUNNEL_TOKEN" "$NETDATA_CLAIM_TOKEN" "$NETDATA_CLAIM_ROOMS" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps02/.env'
 
