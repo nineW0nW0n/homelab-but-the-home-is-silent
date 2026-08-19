@@ -35,6 +35,29 @@ why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`
   exactly 3 status-dot slots, one per VPS node, no 4th slot for it.
   Still visible at `/debug` if needed.
 
+## Public exposure
+
+The apex is deliberately **public**: no Cloudflare Access in front of it,
+unlike the `*-metrics` and `dokploy` hostnames. Two separate things bound
+what a visitor can cost:
+
+- `POLL_TTL_MS` (30s, `poll.js`) caps upstream polling. Traffic volume
+  cannot turn into load on the nodes; a snapshot inside the TTL is served
+  from KV without touching Netdata.
+- `cache-control` on the responses caps Worker invocations. `/status.json`
+  carries `max-age` equal to the poll TTL and the page carries `max-age=300`,
+  so ordinary refreshes are served by the browser rather than burning free
+  tier requests and KV reads. `/debug` is `no-store`: it is key-gated, and a
+  cached copy could outlive a rotated key.
+
+Neither stops a determined attacker who bypasses caches; that needs a
+Cloudflare Rate Limiting rule at the zone, which is dashboard config, not
+code. The nodes stay protected by the poll TTL regardless.
+
+Note the page does **not** auto-refresh: it fetches `/status.json` once on
+load with an 800ms abort. Do not add a `setInterval` without revisiting both
+numbers above.
+
 ## Local dev
 
 `npm install`, `npx wrangler dev`, then hit `http://localhost:8787/`,

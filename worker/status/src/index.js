@@ -1,6 +1,6 @@
 import { isDebugAuthorized } from './debug-auth.js'
 import page from './page.html'
-import { isFresh, pollAll } from './poll.js'
+import { isFresh, POLL_TTL_MS, pollAll } from './poll.js'
 
 const SNAPSHOT_KEY = 'snapshot'
 
@@ -34,6 +34,9 @@ const PAGE_HEADERS = {
   ].join('; '),
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
+  // The page is a static vendored file that only changes on deploy, so a
+  // browser refresh has no reason to re-invoke the Worker for it.
+  'cache-control': 'public, max-age=300',
 }
 
 // Page's own DATA CONTRACT (see src/page.html): array of up to 3
@@ -98,11 +101,24 @@ export default {
     // nosniff on the JSON routes too, not just the page. Without it a
     // browser is free to content-sniff a response body; the page headers
     // already carry it, these did not.
-    const JSON_HEADERS = { 'x-content-type-options': 'nosniff' }
+    //
+    // max-age matches POLL_TTL_MS: the data genuinely cannot change more
+    // often than that, and without it every refresh of a public page is a
+    // Worker invocation plus a KV read. That is a free-tier quota someone
+    // can exhaust by holding down F5 -- the nodes themselves are already
+    // shielded by the poll TTL, this protects the Worker.
+    const JSON_HEADERS = {
+      'x-content-type-options': 'nosniff',
+      'cache-control': `public, max-age=${Math.floor(POLL_TTL_MS / 1000)}`,
+    }
     // Raw snapshot (includes dokploy + per-node `error` on down nodes) --
     // not linked from the page, just a diagnostic escape hatch.
     if (pathname === '/debug') {
-      return Response.json(snapshot, { headers: JSON_HEADERS })
+      // Never cached: it is gated by a shared key, and a cached copy could
+      // outlive a rotated key or be served to the wrong client.
+      return Response.json(snapshot, {
+        headers: { ...JSON_HEADERS, 'cache-control': 'no-store' },
+      })
     }
     const nodeHosts = env.NODE_HOSTS ? env.NODE_HOSTS.split(',') : []
     return Response.json(toStatusJson(snapshot, nodeHosts), { headers: JSON_HEADERS })
