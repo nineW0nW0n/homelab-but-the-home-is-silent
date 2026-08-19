@@ -231,9 +231,24 @@ Sundays); retention is the same server-side R2 lifecycle rules, 7 and 28 days.
 
 **Smoke test passed 2026-08-19**: a `FORCE_BACKUP=1` run went end to end,
 dump, trailer check, upload, stamp, and the object is present in R2 as
-`daily/booking-mysql-2026-08-19T05-40-19.sql.gz`, 6083 bytes. **No restore
-drill has been run yet**, so the archive is proven to arrive, not proven to
-restore.
+`daily/booking-mysql-2026-08-19T05-40-19.sql.gz`, 6083 bytes.
+
+**Restore drill last passed: 2026-08-19.** `daily/booking-mysql-2026-08-19T05-40-19.sql.gz`
+was pulled *back down from R2* (not the local copy in `backup-booking/`, so the
+off-site object is what was tested), 6083 bytes with its `Dump completed`
+trailer intact, and restored into a throwaway `mysql:8.0` container on a
+throwaway volume, `--network none`, no published ports, `--memory 512m`.
+Compared against production with read-only metadata queries only: 14 of 14
+tables present in both, per-table row counts identical across all 14 (128 rows
+total), and 140 columns / 26 `information_schema.statistics` rows / 25
+constraints / 0 routines / 0 triggers / 0 views on both sides. Production was
+never written to, and no row contents were read on either side. Torn down
+completely: container removed, volume removed, temp archive deleted, verified
+absent from `docker ps -a` and `docker volume ls`; `backup-booking/` left
+byte-identical. Not proven: that the restored database actually *serves* — the
+drill compared schema and counts, it did not point EasyAppointments at the
+restored copy and load a booking page, and it did not verify row contents,
+deliberately, because that is customer data.
 
 The dataset is tiny and the archive size is not a mistake: `easyappointments`
 is 14 tables, ~126 rows, 0.4 MB (`information_schema.tables`, 2026-08-19),
@@ -249,6 +264,12 @@ it recreates `easyappointments` itself. Drill it into a throwaway container
 first, never straight into production.
 
 ## Failure log
+
+- A restore drill runs a *second* database on a node already running the first:
+  the capped 512m `mysql:8.0` drill container on 2026-08-19 took vps01 from 4M
+  to 61M of swap in use while production stayed up. Always cap a drill
+  container explicitly and never drill during the 03:00/04:00 backup window;
+  on a 2GB node the drill is itself a workload, not an inspection.
 
 - macOS `zcat` is not Debian's: it appends `.Z` and fails on a `.gz`, so a
   dump-integrity check written as `zcat` verified fine on the node and
