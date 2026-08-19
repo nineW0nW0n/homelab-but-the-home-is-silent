@@ -240,7 +240,11 @@ hand: pull the newest archive, extract it into throwaway volumes, boot a
 second container against them, then delete all of it. That drill is what
 caught the schedule silently never firing.
 
-`booking.maybeit.work`'s MySQL volume is not covered yet.
+`booking.maybeit.work`'s MySQL database is covered too, an hour later at
+04:00: a hot `mysqldump --single-transaction` taken inside the MySQL
+container, so the booking site never goes down for it. It writes its own
+stamp file and the same staleness check watches it, so the two backups can
+go stale independently. No restore drill has been run against it yet.
 
 ## Resource constraints
 

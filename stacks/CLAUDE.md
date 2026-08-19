@@ -162,7 +162,7 @@ manual run. Six moving parts, all in `stacks/vps01/`:
 | `backup-ezbookkeeping.sh` | stop container, tar both volumes, start container, upload, stamp |
 | `backup_age.plugin` | Netdata external plugin charting hours since last success |
 | `health.d/backup.conf` | alarm: warn >36h, crit >72h (chart only, see failure log) |
-| `check-backup-age.sh` | hourly staleness check that alerts Telegram directly |
+| `check-backup-age.sh` | hourly staleness check that alerts Telegram directly; takes optional `[APP_LABEL] [BACKUP_DIR]`, defaults to ezBookkeeping |
 | `.r2.env` (never committed) | written by `deploy.yml` from `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` |
 | `.telegram.env` (never committed) | written by `deploy.yml` from `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` |
 
@@ -200,7 +200,48 @@ back into the two volumes with the same throwaway-container trick. Restoring
 the database without `EBK_SECURITY_SECRET_KEY` (Dokploy env tab, also in
 Ex's password manager) gets you the books but invalidates every session.
 
+## booking MySQL backups (vps01)
+
+Nightly at **04:00 Asia/Manila** (staggered an hour off ezBookkeeping so two
+backups never run at once on a 2GB node), same R2 bucket, same hourly-cron
++ in-script hour gate, same `FORCE_BACKUP=1` escape hatch. Two files in
+`stacks/vps01/`: `backup-booking.sh`, and the shared `check-backup-age.sh`
+invoked as `check-backup-age.sh booking /opt/stacks/vps01/backup-booking`.
+
+Its own work dir `/opt/stacks/vps01/backup-booking/` with its own
+`.last-success` / `.stale-alerted`: the two backups must be able to be stale
+independently. `deploy.yml` excludes that dir from the `rsync --delete` for
+the same reason it excludes `backup/`.
+
+Unlike ezBookkeeping, **nothing is stopped**: a hot `mysqldump
+--single-transaction --routines --triggers` inside
+`booking-ptpwn8-mysql-1` gives a consistent InnoDB snapshot with no downtime
+on a live booking site. `MYSQL_ROOT_PASSWORD` is expanded *inside* the
+container (`docker exec ... sh -c 'exec mysqldump -p"$MYSQL_ROOT_PASSWORD"'`),
+so it never appears in a host process argument or a log line.
+
+`set -o pipefail` is not POSIX, so `mysqldump | gzip` reports gzip's exit
+status and a half-written dump would look like a success. The script proves
+the dump instead: `gzip -cd | tail -5 | grep 'Dump completed'`, and on failure it
+deletes the archive and exits non-zero **without** stamping, so the staleness
+alert fires rather than a truncated dump reaching R2.
+
+Archive name `booking-mysql-<STAMP>.sql.gz` under `daily/` (`weekly/` on
+Sundays); retention is the same server-side R2 lifecycle rules, 7 and 28 days.
+No restore drill has been run yet.
+
+**Restore:** pull the archive, then
+`gzip -cd booking-mysql-*.sql.gz | docker exec -i booking-ptpwn8-mysql-1 sh -c
+'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD"'`. The dump is `--databases`, so
+it recreates `easyappointments` itself. Drill it into a throwaway container
+first, never straight into production.
+
 ## Failure log
+
+- macOS `zcat` is not Debian's: it appends `.Z` and fails on a `.gz`, so a
+  dump-integrity check written as `zcat` verified fine on the node and
+  rejected a *good* archive when dry-run on a laptop. Use `gzip -cd` in these
+  scripts; it means the same thing on both.
 
 - Netdata notifications were dead on **all three nodes** from setup until
   2026-08-18 and nothing surfaced it: `deploy.yml` wrote
