@@ -19,6 +19,12 @@ services:
     command: tunnel run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS}
+    # Rail 4. Measured idle usage 2026-08-19: 27MiB (vps00), 29MiB
+    # (vps01), 18MiB (vps02), so 64m is roughly 2x the busiest node.
+    # Raise it if the tunnel is ever OOM-killed -- a too-tight limit
+    # already caused one misdiagnosed kill here (scripts/CLAUDE.md).
+    mem_limit: 64m
+    mem_reservation: 32m
 
   netdata:
     image: netdata/netdata:v2.11.0
