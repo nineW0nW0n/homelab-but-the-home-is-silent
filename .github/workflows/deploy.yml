@@ -129,10 +129,10 @@ jobs:
               while [ $i -lt 30 ]; do
                 if [ -n "$host" ]; then
                   code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
-                    -H "Host: $host" "$url" || echo 000)
+                    -H "Host: $host" "$url" || true)
                 else
                   code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
-                    || echo 000)
+                    || true)
                 fi
                 if [ "$code" = 200 ]; then
                   echo "ok   $label"
@@ -286,10 +286,10 @@ jobs:
               while [ $i -lt 30 ]; do
                 if [ -n "$host" ]; then
                   code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
-                    -H "Host: $host" "$url" || echo 000)
+                    -H "Host: $host" "$url" || true)
                 else
                   code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
-                    || echo 000)
+                    || true)
                 fi
                 if [ "$code" = 200 ]; then
                   echo "ok   $label"
@@ -405,10 +405,10 @@ jobs:
               while [ $i -lt 30 ]; do
                 if [ -n "$host" ]; then
                   code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
-                    -H "Host: $host" "$url" || echo 000)
+                    -H "Host: $host" "$url" || true)
                 else
                   code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
-                    || echo 000)
+                    || true)
                 fi
                 if [ "$code" = 200 ]; then
                   echo "ok   $label"
