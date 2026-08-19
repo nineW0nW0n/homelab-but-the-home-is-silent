@@ -126,8 +126,12 @@ error, not against CI.
   `local` hook that takes filenames instead (see `no-real-ips`).
 
 - A post-deploy check that probed the **public hostnames from the runner**
-  failed every probe with `403` while every service was healthy: Cloudflare
-  bot protection rejects datacenter IPs, so GitHub Actions and the nodes
-  themselves both get 403 where a laptop gets 200. Verified from a node
-  before rewriting it. CI can only honestly assert the origin; do not add an
-  edge probe here without a Cloudflare WAF skip rule to go with it.
+  failed every probe with `403` while every service was healthy. First
+  diagnosis (bot protection rejecting datacenter IPs) was **wrong**: the
+  real cause is a zone-wide Cloudflare custom rule, `Block non-local
+  traffic`, matching `ip.src.country ne "PH"`. Any non-PH source is blocked,
+  which is every GitHub runner and both US-hosted nodes. Amended
+  2026-08-19 after reading Security -> Events in the dashboard rather than
+  inferring from response codes. `maybeit.work` is now exempt from that
+  rule; the other hostnames are not, so CI still cannot probe them. Read the
+  matched rule in Security Events before theorising about a 403.

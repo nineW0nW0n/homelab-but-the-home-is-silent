@@ -156,9 +156,9 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 - Each deploy job ends by verifying the node it just touched: Netdata
   answers on loopback, that node's `cloudflared` is running, and on vps01
   both apps answer through Traefik. The check runs on the node over the SSH
-  connection the deploy already holds, because Cloudflare's bot protection
-  answers `403` to every datacenter IP, so probing the public hostnames
-  fails from CI while the site is perfectly healthy. The edge and tunnel
+  connection the deploy already holds, because a zone-wide Cloudflare rule
+  blocks every request from outside the Philippines, so probing the public
+  hostnames fails from CI while the site is perfectly healthy. The edge and tunnel
   path is covered by the status page and Netdata Cloud instead. The check
   reports and fails; it never rolls back. A revert cannot undo node-side
   state, and an automated retry loop against three nodes with nobody awake

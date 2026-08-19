@@ -106,12 +106,13 @@ jobs:
 
       - name: Verify vps00
         run: |
-          # Probed from the node, not the runner: Cloudflare's bot
-          # protection answers 403 to every datacenter IP, so probing the
-          # public hostname fails from GitHub Actions and from the nodes
-          # alike while the service is perfectly healthy. The origin is what
-          # CI can honestly assert; the edge and tunnel path is covered by
-          # the status Worker and by Netdata Cloud.
+          # Probed from the node, not the runner: a zone-wide Cloudflare
+          # custom rule ("Block non-local traffic") blocks every request
+          # whose source country is not PH, so the public hostnames 403 from
+          # GitHub Actions while the service is perfectly healthy. Only the
+          # apex is exempt. The origin is what CI can honestly assert; the
+          # edge and tunnel path is covered by the status page and Netdata
+          # Cloud.
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" '
             set -eu
             code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 \
