@@ -135,3 +135,13 @@ error, not against CI.
   inferring from response codes. `maybeit.work` is now exempt from that
   rule; the other hostnames are not, so CI still cannot probe them. Read the
   matched rule in Security Events before theorising about a 403.
+
+- The rewritten node-side check then failed on its first real run with
+  `FAIL netdata: 503` on all three nodes, while every node was healthy. The
+  Deploy step ends with `docker compose restart netdata`, and Netdata
+  answers 503 for ~5s while it initialises, so a single immediate request
+  races the restart it just caused. Fixed by polling (30 tries, 2s apart).
+  It passed by hand only because the agents had been up for hours. A
+  post-deploy check runs at the worst possible moment by definition: give
+  every probe a retry budget, and test it right after a restart rather than
+  on a warm node.

@@ -113,12 +113,38 @@ jobs:
           # apex is exempt. The origin is what CI can honestly assert; the
           # edge and tunnel path is covered by the status page and Netdata
           # Cloud.
+          #
+          # Polls rather than asking once: the Deploy step above ends with
+          # 'docker compose restart netdata', and Netdata answers 503 for a
+          # few seconds while it initialises. Measured at ~5s on a real
+          # node; 60s of patience costs nothing when everything is healthy
+          # and still fails fast enough to be useful.
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" '
             set -eu
-            code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 \
-              http://127.0.0.1:19999/api/v1/info)
-            [ "$code" = 200 ] || { echo "FAIL netdata: $code"; exit 1; }
-            echo "ok   netdata"
+            probe() {
+              label=$1
+              url=$2
+              host=${3:-}
+              i=0
+              while [ $i -lt 30 ]; do
+                if [ -n "$host" ]; then
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
+                    -H "Host: $host" "$url" || true)
+                else
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
+                    || true)
+                fi
+                if [ "$code" = 200 ]; then
+                  echo "ok   $label"
+                  return 0
+                fi
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "FAIL $label: last code $code"
+              return 1
+            }
+            probe netdata http://127.0.0.1:19999/api/v1/info
             running=$(docker inspect -f "{{.State.Running}}" cloudflared-vps00)
             [ "$running" = true ] || { echo "FAIL cloudflared down"; exit 1; }
             echo "ok   cloudflared"
@@ -237,27 +263,50 @@ jobs:
 
       - name: Verify vps01
         run: |
-          # Probed from the node, not the runner: Cloudflare's bot
-          # protection answers 403 to every datacenter IP, so probing the
-          # public hostname fails from GitHub Actions and from the nodes
-          # alike while the service is perfectly healthy. The origin is what
-          # CI can honestly assert; the edge and tunnel path is covered by
-          # the status Worker and by Netdata Cloud.
+          # Probed from the node, not the runner: a zone-wide Cloudflare
+          # custom rule ("Block non-local traffic") blocks every request
+          # whose source country is not PH, so the public hostnames 403 from
+          # GitHub Actions while the service is perfectly healthy. Only the
+          # apex is exempt. The origin is what CI can honestly assert; the
+          # edge and tunnel path is covered by the status page and Netdata
+          # Cloud.
+          #
+          # Polls rather than asking once: the Deploy step above ends with
+          # 'docker compose restart netdata', and Netdata answers 503 for a
+          # few seconds while it initialises. Measured at ~5s on a real
+          # node; 60s of patience costs nothing when everything is healthy
+          # and still fails fast enough to be useful.
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" '
             set -eu
-            code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 \
-              http://127.0.0.1:19999/api/v1/info)
-            [ "$code" = 200 ] || { echo "FAIL netdata: $code"; exit 1; }
-            echo "ok   netdata"
+            probe() {
+              label=$1
+              url=$2
+              host=${3:-}
+              i=0
+              while [ $i -lt 30 ]; do
+                if [ -n "$host" ]; then
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
+                    -H "Host: $host" "$url" || true)
+                else
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
+                    || true)
+                fi
+                if [ "$code" = 200 ]; then
+                  echo "ok   $label"
+                  return 0
+                fi
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "FAIL $label: last code $code"
+              return 1
+            }
+            probe netdata http://127.0.0.1:19999/api/v1/info
             running=$(docker inspect -f "{{.State.Running}}" cloudflared-vps01)
             [ "$running" = true ] || { echo "FAIL cloudflared down"; exit 1; }
             echo "ok   cloudflared"
-            for host in booking.maybeit.work budget.maybeit.work; do
-              code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 \
-                -H "Host: $host" http://127.0.0.1:80/)
-              [ "$code" = 200 ] || { echo "FAIL $host: $code"; exit 1; }
-              echo "ok   $host via Traefik"
-            done
+            probe "booking via Traefik" http://127.0.0.1:80/ booking.maybeit.work
+            probe "budget via Traefik" http://127.0.0.1:80/ budget.maybeit.work
           '
 
   deploy-vps02:
@@ -333,18 +382,45 @@ jobs:
 
       - name: Verify vps02
         run: |
-          # Probed from the node, not the runner: Cloudflare's bot
-          # protection answers 403 to every datacenter IP, so probing the
-          # public hostname fails from GitHub Actions and from the nodes
-          # alike while the service is perfectly healthy. The origin is what
-          # CI can honestly assert; the edge and tunnel path is covered by
-          # the status Worker and by Netdata Cloud.
+          # Probed from the node, not the runner: a zone-wide Cloudflare
+          # custom rule ("Block non-local traffic") blocks every request
+          # whose source country is not PH, so the public hostnames 403 from
+          # GitHub Actions while the service is perfectly healthy. Only the
+          # apex is exempt. The origin is what CI can honestly assert; the
+          # edge and tunnel path is covered by the status page and Netdata
+          # Cloud.
+          #
+          # Polls rather than asking once: the Deploy step above ends with
+          # 'docker compose restart netdata', and Netdata answers 503 for a
+          # few seconds while it initialises. Measured at ~5s on a real
+          # node; 60s of patience costs nothing when everything is healthy
+          # and still fails fast enough to be useful.
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" '
             set -eu
-            code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 \
-              http://127.0.0.1:19999/api/v1/info)
-            [ "$code" = 200 ] || { echo "FAIL netdata: $code"; exit 1; }
-            echo "ok   netdata"
+            probe() {
+              label=$1
+              url=$2
+              host=${3:-}
+              i=0
+              while [ $i -lt 30 ]; do
+                if [ -n "$host" ]; then
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
+                    -H "Host: $host" "$url" || true)
+                else
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
+                    || true)
+                fi
+                if [ "$code" = 200 ]; then
+                  echo "ok   $label"
+                  return 0
+                fi
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "FAIL $label: last code $code"
+              return 1
+            }
+            probe netdata http://127.0.0.1:19999/api/v1/info
             running=$(docker inspect -f "{{.State.Running}}" cloudflared-vps02)
             [ "$running" = true ] || { echo "FAIL cloudflared down"; exit 1; }
             echo "ok   cloudflared"
