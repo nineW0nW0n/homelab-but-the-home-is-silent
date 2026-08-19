@@ -6,9 +6,14 @@
 # the dokploy/ convention and lived only in Dokploy's own database until
 # 2026-08-18; the provider was switched from Raw to GitHub rather than
 # recreating the app, so the compose project name, and therefore the
-# `booking-ptpwn8_mysql-data` volume holding ~200MB of real appointments,
+# `booking-ptpwn8_mysql-data` volume holding the real appointment data,
 # is untouched. Do not rename the Dokploy app: the volume name is derived
 # from it, and a rename silently starts MySQL on an empty database.
+#
+# That data is small: 14 tables, ~126 rows, 0.4 MB in `easyappointments`
+# (measured 2026-08-19). The volume is 203M on disk, but that is MySQL 8.0's
+# own ibdata1, redo/undo tablespaces and binlogs, not appointments. Small
+# does not mean unimportant: it is real customer booking data.
 #
 # MYSQL_ROOT_PASSWORD and DB_PASSWORD come from Dokploy's environment tab
 # (rail 11), never from this file.
