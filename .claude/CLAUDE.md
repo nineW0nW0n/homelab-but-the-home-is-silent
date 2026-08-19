@@ -115,12 +115,15 @@ pre-commit run --all-files   # yamllint --strict, actionlint, gitleaks,
                              # local hooks: no-real-ips (rail 5),
                              # biome ci . (rail 9)
 shellcheck scripts/*.sh      # every script stays shellcheck-clean
-find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +
+git ls-files '*CLAUDE.md' | xargs wc -l
 ```
 
-- The `find` line prints but never fails; acting on it is on you: any
-  `CLAUDE.md` over ~500 lines gets fixed before you report done. Plain
-  globs miss `.github/`; `find` doesn't.
+- The `git ls-files` line prints but never fails; acting on it is on you:
+  any `CLAUDE.md` over ~500 lines gets fixed before you report done. It
+  lists *tracked* files, so a brand-new one counts from the moment you
+  `git add` it. Do not "simplify" it to a shell glob or to `find`: both
+  silently miss the dot-directories, `.claude/` and `.github/` among them
+  (see failure log).
 - `biome ci .` finding nothing to lint is a pass, not a skip.
 - Scripts stay idempotent: trace or run twice, confirm the second is a
   no-op.
@@ -170,7 +173,21 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   workflows as a boolean. Fix `.yamllint` (`check-keys: false`), never
   the workflow file.
 - A `wc -l CLAUDE.md */CLAUDE.md */*/CLAUDE.md` budget check silently
-  skips `.github/`: shell globs don't match dot-directories. Use `find`.
+  skips `.github/`: shell globs don't match dot-directories. This entry
+  used to end "Use `find`" — **superseded** 2026-08-19. Under rtk, which
+  this same file mandates as tooling, the documented
+  `find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +`
+  exits 1 with "rtk find does not support compound predicates or actions",
+  and the bare `find . -name CLAUDE.md` that rtk *does* accept omits
+  dot-directories anyway — exit 0, five files instead of seven, looking
+  correct. A silently wrong answer beats a loud failure for damage. Use
+  `git ls-files '*CLAUDE.md' | xargs wc -l`: it runs under rtk, includes
+  dot-directories, and skips `node_modules/` for free by only listing
+  tracked files. Fourth instance of the rail 9 / rail 5 / uninstalled
+  pre-commit hook class, a check that exists on paper and does not
+  reliably run — and the first where the check appeared to succeed. When a
+  rule mandates a tool that rewrites commands, run the rule's own commands
+  under that tool before writing them down.
 - Biome 2.x's config schema moved fast: `files.ignore` → `files.includes`
   with `!` negation, top-level `organizeImports` → `assist.actions.source`,
   `linter.rules.recommended: true` → `linter.rules.preset: "recommended"`

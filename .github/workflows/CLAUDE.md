@@ -42,14 +42,24 @@ node deploy path; see `worker/status/CLAUDE.md`).
 
 Secrets: `SSH_PRIVATE_KEY_VPS00` / `_VPS01` / `_VPS02` (one CI key per
 node, see the blast-radius note below), `SSH_KNOWN_HOSTS`, `VPS00_HOST`, `VPS01_HOST`,
-`VPS02_HOST`, `DOKPLOY_API_TOKEN`, `CLOUDFLARE_API_TOKEN`,
+`VPS02_HOST`, `CLOUDFLARE_API_TOKEN`,
 `CLOUDFLARE_TUNNEL_TOKEN` (vps00), `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`
 (vps01), `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` (vps02),
-`CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCOUNT_ID`, `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_CHAT_ID` (Netdata alerts, all 3 nodes), `CF_ACCESS_CLIENT_ID`,
-`CF_ACCESS_CLIENT_SECRET` (status Worker's Cloudflare Access service
-token, `deploy-worker.yml`), `DEBUG_KEY` (gates `maybeit.work/debug`;
-if unset the route 404s for everyone; it fails closed).
+`CLOUDFLARE_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+(written to vps01's `.r2.env`; without them the nightly backup exits 1),
+`NETDATA_CLAIM_TOKEN`, `NETDATA_CLAIM_ROOMS` (Netdata Cloud claim, the
+**same** value on all three nodes, unlike a tunnel token),
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (Netdata alert config on all 3
+nodes, and vps01's `.telegram.env` for `check-backup-age.sh`),
+`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` (status Worker's
+Cloudflare Access service token, `deploy-worker.yml`), `DEBUG_KEY` (gates
+`maybeit.work/debug`; if unset the route 404s for everyone; it fails
+closed).
+
+Present as repo secrets but **consumed by no workflow**:
+`DOKPLOY_API_TOKEN` and `CLOUDFLARE_TUNNEL_ID`. They exist for manual
+dashboard/CLI work. Don't delete them assuming they are load-bearing, and
+don't reference them in a workflow assuming they are maintained.
 
 Variables (optional, default in workflow): `VPS0N_SSH_USER`,
 `VPS0N_SSH_PORT`.

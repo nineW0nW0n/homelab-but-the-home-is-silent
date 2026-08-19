@@ -75,35 +75,70 @@ This repo is mostly YAML, so this is the linter that actually matters day
 to day. Check: `yamllint --version`. If missing, install it:
 
 ```sh
-pip install --break-system-packages yamllint
-# or, if pip is unavailable: apt-get install -y yamllint / brew install yamllint
+pip install --break-system-packages yamllint==1.38.0
 ```
 
+Pinned, like everything else here: root's failure log says never `latest`
+for Biome, rtk, caveman or yamllint. `apt-get install -y yamllint` and
+`brew install yamllint` are fallbacks only when pip is unavailable — they
+install whatever the distro happens to ship, so record the version you got
+and expect lint results to differ from CI's.
+
 If `.yamllint` doesn't exist yet at repo root, create it with exactly
-this content:
+this content (hard-railed, byte-for-byte from this repo's `.yamllint`;
+don't improvise values):
 
 ```yaml
+---
 extends: default
+
+yaml-files:
+  - "*.yaml"
+  - "*.yml"
+  - ".yamllint"
+
+ignore:
+  - .git/
+  - node_modules/
 
 rules:
   line-length:
     max: 120
-    level: warning
-  document-start: disable
-  truthy:
-    allowed-values: ["true", "false"]
-    check-keys: false   # GitHub Actions' `on:` trigger key isn't a boolean, don't flag it
-  indentation:
-    spaces: 2
-    indent-sequences: consistent
+    level: error
+  document-start:
+    present: true
   comments:
     min-spaces-from-content: 1
-  key-duplicates: enable
+  comments-indentation: enable
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
   braces:
     max-spaces-inside: 1
+    min-spaces-inside: 0
   brackets:
     max-spaces-inside: 1
+    min-spaces-inside: 0
+  empty-lines:
+    max: 1
+    max-start: 0
+    max-end: 0
+  trailing-spaces: enable
+  new-line-at-end-of-file: enable
+  key-duplicates: enable
 ```
+
+Every value here is load-bearing and several differ from yamllint's
+defaults on purpose: `document-start.present: true` and
+`line-length.level: error` are enforced, not warnings, and
+`indent-sequences: true` is stricter than `consistent`. An earlier version
+of this skill listed the looser variants, which would have silently
+weakened the gate on the next new YAML file — exactly the drift the Biome
+section warns about one heading up.
 
 `truthy.check-keys: false` is the one that matters most in this repo:
 without it, yamllint misreads `on:` in every `.github/workflows/*.yml`
@@ -148,9 +183,14 @@ assume.
 Check: `rtk --version`. If missing, install it:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/v0.45.0/install.sh | sh
 rtk init -g          # wires the Claude Code PreToolUse hook; restart after this
 ```
+
+Pinned to a tag, not `refs/heads/master`: a branch URL re-pipes whatever
+upstream pushed that day into a shell. Bump it deliberately —
+`gh api repos/rtk-ai/rtk/releases/latest --jq .tag_name` — and record the
+new version here.
 
 Config is hard-railed at `~/.config/rtk/config.toml`; create it with
 these values if it doesn't already have them:
@@ -181,8 +221,11 @@ report savings; not required per task.
 Check: is `/caveman` available? If not, install it:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman/bin-v1.1.1/install.sh | bash
 ```
+
+Pinned for the same reason as rtk above; bump with
+`gh api repos/JuliusBrussee/caveman/releases/latest --jq .tag_name`.
 
 Configured level, hard-railed: run `/caveman full` at the start of a
 session, not `ultra` or `wenyan`. This repo's output often *is* the exact
