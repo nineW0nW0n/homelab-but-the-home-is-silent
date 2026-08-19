@@ -22,7 +22,11 @@ node deploy path; see `worker/status/CLAUDE.md`).
    environment and the three deploy jobs `needs:` it, so one approval
    covers the run and all three nodes deploy in parallel (rail 7). Do not
    put `environment: production` back on the deploy jobs: GitHub prompts
-   once per job, which is what made this three clicks. Per node: SSH key via
+   once per job, which is what made this three clicks. A `verify` job then
+   probes every node and app through its public hostname and fails the run
+   if anything is down; it runs even when a deploy job failed, so a partial
+   failure still says which nodes are serving. It reports only, never
+   reverts. Per node: SSH key via
    `webfactory/ssh-agent`, pinned `known_hosts`, `mkdir -p` the remote
    stack dir, `rsync --delete` the stack files, write that node's tunnel
    token into a remote `.env` (piped over SSH stdin, never a CLI arg,

@@ -153,6 +153,14 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   node's tunnel token to a remote `.env` over stdin, then a guarded
   `docker compose pull && up -d`, guarded because a stack with no
   services defined makes plain `compose pull` error out otherwise.
+- After the deploys, a `verify` job probes every node's Netdata endpoint
+  (through Cloudflare Access, with the status Worker's service token) plus
+  both live apps, and fails the run if any of them is down or if the
+  Dokploy dashboard stops returning a redirect to Access. It runs even when
+  a deploy job failed, so a partial failure still reports which nodes are
+  serving. It reports; it never rolls back. A revert cannot undo node-side
+  state, and an automated retry loop against three nodes with nobody awake
+  is worse than an alert.
 - Every action is pinned to a full commit SHA, not a tag. Tags are
   mutable, and these workflows run with SSH keys and a Cloudflare API
   token in scope. Dependabot bumps the pins weekly.
