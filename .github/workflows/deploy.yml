@@ -4,8 +4,14 @@ name: deploy
 on:
   push:
     branches: [main]
+    # Only what actually reaches a node. infra/ was listed here until
+    # 2026-08-19 but nothing under it is ever rsynced: the deploy jobs sync
+    # stacks/vps0N/ only, and inventory.yaml is gitignored so it could
+    # never have triggered anyway. The cost was real -- a docs-only edit to
+    # infra/CLAUDE.md queued a full three-node production deploy that sat
+    # 13h at the approval gate and, once approved, shipped a by-then stale
+    # deploy.yml that wiped vps01's backup state.
     paths:
-      - infra/**
       - stacks/**
       - .github/workflows/deploy.yml
   workflow_dispatch: {}
@@ -145,8 +151,14 @@ jobs:
               return 1
             }
             probe netdata http://127.0.0.1:19999/api/v1/info
-            running=$(docker inspect -f "{{.State.Running}}" cloudflared-vps00)
-            [ "$running" = true ] || { echo "FAIL cloudflared down"; exit 1; }
+            # 2>/dev/null || echo missing: unguarded, set -e kills the
+            # script at this assignment when the container does not
+            # exist, so the FAIL line below never prints and the log
+            # shows docker stderr instead. A rename is plausible --
+            # see the Dokploy project-prefix warning in stacks/CLAUDE.md.
+            running=$(docker inspect -f "{{.State.Running}}" \
+              cloudflared-vps00 2>/dev/null || echo missing)
+            [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
             echo "ok   cloudflared"
           '
 
@@ -182,7 +194,17 @@ jobs:
           # backup/ holds the run log, the .last-success stamp the Netdata
           # age alarm reads, and the local archive: node state, not repo
           # state. --delete wiped it on every deploy until 2026-08-18.
-          rsync -az --delete --exclude 'backup/' -e "ssh -p $SSH_PORT" \
+          #
+          # The two credential files are excluded for a subtler reason:
+          # --delete removes them here and later steps write them back, so
+          # they are absent for a few seconds every deploy.
+          # check-backup-age.sh runs at :30 every hour with no schedule
+          # gate, so a deploy overlapping it exits 1 on "ERROR:
+          # .telegram.env missing" and that hour's staleness check is
+          # silently skipped. .env is deliberately NOT excluded: nothing
+          # reads it between the rsync and its rewrite.
+          rsync -az --delete -e "ssh -p $SSH_PORT" \
+            --exclude 'backup/' --exclude '.r2.env' --exclude '.telegram.env' \
             stacks/vps01/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps01/"
 
       - name: Write remote .env
@@ -302,8 +324,14 @@ jobs:
               return 1
             }
             probe netdata http://127.0.0.1:19999/api/v1/info
-            running=$(docker inspect -f "{{.State.Running}}" cloudflared-vps01)
-            [ "$running" = true ] || { echo "FAIL cloudflared down"; exit 1; }
+            # 2>/dev/null || echo missing: unguarded, set -e kills the
+            # script at this assignment when the container does not
+            # exist, so the FAIL line below never prints and the log
+            # shows docker stderr instead. A rename is plausible --
+            # see the Dokploy project-prefix warning in stacks/CLAUDE.md.
+            running=$(docker inspect -f "{{.State.Running}}" \
+              cloudflared-vps01 2>/dev/null || echo missing)
+            [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
             echo "ok   cloudflared"
             probe "booking via Traefik" http://127.0.0.1:80/ booking.maybeit.work
             probe "budget via Traefik" http://127.0.0.1:80/ budget.maybeit.work
@@ -421,7 +449,13 @@ jobs:
               return 1
             }
             probe netdata http://127.0.0.1:19999/api/v1/info
-            running=$(docker inspect -f "{{.State.Running}}" cloudflared-vps02)
-            [ "$running" = true ] || { echo "FAIL cloudflared down"; exit 1; }
+            # 2>/dev/null || echo missing: unguarded, set -e kills the
+            # script at this assignment when the container does not
+            # exist, so the FAIL line below never prints and the log
+            # shows docker stderr instead. A rename is plausible --
+            # see the Dokploy project-prefix warning in stacks/CLAUDE.md.
+            running=$(docker inspect -f "{{.State.Running}}" \
+              cloudflared-vps02 2>/dev/null || echo missing)
+            [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
             echo "ok   cloudflared"
           '

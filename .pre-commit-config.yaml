@@ -47,12 +47,23 @@ repos:
       # so in CI (nothing staged) it is a no-op and catches nothing. This
       # hook takes filenames, so it works identically at commit time and
       # under `pre-commit run --all-files` in validate.yml.
+      # -o so each ADDRESS is judged, not the line it sits on. The earlier
+      # form matched unanchored substrings against whole lines, so three
+      # classes of real address walked through it: any public address whose
+      # text merely contains a private prefix, any containing the loopback
+      # prefix, and any line pairing a safe address with a real one (a
+      # comment naming both passed entirely). With -o the output is
+      # file:line:address, so the trailing $ pins each pattern to a whole
+      # address and offenders print with their location.
+      #
+      # Do not put example addresses in this comment: the hook reads its own
+      # config file and will, correctly, reject them.
       - id: no-real-ips
         name: no real IPs (rail 5)
         entry: >
-          sh -c 'grep -nE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" "$@" |
-          grep -vE "127\.|0\.0\.0\.0|203\.0\.113\.|192\.0\.2\.|198\.51\.100\." |
-          grep -vE "10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\." &&
+          sh -c 'grep -onE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" "$@" |
+          grep -vE ":(0\.0\.0\.0|127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)[0-9.]*$" |
+          grep -vE ":(203\.0\.113\.|192\.0\.2\.|198\.51\.100\.)[0-9.]*$" &&
           { echo "real IP in a tracked file -- rail 5, use RFC 5737 (203.0.113.x)"; exit 1; }; exit 0' --
         language: system
         types: [text]
