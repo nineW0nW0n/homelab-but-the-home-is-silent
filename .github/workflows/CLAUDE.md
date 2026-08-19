@@ -22,10 +22,11 @@ node deploy path; see `worker/status/CLAUDE.md`).
    environment and the three deploy jobs `needs:` it, so one approval
    covers the run and all three nodes deploy in parallel (rail 7). Do not
    put `environment: production` back on the deploy jobs: GitHub prompts
-   once per job, which is what made this three clicks. A `verify` job then
-   probes every node and app through its public hostname and fails the run
-   if anything is down; it runs even when a deploy job failed, so a partial
-   failure still says which nodes are serving. It reports only, never
+   once per job, which is what made this three clicks. Each deploy job ends
+   with a `Verify vps0N` step that checks the node's own origin over the
+   SSH connection it already has: Netdata answers 200 on loopback,
+   `cloudflared-vps0N` is running, and on vps01 both apps answer 200
+   through Traefik with a `Host:` header. It reports and fails; it never
    reverts. Per node: SSH key via
    `webfactory/ssh-agent`, pinned `known_hosts`, `mkdir -p` the remote
    stack dir, `rsync --delete` the stack files, write that node's tunnel
@@ -123,3 +124,10 @@ error, not against CI.
   where nothing is staged, it scans nothing. It is a commit-time
   secret check, not a CI one. Any repo-wide content rule needs a
   `local` hook that takes filenames instead (see `no-real-ips`).
+
+- A post-deploy check that probed the **public hostnames from the runner**
+  failed every probe with `403` while every service was healthy: Cloudflare
+  bot protection rejects datacenter IPs, so GitHub Actions and the nodes
+  themselves both get 403 where a laptop gets 200. Verified from a node
+  before rewriting it. CI can only honestly assert the origin; do not add an
+  edge probe here without a Cloudflare WAF skip rule to go with it.

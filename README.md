@@ -153,12 +153,14 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   node's tunnel token to a remote `.env` over stdin, then a guarded
   `docker compose pull && up -d`, guarded because a stack with no
   services defined makes plain `compose pull` error out otherwise.
-- After the deploys, a `verify` job probes every node's Netdata endpoint
-  (through Cloudflare Access, with the status Worker's service token) plus
-  both live apps, and fails the run if any of them is down or if the
-  Dokploy dashboard stops returning a redirect to Access. It runs even when
-  a deploy job failed, so a partial failure still reports which nodes are
-  serving. It reports; it never rolls back. A revert cannot undo node-side
+- Each deploy job ends by verifying the node it just touched: Netdata
+  answers on loopback, that node's `cloudflared` is running, and on vps01
+  both apps answer through Traefik. The check runs on the node over the SSH
+  connection the deploy already holds, because Cloudflare's bot protection
+  answers `403` to every datacenter IP, so probing the public hostnames
+  fails from CI while the site is perfectly healthy. The edge and tunnel
+  path is covered by the status page and Netdata Cloud instead. The check
+  reports and fails; it never rolls back. A revert cannot undo node-side
   state, and an automated retry loop against three nodes with nobody awake
   is worse than an alert.
 - Every action is pinned to a full commit SHA, not a tag. Tags are
