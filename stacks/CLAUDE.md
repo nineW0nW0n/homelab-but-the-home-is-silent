@@ -127,8 +127,10 @@ manual run. Four moving parts, all in `stacks/vps01/`:
 |---|---|
 | `backup-ezbookkeeping.sh` | stop container, tar both volumes, start container, upload, stamp |
 | `backup_age.plugin` | Netdata external plugin charting hours since last success |
-| `health.d/backup.conf` | alarm: warn >36h, crit >72h |
+| `health.d/backup.conf` | alarm: warn >36h, crit >72h (chart only, see failure log) |
+| `check-backup-age.sh` | hourly staleness check that alerts Telegram directly |
 | `.r2.env` (never committed) | written by `deploy.yml` from `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` |
+| `.telegram.env` (never committed) | written by `deploy.yml` from `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` |
 
 The container is **stopped** for the tar so SQLite checkpoints its WAL and
 closes cleanly: a few seconds of downtime buys a provably consistent
@@ -145,6 +147,12 @@ thing to check when a backup starts failing after Dokploy work.
 Retention lives in **R2 lifecycle rules**, not in the script: `daily/`
 expires at 7 days, `weekly/` (Sundays) at 28. Deletion is server-side so a
 script bug cannot erase history.
+
+**The staleness alert does not go through Netdata.** `check-backup-age.sh`
+runs hourly, reads the same `.last-success` stamp and calls the Telegram API
+itself: alert on crossing 36h, re-alert every 12h while stale, one message on
+recovery, state in `backup/.stale-alerted`. Netdata's alarm stays for the
+chart but is no longer the delivery path (see failure log).
 
 **Restore drill last passed: 2026-08-18.** Archive pulled from R2, extracted
 into throwaway volumes, booted as a second container on `127.0.0.1:18080`:
@@ -180,6 +188,24 @@ Ex's password manager) gets you the books but invalidates every session.
   The templates' claim that every unlisted method "stays at its built-in
   default (disabled)" was simply wrong about email; check a notifier's
   default before writing that sentence.
+
+- Netdata's health engine **never executed the notification script** for
+  `ezbookkeeping_backup_age`, on any transition, while executing it every
+  time for stock alarms on the same node (`/api/v2/alert_transitions`: stock
+  alarms carry the `EXEC_RUN` flag, ours only `PROCESSED, UPDATED, SAVED`).
+  Script, config and token are fine — replaying netdata's exact real-mode
+  arguments by hand delivers, as `netdata` and as `root`. Root cause not
+  found; every alarm observed firing had `to: silent`, ours has
+  `to: sysadmin`. Fixed by not depending on it. Never make a Netdata alarm
+  the *only* delivery path for something that matters without proving a real
+  transition reaches Telegram: an interactive `alarm-notify.sh test` passes
+  on a setup where real alerts are silently dropped, which is how this hid.
+
+- `delay: down 1h multiplier 1.5 max 4h` in `health.d/backup.conf` holds
+  every CLEAR for an hour and cancels it outright if the alarm re-fires
+  first, so a flapping alarm never sends a recovery (`delay: 3600` on every
+  CLEAR in the transition records). Fine for a dashboard, useless as
+  notification.
 
 - rclone's S3 backend calls `CreateBucket` before uploading, to create the
   bucket if it is missing. An R2 token scoped to Object Read & Write cannot
