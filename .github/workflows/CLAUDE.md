@@ -15,7 +15,7 @@ node deploy path; see `worker/status/CLAUDE.md`).
    large-file/private-key checks, plus the `no-real-ips` and `biome ci`
    local hooks). Also callable via `workflow_call`; `deploy.yml` calls
    it first (rail 8).
-2. `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`,
+2. `deploy.yml` runs on push to `main` (paths: `stacks/**`,
    itself) or manual dispatch. `concurrency: deploy-production`,
    `cancel-in-progress: false`: a second push queues, doesn't abort a
    deploy in flight. A single `approve` job holds the `production`
