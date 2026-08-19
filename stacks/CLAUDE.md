@@ -74,6 +74,27 @@ Bridge mode puts `cloudflared` in its own network namespace, so
 container, not the VPS itself: the origin app is unreachable, 502.
 `network_mode: host` makes `localhost` mean the node.
 
+## Netdata Cloud claim
+
+All three agents connect to Netdata Cloud (free Community plan: max 5 nodes,
+1 custom dashboard per Room). Claiming is declarative: `NETDATA_CLAIM_TOKEN`
+and `NETDATA_CLAIM_ROOMS` come from GitHub secrets into each node's `.env`,
+and the compose file passes them to the agent, which claims itself on start.
+
+The **same token goes on every node**, unlike a tunnel token (rail 2): this
+one identifies the Space, not the node. Do not mint one per node.
+
+Identity lives in the `netdatalib` volume (`/var/lib/netdata/cloud.d`), so a
+claimed agent stays claimed across restarts and redeploys even if the secret
+is later unset. Removing a node is a Cloud-side action, not a repo change.
+
+Claiming is outbound HTTPS to `app.netdata.cloud` only. It opens no inbound
+port and does not touch rail 1.
+
+Cloud is additive: the per-node dashboards behind each tunnel and the local
+health alarms keep working exactly as before. Do not move the backup
+staleness alert onto it, for the reason in the failure log.
+
 ## Alert delivery
 
 `health_alarm_notify.conf` carries the Telegram bot token, so it is

@@ -25,6 +25,16 @@ services:
     container_name: netdata
     restart: unless-stopped
     network_mode: host
+    environment:
+      # Netdata Cloud claim. The same token goes on all three nodes on
+      # purpose: unlike a tunnel token (rail 2) this identifies the Space,
+      # not the node. Empty when the secret is unset, which is harmless —
+      # an agent that is already claimed keeps its identity in the
+      # netdatalib volume regardless. Claiming needs outbound HTTPS to
+      # app.netdata.cloud only; it opens no inbound port (rail 1).
+      NETDATA_CLAIM_TOKEN: ${NETDATA_CLAIM_TOKEN:-}
+      NETDATA_CLAIM_URL: https://app.netdata.cloud
+      NETDATA_CLAIM_ROOMS: ${NETDATA_CLAIM_ROOMS:-}
     volumes:
       - netdataconfig:/etc/netdata
       - netdatalib:/var/lib/netdata
