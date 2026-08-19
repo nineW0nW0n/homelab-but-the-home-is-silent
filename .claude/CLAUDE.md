@@ -235,6 +235,16 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   entry says a config shape is wrong, grep the skills for that shape in
   the same turn; a log entry and a skill that contradict each other is
   worse than neither.
+- Never size a dataset with `du` on its volume. `du -sh` on
+  `booking-ptpwn8_mysql-data` reported 203M, that number was written down as
+  "~200MB of real appointments", and it was then copied into `README.md`,
+  `stacks/CLAUDE.md`, `dokploy/CLAUDE.md`, the booking compose header and a
+  commit message before anyone dumped the database. The real dataset is 14
+  tables, ~126 rows, 0.4 MB; the rest is MySQL 8.0's own ibdata1, redo/undo
+  tablespaces and binlogs. Measure the data, not its container: query
+  `information_schema.tables`, or take an actual dump and size that. And a
+  number that is inferred rather than measured gets said once, hedged, until
+  it is measured, never copied into a second document.
 - The `tooling-setup` skill called `~/.config/rtk/config.toml` the
   hard-railed rtk config path. On macOS rtk reads
   `~/Library/Application Support/rtk/config.toml` instead, so a config

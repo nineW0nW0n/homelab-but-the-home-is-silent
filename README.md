@@ -244,7 +244,12 @@ caught the schedule silently never firing.
 04:00: a hot `mysqldump --single-transaction` taken inside the MySQL
 container, so the booking site never goes down for it. It writes its own
 stamp file and the same staleness check watches it, so the two backups can
-go stale independently. No restore drill has been run against it yet.
+go stale independently. Until it was added this was the only production data
+here without an off-site copy. It is not much data: 14 tables and about 126
+rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
+own tablespaces and binlogs, not appointments. Real customer bookings all the
+same. A forced end-to-end run of the backup passed on 2026-08-19 and the
+archive is in R2. No restore drill has been run against it yet.
 
 ## Resource constraints
 

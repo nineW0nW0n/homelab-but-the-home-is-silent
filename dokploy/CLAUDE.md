@@ -74,11 +74,16 @@ on the first means the dashboard itself is unprotected.
   Migrated into this repo 2026-08-18 by switching the **existing** Dokploy
   app's provider from Raw to GitHub, not by creating a new app. That
   matters: the compose project name (`booking-ptpwn8`) is derived from the
-  Dokploy app, and the MySQL volume `booking-ptpwn8_mysql-data` (~200MB of
-  real appointments) is named after it. Renaming or recreating the app
-  silently brings MySQL up on an empty database while the old volume sits
-  orphaned on disk. `MYSQL_ROOT_PASSWORD` and `DB_PASSWORD` stay in
-  Dokploy's environment tab.
+  Dokploy app, and the MySQL volume `booking-ptpwn8_mysql-data` is named
+  after it. Renaming or recreating the app silently brings MySQL up on an
+  empty database while the old volume sits orphaned on disk.
+  `MYSQL_ROOT_PASSWORD` and `DB_PASSWORD` stay in Dokploy's environment tab.
+  The volume is 203M on disk but the dataset is not: `easyappointments` is
+  14 tables, ~126 rows, 0.4 MB (measured 2026-08-19), and a full
+  `mysqldump --databases` is 31,064 bytes, 6,083 gzipped. The rest is MySQL
+  8.0's own ibdata1, redo/undo tablespaces and binlogs. It is still real
+  customer booking data, and it was the only production dataset with no
+  off-site copy.
 
 ## Failure log
 

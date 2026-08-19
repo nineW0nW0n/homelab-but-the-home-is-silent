@@ -228,7 +228,19 @@ alert fires rather than a truncated dump reaching R2.
 
 Archive name `booking-mysql-<STAMP>.sql.gz` under `daily/` (`weekly/` on
 Sundays); retention is the same server-side R2 lifecycle rules, 7 and 28 days.
-No restore drill has been run yet.
+
+**Smoke test passed 2026-08-19**: a `FORCE_BACKUP=1` run went end to end,
+dump, trailer check, upload, stamp, and the object is present in R2 as
+`daily/booking-mysql-2026-08-19T05-40-19.sql.gz`, 6083 bytes. **No restore
+drill has been run yet**, so the archive is proven to arrive, not proven to
+restore.
+
+The dataset is tiny and the archive size is not a mistake: `easyappointments`
+is 14 tables, ~126 rows, 0.4 MB (`information_schema.tables`, 2026-08-19),
+and the full dump is 31,064 bytes uncompressed with all 14 `CREATE TABLE` and
+9 `INSERT` statements. The volume's 203M on disk is MySQL 8.0's own ibdata1,
+redo/undo tablespaces and binlogs. Small, but real customer booking data, and
+until this backup it was the only production dataset with no off-site copy.
 
 **Restore:** pull the archive, then
 `gzip -cd booking-mysql-*.sql.gz | docker exec -i booking-ptpwn8-mysql-1 sh -c
