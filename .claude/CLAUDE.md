@@ -178,9 +178,12 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   this same file mandates as tooling, the documented
   `find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +`
   exits 1 with "rtk find does not support compound predicates or actions",
-  and the bare `find . -name CLAUDE.md` that rtk *does* accept omits
-  dot-directories anyway — exit 0, five files instead of seven, looking
-  correct. A silently wrong answer beats a loud failure for damage. Use
+  and the bare `find . -name CLAUDE.md` that rtk *does* accept returns a
+  silently wrong count instead: it walks untracked directories, so with
+  three agent worktrees present it reported 28 files, the 7 real ones plus
+  21 copies under `.claude/worktrees/` (measured 2026-08-19). Exit 0,
+  looking correct. A silently wrong answer beats a loud failure for
+  damage. Use
   `git ls-files '*CLAUDE.md' | xargs wc -l`: it runs under rtk, includes
   dot-directories, and skips `node_modules/` for free by only listing
   tracked files. Fourth instance of the rail 9 / rail 5 / uninstalled
