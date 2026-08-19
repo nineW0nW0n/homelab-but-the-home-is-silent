@@ -96,6 +96,20 @@ route isn't pinned to a specific node. Two nodes sharing one token means
 requests for either node's app can land on the wrong node and 502. Each
 node that serves something gets its own tunnel and its own token.
 
+**Not reachable from most of the world.** A zone-wide Cloudflare custom
+rule blocks every request whose source country is not the Philippines,
+across every hostname, with one exemption for the `maybeit.work` apex so
+the status page is publicly readable. `booking` and `budget` are therefore
+unreachable outside PH by design. Any non-PH client, including GitHub
+Actions runners and the nodes themselves, gets a `403` that looks exactly
+like an outage and is not one. The rule lives only in the Cloudflare
+dashboard, so nothing in this repo can restore it.
+
+All three Netdata agents are also **claimed into Netdata Cloud**, an
+outbound HTTPS connection to a third party from every node. It opens no
+inbound port, so the statement above still holds, but it is a dependency
+worth naming next to a zero-inbound-ports posture.
+
 ## 📦 Repo layout
 
 ```
@@ -112,7 +126,8 @@ infra/
 stacks/
   vps0N/docker-compose.yml           per-node cloudflared connector + Netdata
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
-  vps01/backup-ezbookkeeping.sh      nightly off-site backup + its Netdata age alarm
+  vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
+  vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
 dokploy/
   ezbookkeeping/, booking/           compose apps Dokploy clones from this repo itself
 worker/status/                       Cloudflare Worker: maybeit.work status page + health poller
@@ -149,8 +164,11 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   gates on every deploy was not worth the staged rollout on three nodes
   that are already independent. Per node: SSH in via
   `webfactory/ssh-agent` with that node's own key and a pinned
-  `known_hosts`, `rsync --delete` the node's stack files, write that
-  node's tunnel token to a remote `.env` over stdin, then a guarded
+  `known_hosts`, `rsync --delete --exclude 'backup/'` the node's stack
+  files (the exclude protects node-side state: the backup's run log and
+  its last-success stamp), write that node's tunnel token and Netdata
+  Cloud claim values to a remote `.env` over stdin plus separate
+  `.r2.env` and `.telegram.env` credential files, then a guarded
   `docker compose pull && up -d`, guarded because a stack with no
   services defined makes plain `compose pull` error out otherwise.
 - Each deploy job ends by verifying the node it just touched: Netdata
@@ -185,6 +203,10 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   container with the host filesystem mounted.
 - Dokploy manages the other nodes over its own separate, dedicated SSH
   credential, scoped to that purpose only.
+- A zone-wide Cloudflare rule blocks all non-Philippines traffic, and all
+  three Netdata agents stream outbound to Netdata Cloud (see
+  [Network model](#-network-model)). Both live outside this repo: the geo
+  rule in the Cloudflare dashboard, the Cloud claim in a GitHub secret.
 
 > [!NOTE]
 > The CI deploy user has no sudo, but that is a smaller guarantee than it
@@ -207,11 +229,17 @@ Retention lives in R2 lifecycle rules rather than in the script: `daily/`
 expires after 7 days, `weekly/` after 28. Deletion is server-side, so a bug
 in the script cannot erase history.
 
-A backup that is never restored is a guess. A Netdata alarm charts the age
-of the last successful run and fires at 36 hours, and the restore path is
-drilled by hand: pull the newest archive, extract it into throwaway volumes,
-boot a second container against them, then delete all of it. That drill is
-what caught the schedule silently never firing.
+Staleness is alerted by `check-backup-age.sh`: an hourly cron job that reads
+the same stamp file the backup writes and calls the Telegram API directly.
+First alert at 36 hours, re-alert every 12 hours while stale, one message on
+recovery. **It deliberately does not go through Netdata.** A Netdata alarm
+charts the same age for the dashboard, but it silently stopped notifying
+once and nothing depends on it any more.
+
+A backup that is never restored is a guess, so the restore path is drilled by
+hand: pull the newest archive, extract it into throwaway volumes, boot a
+second container against them, then delete all of it. That drill is what
+caught the schedule silently never firing.
 
 `booking.maybeit.work`'s MySQL volume is not covered yet.
 
