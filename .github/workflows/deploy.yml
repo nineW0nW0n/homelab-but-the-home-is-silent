@@ -191,9 +191,10 @@ jobs:
 
       - name: Sync stack files
         run: |
-          # backup/ holds the run log, the .last-success stamp the Netdata
-          # age alarm reads, and the local archive: node state, not repo
-          # state. --delete wiped it on every deploy until 2026-08-18.
+          # backup/ and backup-booking/ hold the run logs, the
+          # .last-success stamps the staleness check reads, and the local
+          # archives: node state, not repo state. --delete wiped backup/ on
+          # every deploy until 2026-08-18.
           #
           # The two credential files are excluded for a subtler reason:
           # --delete removes them here and later steps write them back, so
@@ -204,7 +205,8 @@ jobs:
           # silently skipped. .env is deliberately NOT excluded: nothing
           # reads it between the rsync and its rewrite.
           rsync -az --delete -e "ssh -p $SSH_PORT" \
-            --exclude 'backup/' --exclude '.r2.env' --exclude '.telegram.env' \
+            --exclude 'backup/' --exclude 'backup-booking/' \
+            --exclude '.r2.env' --exclude '.telegram.env' \
             stacks/vps01/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps01/"
 
       - name: Write remote .env
@@ -258,18 +260,25 @@ jobs:
       - name: Install backup cron
         run: |
           # Debian's cron ignores CRON_TZ, so these fire hourly in the node's
-          # own zone and backup-ezbookkeeping.sh gates itself on 03:00
-          # Asia/Manila. Nothing here depends on the host clock's zone.
+          # own zone; backup-ezbookkeeping.sh gates itself on 03:00 and
+          # backup-booking.sh on 04:00 Asia/Manila (staggered: 2GB node).
+          # Nothing here depends on the host clock's zone.
           #
-          # Both entries go in one heredoc because 'crontab -' REPLACES the
-          # whole crontab; installing a second job separately would delete
-          # the first. See stacks/CLAUDE.md.
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'mkdir -p /opt/stacks/vps01/backup'
+          # All four entries go in one heredoc because 'crontab -' REPLACES
+          # the whole crontab; installing a job separately would delete the
+          # others. See stacks/CLAUDE.md.
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'mkdir -p /opt/stacks/vps01/backup /opt/stacks/vps01/backup-booking'
           {
             printf '0 * * * * /opt/stacks/vps01/backup-ezbookkeeping.sh'
             printf ' >> /opt/stacks/vps01/backup/backup.log 2>&1\n'
             printf '30 * * * * /opt/stacks/vps01/check-backup-age.sh'
             printf ' >> /opt/stacks/vps01/backup/check.log 2>&1\n'
+            printf '10 * * * * /opt/stacks/vps01/backup-booking.sh'
+            printf ' >> /opt/stacks/vps01/backup-booking/backup.log 2>&1\n'
+            printf '40 * * * * /opt/stacks/vps01/check-backup-age.sh'
+            printf ' booking /opt/stacks/vps01/backup-booking'
+            printf ' >> /opt/stacks/vps01/backup-booking/check.log 2>&1\n'
           } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'crontab -'
 
       - name: Deploy vps01

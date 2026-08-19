@@ -1,5 +1,9 @@
 #!/bin/sh
-# Alert to Telegram when the ezBookkeeping backup goes stale.
+# Alert to Telegram when a vps01 backup goes stale.
+#
+# Usage: check-backup-age.sh [APP_LABEL] [BACKUP_DIR]
+# Defaults to the ezBookkeeping backup, so the original argument-less crontab
+# entry and its existing .stale-alerted state file keep working unchanged.
 #
 # Deployed to /opt/stacks/vps01/ by .github/workflows/deploy.yml (rsync of
 # stacks/vps01/), run hourly from the deploy user's crontab.
@@ -13,11 +17,18 @@
 # no roles, delays or notification queue to go wrong. Netdata keeps the
 # chart and the dashboard alarm; it is no longer the only path.
 #
-# Reads the same stamp backup-ezbookkeeping.sh writes on success.
+# It is parameterised rather than copied: the booking (EasyAppointments)
+# MySQL backup gets the same treatment by passing its own label and work
+# dir, so there is still exactly one staleness implementation to get right.
+#
+# Reads the same stamp the matching backup script writes on success.
 set -eu
 
-STAMP_FILE=/opt/stacks/vps01/backup/.last-success
-STATE_FILE=/opt/stacks/vps01/backup/.stale-alerted
+APP=${1:-ezBookkeeping}
+BACKUP_DIR=${2:-/opt/stacks/vps01/backup}
+
+STAMP_FILE="${BACKUP_DIR}/.last-success"
+STATE_FILE="${BACKUP_DIR}/.stale-alerted"
 ENV_FILE=/opt/stacks/vps01/.telegram.env
 # One missed daily run. Matches health.d/backup.conf's warn threshold so the
 # two agree about what "stale" means.
@@ -26,7 +37,7 @@ STALE_HOURS=36
 # stays broken should keep nagging, but not once an hour all night.
 RENOTIFY_HOURS=12
 
-log() { printf '%s check-backup-age: %s\n' "$(date -Is)" "$1"; }
+log() { printf '%s check-backup-age[%s]: %s\n' "$(date -Is)" "$APP" "$1"; }
 
 if [ ! -r "$ENV_FILE" ]; then
     log "ERROR: $ENV_FILE missing; deploy.yml writes it from GitHub secrets"
@@ -64,7 +75,7 @@ fi
 if [ "$age_hours" -lt "$STALE_HOURS" ]; then
     # Fresh. If we alerted earlier, say so once and forget it happened.
     if [ -f "$STATE_FILE" ]; then
-        notify "ezBookkeeping backup on vps01 recovered: last success ${age_hours}h ago."
+        notify "${APP} backup on vps01 recovered: last success ${age_hours}h ago."
         rm -f "$STATE_FILE"
         log "recovered, age ${age_hours}h"
     fi
@@ -84,6 +95,6 @@ if [ "$last" -gt 0 ]; then
 else
     detail="no successful backup on record"
 fi
-notify "ezBookkeeping backup on vps01 is STALE: ${detail} (threshold ${STALE_HOURS}h). Check /opt/stacks/vps01/backup/backup.log."
+notify "${APP} backup on vps01 is STALE: ${detail} (threshold ${STALE_HOURS}h). Check ${BACKUP_DIR}/backup.log."
 printf '%s\n' "$now" > "$STATE_FILE"
 log "stale alert sent, $detail"
