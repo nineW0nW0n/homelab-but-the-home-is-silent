@@ -192,17 +192,39 @@ upstream pushed that day into a shell. Bump it deliberately —
 `gh api repos/rtk-ai/rtk/releases/latest --jq .tag_name` — and record the
 new version here.
 
-Config is hard-railed at `~/.config/rtk/config.toml`; create it with
-these values if it doesn't already have them:
+Config lives where rtk itself puts it, which is **not** the same path on
+every platform: on macOS it is
+`~/Library/Application Support/rtk/config.toml`, on Linux
+`~/.config/rtk/config.toml`. This skill claimed the Linux path
+unconditionally until 2026-08-19; a config hand-written at
+`~/.config/rtk/` on macOS is simply never read. Don't guess the path and
+don't hand-create the file: run `rtk config --create`, which writes a
+fully-populated default at the correct location and prints it, then edit
+the values below in place. (It exits 1 even on success; the "Created:"
+line is the real result.)
+
+Hard-railed values, all of them departures from rtk's own defaults:
 
 ```toml
+[display]
+colors = false          # ANSI escapes are tokens that carry no meaning
+emoji = false
+max_width = 200         # default 120 truncated real paths and error text
+
 [hooks]
 exclude_commands = ["curl", "playwright"]
 
 [tee]
 enabled = true
 mode = "failures"
+
+[limits]
+passthrough_max_chars = 4000   # default 2000; a re-run costs more than the chars
 ```
+
+`display.max_width` is the one that bites: at rtk's default of 120 every
+long line of command output is chopped mid-path, which reads as a
+complete answer and is not one. Raise it, don't work around it.
 
 `exclude_commands` stays as-is unless a command's *filtered* output has
 actually caused you to miss something. If that happens, add the command

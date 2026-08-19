@@ -235,6 +235,20 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   entry says a config shape is wrong, grep the skills for that shape in
   the same turn; a log entry and a skill that contradict each other is
   worse than neither.
+- The `tooling-setup` skill called `~/.config/rtk/config.toml` the
+  hard-railed rtk config path. On macOS rtk reads
+  `~/Library/Application Support/rtk/config.toml` instead, so a config
+  written at the documented path is never loaded and rtk silently runs on
+  its defaults: `display.max_width = 120` chopped command output mid-path
+  for a whole session (2026-08-19) and cost several detours re-running
+  commands. Fixed by running `rtk config --create`, which writes a
+  populated default at whatever path that platform actually uses, then
+  editing it in place; the skill now says so. `rtk config --create` exits
+  1 even on success, so judge it by its "Created:" line, not its status.
+  Same class as the Biome entry above: a documented config path or
+  spelling that the tool does not honor is indistinguishable from no
+  config at all. Never hand-create a config at a path a doc asserts; make
+  the tool tell you where it reads from.
 
 ## Propagation protocol
 
