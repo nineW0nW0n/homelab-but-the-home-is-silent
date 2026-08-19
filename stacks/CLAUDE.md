@@ -188,6 +188,35 @@ itself: alert on crossing 36h, re-alert every 12h while stale, one message on
 recovery, state in `backup/.stale-alerted`. Netdata's alarm stays for the
 chart but is no longer the delivery path (see failure log).
 
+**Alarm drill last passed: 2026-08-19.** `/opt/stacks/vps01/backup/.last-success`
+was backdated to 100h, `check-backup-age.sh` run, Netdata given time to
+transition, then recovered, then driven stale a second time — to test whether
+the notification chain still goes silent after a CRITICAL. Both paths passed all
+three stages, first CRITICAL, CLEAR, second CRITICAL. `check-backup-age.sh`, the
+real delivery path, sent 4/4 Telegram messages with a clean `.stale-alerted`
+lifecycle, no caveats. Netdata executed four consecutive transitions with no
+suppression: `10:01:03Z CLEAR -> CRITICAL val=100 flags=PROCESSED,EXEC_RUN,EXEC_IN_PROGRESS,SAVED exec_code=0 delay=0`,
+then `10:11:03Z CRITICAL -> CLEAR val=0 delay=300` held exactly 300s and then
+executed (the first executed CLEAR on this alarm since 2026-08-18), then
+`10:21:03Z CLEAR -> CRITICAL val=100 flags=PROCESSED,EXEC_RUN,SAVED exec_code=0`
+undeduped, then a fourth transition, another executed CLEAR. Before the drill the
+last transition that executed was `08-18 07:31:50Z UNINITIALIZED -> CRITICAL
+flags=…,EXEC_RUN,EXEC_FAILED exec_code=1`; everything after it up to
+`08-19 00:13:53Z` carried no `EXEC_RUN`, and all three CLEARs in that window
+showed `delay=3600, flags=UPDATED` — the wedged chain.
+
+**Not proven: that `down 5m` is what fixed the wedge.** The alarm was already
+unwedged when the drill started — the drill's first CRITICAL executed with no
+executed CLEAR ahead of it. Between `08-19 00:13:53Z` and the drill, netdata
+restarted at `04:46:03Z` and picked up the new `backup.conf`, and the alarm's
+`config_hash_id` changed from `046da83b…` to `4686c70f…` with no transition
+recorded at that timestamp. What is confirmed: the alarm currently delivers
+CRITICAL and CLEAR reliably, and `down 5m` demonstrably lets a CLEAR land in a
+window where a re-fire would otherwise have superseded it (under `down 1h` the
+10:11 CLEAR would have been due at 11:11, after the 10:17 re-stale). The escape
+from the original wedge is at least as attributable to the config-hash change as
+to the delay value.
+
 **Restore drill last passed: 2026-08-18.** Archive pulled from R2, extracted
 into throwaway volumes, booted as a second container on `127.0.0.1:18080`:
 SQLite `integrity_check` ok, row counts identical to production, app served
@@ -305,8 +334,11 @@ first, never straight into production.
   `alarm_id` that carried `EXEC_RUN` has the **same status** as the new
   transition — its "don't send the same notification twice" rule. That alarm
   last executed at 07:31:50Z with status CRITICAL, so every CRITICAL since
-  is dropped as a duplicate. The state persists across netdata restarts,
-  which is why restarting never helped. The escape hatch would be a CLEAR
+  is dropped as a duplicate. This entry used to read "The state persists
+  across netdata restarts, which is why restarting never helped" —
+  **superseded** 2026-08-19: it persists across a restart alone, but it also
+  resets when the alarm's `config_hash_id` changes, which a restart that picks
+  up an edited `.conf` does at the same time. The escape hatch would be a CLEAR
   that executes and resets the chain, and `delay: down 1h multiplier 1.5 max
   4h` in `health.d/backup.conf` blocks exactly that: every CLEAR is held an
   hour, the alarm re-fires first, and the CLEAR is superseded (`UPDATED`)
@@ -319,6 +351,14 @@ first, never straight into production.
   permanently silent for one status.** Verify with a real transition, never
   an interactive `alarm-notify.sh test`, and never make a Netdata alarm the
   only delivery path for something that matters.
+
+- Netdata's alarm dedup state resets when an alarm's `config_hash_id` changes,
+  not merely on restart (measured 2026-08-19: `046da83b…` → `4686c70f…` at the
+  04:46:03Z restart, no transition recorded, and the wedge was gone by the
+  10:01:03Z drill). So when an alarm is stuck silent, edit its `.conf` and
+  redeploy; do not just restart netdata. And re-run the
+  stale/recover/stale drill after any change to `health.d/backup.conf`, to
+  prove CRITICAL → CLEAR → CRITICAL all still execute.
 
 - `sed -i` does **not** propagate into a bind-mounted single file: it writes
   a new inode and the container keeps reading the old one. Use
