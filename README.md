@@ -155,9 +155,8 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   files: `yamllint --strict`, `actionlint`, `shellcheck`, `gitleaks`,
   `biome ci`, a no-real-IP check, trailing-whitespace, large-file and
   private-key checks.
-- `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`,
-  `deploy.yml` itself) or
-  manual dispatch. It calls `validate.yml` first (nothing deploys unless
+- `deploy.yml` runs on push to `main` (paths: `stacks/**`, `deploy.yml`
+  itself) or manual dispatch. It calls `validate.yml` first (nothing deploys unless
   lint passes), then waits for a single **manual approval** on the
   `production` environment, after which all three nodes deploy in
   parallel. It was sequential until 2026-08-19; approving three per-job
