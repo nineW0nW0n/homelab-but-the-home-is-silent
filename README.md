@@ -51,9 +51,9 @@ flowchart LR
         validate["validate.yml\nlint gate"] --> deploy["deploy.yml"]
     end
 
-    deploy -. "1️⃣ sequential" .-> vps00
-    deploy -. "2️⃣" .-> vps01
-    deploy -. "3️⃣" .-> vps02
+    deploy -. "one approval, then parallel" .-> vps00
+    deploy -.-> vps01
+    deploy -.-> vps02
 ```
 
 ## 🔒 Network model
@@ -105,7 +105,7 @@ node that serves something gets its own tunnel and its own token.
   dependabot.yml                     weekly bumps for SHA-pinned actions + worker npm deps
   workflows/
     validate.yml                     pre-commit over the whole repo, reusable via workflow_call
-    deploy.yml                       sequential rolling deploy: vps00 -> vps01 -> vps02
+    deploy.yml                       one approval, then all three nodes in parallel
     deploy-worker.yml                tests + deploys the status Worker
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
@@ -143,9 +143,11 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 - `deploy.yml` runs on push to `main` (paths: `infra/**`, `stacks/**`,
   `deploy.yml` itself) or
   manual dispatch. It calls `validate.yml` first (nothing deploys unless
-  lint passes), then waits for a **manual approval** on the `production`
-  environment, then runs three sequential jobs, never in parallel, so a
-  bad deploy can't take all three nodes down at once. Per node: SSH in via
+  lint passes), then waits for a single **manual approval** on the
+  `production` environment, after which all three nodes deploy in
+  parallel. It was sequential until 2026-08-19; approving three per-job
+  gates on every deploy was not worth the staged rollout on three nodes
+  that are already independent. Per node: SSH in via
   `webfactory/ssh-agent` with that node's own key and a pinned
   `known_hosts`, `rsync --delete` the node's stack files, write that
   node's tunnel token to a remote `.env` over stdin, then a guarded

@@ -31,8 +31,8 @@ here.
 - **Why**: learn GitOps end to end on real, cheap, constrained hardware.
   The constraints are the point, not accidents to design around.
 - **How**: infra under `infra/`, workloads under `stacks/`, push to
-  `main`, `validate.yml` gates `deploy.yml`, deploy is sequential:
-  `vps00 → vps01 → vps02`, never parallel.
+  `main`, `validate.yml` gates `deploy.yml`, one approval gates production
+  and all three nodes then deploy in parallel.
 
 ## Directory map
 
@@ -41,7 +41,7 @@ here.
 | `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml`: cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
-| `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (sequential rolling deploy), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
+| `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
 | `dokploy/` | Compose apps Dokploy pulls from git (not `deploy.yml`) | exists → `dokploy/CLAUDE.md` |
 | `worker/status/` | Cloudflare Worker: status page + health poller | exists → worker/status/CLAUDE.md |
 | `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`); read-only history, nothing deploys from here | none: no rails of its own |
@@ -83,7 +83,14 @@ Never silently pick one.
    `infra/inventory.example.yaml` stays redacted.
 6. **CI deploy user: key-only, no sudo, no password login.** Dokploy uses
    its own separate credential.
-7. **Deploys are sequential, never parallel**: `vps00 → vps01 → vps02`.
+7. **One approval gates production; all three nodes then deploy in
+   parallel.** Sequential until 2026-08-19, changed at Ex's request: an
+   `environment:` on each deploy job prompted for approval three times per
+   run, and the gate is now a single `approve` job the three deploys hang
+   off. The sequencing did buy something real, a bad stack file reaching
+   one node before the others, and that protection is gone: what remains is
+   `validate.yml`, the single approval, and `git revert` (rail 12). Never
+   drop the approval gate too.
 8. **`validate.yml` passes before `deploy.yml` runs.** Fix lint failures;
    never bypass them.
 9. **Biome lints/formats all JS, TS, JSON, JSONC, CSS.** No ESLint, no
