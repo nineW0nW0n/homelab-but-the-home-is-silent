@@ -58,6 +58,17 @@ run is a no-op, before calling a script change done.
   this is declarative. Installed by `bootstrap-dokploy.sh`'s upstream
   installer, so caps must be reapplied after any Dokploy reinstall or
   upgrade.
+- `cap-dokploy-resources.sh` only ever worked on vps00. Its remote
+  payload runs under `set -eu` and opened with
+  `docker service update ... dokploy`, but `dokploy` and
+  `dokploy-postgres` are vps00-only Swarm services, so on vps01/vps02 the
+  script aborted on its first line and never reached the
+  `dokploy-traefik` cap. That is why traefik was capped on vps00 and
+  unbounded on both secondaries for as long as anyone had run it there.
+  Each cap is now guarded: a missing target is skipped with a message,
+  not fatal. When a provisioning script targets "every node", check what
+  is actually present on the secondaries -- vps00 has the control plane,
+  they do not.
 - A transient memory spike (app startup, migrations) on a no-swap node is
   a hard OOM-kill, not a slowdown. Misdiagnosed once as a Calcom "build
   process" failure on vps01 when it was actually an OOM kill under a

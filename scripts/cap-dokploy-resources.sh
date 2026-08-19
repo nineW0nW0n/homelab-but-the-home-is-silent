@@ -9,6 +9,12 @@
 # update --memory` instead -- `docker service update` 404s on it).
 # Rerun after any Dokploy reinstall/upgrade.
 #
+# Runs on all three nodes. Only vps00 has the `dokploy` and
+# `dokploy-postgres` Swarm services; vps01/vps02 have `dokploy-traefik`
+# alone, installed there by Dokploy's Remote Server setup. Each cap is
+# therefore skipped, not fatal, when its target is absent on this node --
+# see scripts/CLAUDE.md for what the unguarded version cost.
+#
 # Observed baseline on vps00 before capping: dokploy app ~913MiB (of
 # 1.9GiB total, uncapped), dokploy-postgres ~67MiB, both otherwise
 # unbounded. Limits below give real headroom above observed usage while
@@ -29,14 +35,56 @@ echo "Capping Dokploy resources on ${ssh_user}@${host}:${ssh_port} ..."
 ssh -p "$ssh_port" "${ssh_user}@${host}" 'sh -s' <<'EOF'
 set -eu
 
-docker service update --limit-memory 1024M --reserve-memory 512M dokploy
-docker service update --limit-memory 320M --reserve-memory 128M dokploy-postgres
-docker update --memory 128m --memory-swap 256m dokploy-traefik
+# Swarm service: docker service update. A plain `docker update` here gets
+# reconciled away silently.
+cap_service() {
+    name=$1
+    limit_mb=$2
+    reserve_mb=$3
+    if ! docker service inspect "$name" >/dev/null 2>&1; then
+        echo "skip: swarm service $name is not on this node"
+        return 0
+    fi
+    want=$((limit_mb * 1024 * 1024))
+    have=$(docker service inspect "$name" \
+        --format '{{.Spec.TaskTemplate.Resources.Limits.MemoryBytes}}' \
+        2>/dev/null || echo 0)
+    if [ "$have" = "$want" ]; then
+        echo "ok: $name already capped at ${limit_mb}M"
+        return 0
+    fi
+    # Re-running an update restarts the service's tasks, so only do it
+    # when the limit actually differs -- that is what keeps a second run
+    # a genuine no-op rather than a control-plane bounce.
+    docker service update \
+        --limit-memory "${limit_mb}M" --reserve-memory "${reserve_mb}M" \
+        "$name" >/dev/null
+    echo "capped: $name -> ${limit_mb}M limit / ${reserve_mb}M reserve"
+}
 
-echo "-- current limits --"
-docker service inspect dokploy --format '{{.Spec.TaskTemplate.Resources.Limits.MemoryBytes}}'
-docker service inspect dokploy-postgres --format '{{.Spec.TaskTemplate.Resources.Limits.MemoryBytes}}'
-docker inspect dokploy-traefik --format '{{.HostConfig.Memory}}'
+# Plain container: docker update. `docker service update` 404s on it.
+cap_container() {
+    name=$1
+    limit_mb=$2
+    swap_mb=$3
+    if ! docker inspect "$name" >/dev/null 2>&1; then
+        echo "skip: container $name is not on this node"
+        return 0
+    fi
+    want=$((limit_mb * 1024 * 1024))
+    have=$(docker inspect "$name" --format '{{.HostConfig.Memory}}')
+    if [ "$have" = "$want" ]; then
+        echo "ok: $name already capped at ${limit_mb}m"
+        return 0
+    fi
+    docker update \
+        --memory "${limit_mb}m" --memory-swap "${swap_mb}m" "$name" >/dev/null
+    echo "capped: $name -> ${limit_mb}m limit / ${swap_mb}m memory+swap"
+}
+
+cap_service dokploy 1024 512
+cap_service dokploy-postgres 320 128
+cap_container dokploy-traefik 128 256
 EOF
 
 echo "Done."
