@@ -119,7 +119,10 @@ docker exec -u netdata netdata /usr/libexec/netdata/plugins.d/alarm-notify.sh te
 That test proves the script, the config and the token. It does **not** prove
 Netdata will ever run them: it passes on a setup where real alerts are
 silently dropped (see failure log). A green test is not evidence that alarms
-deliver; only a real transition reaching Telegram is.
+deliver; only a real transition reaching Telegram is. That evidence now
+exists for `ezbookkeeping_backup_age`: the 2026-08-19 drill drove four
+consecutive executed transitions (CRITICAL, CLEAR, CRITICAL, CLEAR), which
+is what the alarm-drill paragraph below records.
 
 ## Alert thresholds
 
