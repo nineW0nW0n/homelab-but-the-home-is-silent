@@ -1,6 +1,8 @@
 # Secrets
-.env
+# *.env catches .r2.env / .telegram.env, which .env.* does not match; .env.*
+# still carries .env.local and friends.
 .env.*
+*.env
 !.env.example
 infra/inventory.yaml
 *.pem
