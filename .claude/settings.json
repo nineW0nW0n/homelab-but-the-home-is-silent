@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": ["Bash(rtk git *)"]
+  },
+  "enabledPlugins": {
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
+    "frontend-design@claude-plugins-official": false
+  },
+  "skillOverrides": {
+    "agent-browser": "off",
+    "dataviz": "off",
+    "design": "off",
+    "diagnosing-bugs": "off",
+    "theme-factory": "off"
+  }
+}
