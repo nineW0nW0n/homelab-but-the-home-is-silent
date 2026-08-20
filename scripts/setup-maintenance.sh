@@ -1,7 +1,7 @@
 #!/bin/sh
 # Idempotent. Caps docker container log growth, caps journald disk use,
-# and drops a weekly docker-prune cron.d entry. Run once per node; safe
-# to re-run.
+# drops a weekly docker-prune cron.d entry, and enables unattended
+# security upgrades. Run once per node; safe to re-run.
 #
 # This script never restarts Docker. The log-opts it merges into
 # /etc/docker/daemon.json take effect at the next Docker restart or
@@ -64,6 +64,35 @@ else
   printf '%s\n' "$cron_line" > /etc/cron.d/docker-prune
   chmod 644 /etc/cron.d/docker-prune
   echo "wrote /etc/cron.d/docker-prune -- weekly Sunday 03:00"
+fi
+
+# --- unattended-upgrades: apply Debian security updates automatically ---
+# Port 22 is the only permanently reachable port on these nodes (everything
+# else is behind an outbound-only tunnel), so an unpatched sshd/openssl/kernel
+# is the real exposure.
+#
+# Debian 12's shipped /etc/apt/apt.conf.d/50unattended-upgrades already limits
+# origins to the security suite. Do NOT add an Origins-Pattern override here:
+# it can only widen that default or drift out of sync with it.
+#
+# Interaction worth knowing: an unattended docker-ce upgrade restarts dockerd.
+# That does not flush DOCKER-USER -- Docker creates that chain when absent and
+# never rewrites its contents, which is the chain's whole purpose -- so rail
+# 1's iptables enforcement survives the restart. That is why this is safe to
+# enable on these nodes.
+command -v unattended-upgrade >/dev/null 2>&1 || {
+  apt-get -qq update >/dev/null
+  DEBIAN_FRONTEND=noninteractive apt-get -y -qq install unattended-upgrades >/dev/null
+}
+auto_upgrades='APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";'
+if [ -f /etc/apt/apt.conf.d/20auto-upgrades ] &&
+  [ "$(cat /etc/apt/apt.conf.d/20auto-upgrades)" = "$auto_upgrades" ]; then
+  echo "/etc/apt/apt.conf.d/20auto-upgrades already set, leaving it alone"
+else
+  printf '%s\n' "$auto_upgrades" > /etc/apt/apt.conf.d/20auto-upgrades
+  chmod 644 /etc/apt/apt.conf.d/20auto-upgrades
+  echo "wrote /etc/apt/apt.conf.d/20auto-upgrades -- daily security updates"
 fi
 
 echo "Maintenance setup complete on $(hostname)"
