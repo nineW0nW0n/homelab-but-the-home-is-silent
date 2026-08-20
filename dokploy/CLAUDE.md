@@ -90,9 +90,26 @@ on the first means the dashboard itself is unprotected.
   `stacks/vps01/backup-booking.sh` (see `stacks/vps01/CLAUDE.md` for schedule,
   drills and the `MYSQL_PWD` handling).
 
-### Known gap: booking disables EasyAppointments' CalDAV SSRF check
+### Closed 2026-08-20: the CalDAV SSRF check is back on
 
-`booking/docker-compose.yml`'s `entrypoint` runs, on every boot, a `sed`
+The `sed` below was removed. What settled it was measuring the thing nobody
+had checked: **CalDAV is in active use** — one provider row has
+`caldav_sync = 1` with a URL set, and all 8 rows in `ea_appointments` carry
+an `id_caldav_calendar` — so this was never dead config to rip out. But the
+sync target is **public HTTPS**, classified straight from
+`ea_user_settings` without printing the URL (it has a password beside it).
+The guard blocks *internal* targets; a public host passes it untouched. So
+the guard was almost certainly never what broke anything — it reads like
+setup-time troubleshooting that was never revisited.
+
+Re-check after any redeploy that sync still runs. If it breaks, the guard
+*was* load-bearing for a reason still unknown, and that reason goes here
+rather than back into a `sed`. The history below is kept because the
+argument for removing it is the useful part.
+
+### Original entry: booking disabled EasyAppointments' CalDAV SSRF check
+
+`booking/docker-compose.yml`'s `entrypoint` ran, on every boot, a `sed`
 rewriting `application/libraries/Caldav_sync.php` from
 `enable_ssrf_check = true` to `false`: the app's own guard against CalDAV sync
 URLs pointing at internal addresses, turned off. Nothing in this repo explains
@@ -104,10 +121,12 @@ predates the repo and was never written down.
 Known: with the check off, anyone who can set a CalDAV URL in the booking
 admin UI can make the container issue requests to addresses it should not
 reach — sibling containers on `dokploy-network` and anything private that
-vps01 can route to, none of which is reachable from the internet. Not known:
-whether CalDAV sync is used at all, or whether the app was failing without
-it. Do not delete the `sed` blind and do not file it as accepted risk — ask
-Ex, then remove it or record the reason here.
+vps01 can route to, none of which is reachable from the internet. Not known
+at the time: whether CalDAV sync was used at all, or whether the app was
+failing without it — both answered by measuring, above. The rule that
+survives: **do not delete a guard blind, and do not file it as accepted
+risk either.** Measure what it actually protects and what actually depends
+on it; here that was two SQL queries nobody had run.
 
 ## Failure log
 
