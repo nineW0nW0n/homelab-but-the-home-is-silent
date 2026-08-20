@@ -3,126 +3,103 @@ Parent: ../.claude/CLAUDE.md
 # stacks/: per-node compose files
 
 One `docker-compose.yml` per node, deployed by `deploy.yml` to
-`/opt/stacks/<node>/`. Each runs that node's `cloudflared` connector
-(rail 2, rail 3) plus any node-specific workload not deployed through
-Dokploy directly.
+`/opt/stacks/<node>/`. Each runs that node's `cloudflared` connector (rails 2,
+3) plus any node-specific workload not deployed through Dokploy directly.
 
-## Tunnel mode
+Superseded passages are archived in full in
+`docs/superpowers/failure-log-archive.md` (2026-08-20); pointers below say
+which.
+
+## Tunnel mode and routes
 
 `cloudflared` runs in **token mode** (`tunnel run` + `TUNNEL_TOKEN` env).
-Ingress/public-hostname routing is owned by the Cloudflare Zero Trust
-dashboard (Networks → Tunnels → *tunnel* → Public Hostnames), not a local
-config file in this repo. Add or change routes there.
+Public-hostname routing is owned by the Cloudflare Zero Trust dashboard
+(Networks → Tunnels → *tunnel* → Public Hostnames), not by any file here. Add
+or change routes there.
 
-Current routes:
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
-  (`dokploy`, 24h session) since 2026-08-16. Policies mirror the
-  `*-metrics` apps exactly: `status-worker service auth` (service token,
-  so the status Worker can still poll it) then `owner email allow`. An
-  unauthenticated request must `302` to `old-firefly-996b.cloudflareaccess.com`;
-  a `200` means the policy detached and the control plane is open again.
+  (`dokploy`, 24h session) since 2026-08-16, policies mirroring the `*-metrics`
+  apps exactly: `status-worker service auth` (service token, so the status
+  Worker can still poll it) then `owner email allow`. Unauthenticated must
+  `302` to `old-firefly-996b.cloudflareaccess.com`; a `200` means the policy
+  detached and the control plane is open again.
 - `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
-  Traefik, forwards to the app container per the Domain set in Dokploy's
-  UI), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated
-  tunnel, not shared with vps00's.
+  Traefik, forwarding to whichever container the Domain in Dokploy's UI points
+  at), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
 - vps02's Netdata → `http://localhost:19999`, token
-  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel,
-  vps02's first workload *from this repo*, not shared with vps00's or
-  vps01's.
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, and
+  vps02's first workload *from this repo*.
 
-Note vps02 is not the empty node it reads as: Dokploy has installed
-`dokploy-traefik` there too, publishing 80/443. Nothing in `stacks/`
-declares it; it comes from Dokploy's Remote Server setup, same as on
-vps00 and vps01. `docker ps` on a node is the truth, not this
-directory.
+**One token per node (rail 2):** Cloudflare load-balances a hostname across
+*every* connector on its tunnel — a route is not pinned to a node — so one
+token shared between nodes with different origins sends some requests to a node
+with nothing on that origin port.
+
+**`network_mode: host` (rail 3):** bridge mode gives `cloudflared` its own
+netns, so `http://localhost:PORT` in a route resolves to the container, not the
+VPS: origin unreachable, 502.
+
+vps02 is not the empty node it reads as: Dokploy installed `dokploy-traefik`
+there too, publishing 80/443, same as vps00 and vps01. Nothing in `stacks/`
+declares it. `docker ps` on a node is the truth, not this directory.
 
 ## Netdata
 
-Runs on all 3 nodes as a `netdata` service, `network_mode: host`,
-bound to `127.0.0.1:19999` (see each node's `netdata.conf`, `[web] bind
-to = 127.0.0.1`, not exposed beyond the host; reaching it publicly goes
-through that node's `cloudflared` route above). Config is split two ways:
-`netdata.conf` (committed, no secrets, identical across nodes) and
-`health_alarm_notify.conf` (generated at deploy time by a separate step,
-never committed. `docker compose config` doesn't need it to exist,
-`docker compose up` does).
+All 3 nodes, `network_mode: host`, bound to `127.0.0.1:19999` (`[web] bind to`
+in `netdata.conf`); public access only via that node's `cloudflared` route.
+Config splits two ways: `netdata.conf` (committed, no secrets; identical on
+vps00/vps02, vps01 adds `[plugins] backup_age = yes`) and
+`health_alarm_notify.conf` (generated at deploy time, never committed —
+`docker compose config` doesn't need it to exist, `docker compose up` does).
 
-## No docker.sock in Netdata
+**No docker.sock.** A `:ro` bind on a socket restricts nothing: anything that
+can reach the Docker API can `docker run -v /:/host`, i.e. host root. Mounting
+it turned any Netdata RCE into instant root on all three nodes at once. Cost is
+cosmetic: the cgroup collector used the socket only to resolve container
+*names*, so per-container charts are labelled by cgroup ID; their CPU/memory/IO
+data comes from `/sys/fs/cgroup`, mounted separately, and none of the node-level
+metrics the status page consumes (`system.cpu`, `system.ram`, `disk_space./`,
+`system.load`, `mem.swap`) ever touched the socket. `/:/host/root:ro,rslave`
+**stays**: the disk collectors need it, it is read-only, it grants no write. Not
+the same thing; don't remove it "in the same spirit".
 
-Netdata does **not** get `/var/run/docker.sock`. A `:ro` bind on a socket
-restricts nothing: anything that can talk to the Docker API can run
-`docker run -v /:/host`, i.e. host root. Mounting it turned any Netdata
-RCE into instant root on all three nodes at once.
-
-What that costs: Netdata's cgroup collector used the socket only to
-resolve container *names*, so per-container charts are labelled by
-cgroup ID instead of a friendly name. The per-container CPU/memory/IO
-data itself comes from `/sys/fs/cgroup`, mounted separately and
-unaffected, and none of the node-level metrics the status page consumes
-(`system.cpu`, `system.ram`, `disk_space./`, `system.load`, `mem.swap`)
-ever touched the socket.
-
-`/:/host/root:ro,rslave` **stays**: the disk collectors genuinely need
-it, it is read-only, and it grants no write anywhere. Don't remove it in
-the same spirit; it isn't the same thing.
-
-## Why network_mode: host (rail 3)
-
-Bridge mode puts `cloudflared` in its own network namespace, so
-`http://localhost:PORT` in a Public Hostname route resolves to the
-container, not the VPS itself: the origin app is unreachable, 502.
-`network_mode: host` makes `localhost` mean the node.
-
-## Netdata Cloud claim
-
-All three agents connect to Netdata Cloud (free Community plan: max 5 nodes,
-1 custom dashboard per Room). Claiming is declarative: `NETDATA_CLAIM_TOKEN`
-and `NETDATA_CLAIM_ROOMS` come from GitHub secrets into each node's `.env`,
-and the compose file passes them to the agent, which claims itself on start.
-
-The **same token goes on every node**, unlike a tunnel token (rail 2): this
-one identifies the Space, not the node. Do not mint one per node.
-
-Identity lives in the `netdatalib` volume (`/var/lib/netdata/cloud.d`), so a
-claimed agent stays claimed across restarts and redeploys even if the secret
-is later unset. Removing a node is a Cloud-side action, not a repo change.
-
-Claiming is outbound HTTPS to `app.netdata.cloud` only. It opens no inbound
-port and does not touch rail 1.
-
-Cloud is additive: the per-node dashboards behind each tunnel and the local
-health alarms keep working exactly as before. Do not move the backup
-staleness alert onto it, for the reason in the failure log.
+**Netdata Cloud claim.** All three agents connect (free Community plan: 5 nodes
+max, 1 custom dashboard per Room). Declarative: `NETDATA_CLAIM_TOKEN` and
+`NETDATA_CLAIM_ROOMS` go from GitHub secrets into each node's `.env`, compose
+passes them to the agent, the agent claims itself on start. The **same token
+goes on every node** — unlike a tunnel token (rail 2) it identifies the Space,
+not the node; do not mint one per node. Identity lives in the `netdatalib`
+volume (`/var/lib/netdata/cloud.d`), so an agent stays claimed across restarts
+and redeploys even if the secret is unset later; removing a node is a Cloud-side
+action, not a repo change. Claiming is outbound HTTPS to `app.netdata.cloud`
+only: no inbound port, rail 1 untouched. Cloud is additive — per-node dashboards
+and local alarms are unaffected — but do not move the backup staleness alert
+onto it (`vps01/CLAUDE.md` failure log).
 
 ## Alert delivery
 
-`health_alarm_notify.conf` carries the Telegram bot token, so it is
-generated at deploy time and never committed. It is **not** bind-mounted
-from the stack directory: `deploy.yml` pipes it into the node's
-`<node>_netdataconfig` volume through a throwaway `alpine` container that
-also does `chown 201:201` and `chmod 600`.
+`health_alarm_notify.conf` carries the Telegram bot token, so it is generated
+at deploy time and never committed, and it is **not** bind-mounted: `deploy.yml`
+pipes it into the node's `<node>_netdataconfig` volume through a throwaway
+`alpine` container that also does `chown 201:201` and `chmod 600`. That
+indirection exists because in-container Netdata is uid 201 while the deploy user
+is uid 1000; a bind-mounted `600 deploy:deploy` file is unreadable to uid 201,
+and Netdata fails silently — logs "Failed to load config file", forgets Telegram
+entirely, falls back to emailing root on a box with no sendmail.
 
-That indirection exists because the in-container Netdata runs as uid 201
-while the deploy user is uid 1000. A bind-mounted `600 deploy:deploy` file
-is unreadable to uid 201, and Netdata's failure mode is silent: it logs
-"Failed to load config file", forgets Telegram entirely, and falls back to
-emailing root on a box with no sendmail.
-
-Verify delivery as the netdata user, never as root (root can read the file
-regardless, so a root test passes on a broken setup):
+Verify as the netdata user, never root (root reads the file regardless, so a
+root test passes on a broken setup):
 
 ```sh
 docker exec -u netdata netdata /usr/libexec/netdata/plugins.d/alarm-notify.sh test sysadmin
 ```
 
-That test proves the script, the config and the token. It does **not** prove
-Netdata will ever run them: it passes on a setup where real alerts are
-silently dropped (see failure log). A green test is not evidence that alarms
-deliver; only a real transition reaching Telegram is. That evidence now
-exists for `ezbookkeeping_backup_age`: the 2026-08-19 drill drove four
-consecutive executed transitions (CRITICAL, CLEAR, CRITICAL, CLEAR), which
-is what the alarm-drill paragraph below records.
+That proves script, config and token — **not** that Netdata will ever run them:
+it passes on a setup where real alerts are silently dropped (failure log). Only
+a real transition reaching Telegram is evidence. That evidence exists for
+`ezbookkeeping_backup_age`: the 2026-08-19 drill drove four consecutive executed
+transitions (CRITICAL, CLEAR, CRITICAL, CLEAR), recorded in `vps01/CLAUDE.md`.
 
 ## Alert thresholds
 
@@ -349,130 +326,29 @@ first, never straight into production.
 
 ## Failure log
 
-- A restore drill runs a *second* database on a node already running the first:
-  the capped 512m `mysql:8.0` drill container on 2026-08-19 took vps01 from 4M
-  to 61M of swap in use while production stayed up. Always cap a drill
-  container explicitly and never drill during the 03:00/04:00 backup window;
-  on a 2GB node the drill is itself a workload, not an inspection.
+Incident histories behind these rules: `failure-log` skill (`stacks/`).
 
-- macOS `zcat` is not Debian's: it appends `.Z` and fails on a `.gz`, so a
-  dump-integrity check written as `zcat` verified fine on the node and
-  rejected a *good* archive when dry-run on a laptop. Use `gzip -cd` in these
-  scripts; it means the same thing on both.
-
-- Netdata notifications were dead on **all three nodes** from setup until
-  2026-08-18 and nothing surfaced it: `deploy.yml` wrote
-  `health_alarm_notify.conf` with `umask 077`, giving `600 deploy:deploy`
-  (uid 1000), and the container's netdata user (uid 201) could not read it.
-  Every alarm since then failed to deliver, including the tightened 80/90
-  RAM and disk alarms. The config looked present and correct on the host,
-  which is exactly why it went unnoticed for so long. Fixed by writing the
-  file into the netdataconfig volume as uid 201 (see alert delivery above).
-  When a container reads a secret file, check the *in-container* uid, and
-  test as that user rather than root.
-
-- `alarm-notify.sh` enables **email by default**, so with Telegram configured
-  and no MTA installed every alert also ran sendmail and logged
-  `account default not found` (error 78) — three errors per alarm
-  transition, and `alarm-notify.sh` exiting non-zero. Telegram still
-  delivered, so nothing was lost, but that steady error stream is what hid
-  the genuinely broken config above. `SEND_EMAIL="NO"` in the templates.
-  The templates' claim that every unlisted method "stays at its built-in
-  default (disabled)" was simply wrong about email; check a notifier's
-  default before writing that sentence.
-
-- `ezbookkeeping_backup_age` has executed no notification since 2026-08-18
-  07:31:50Z. Written up wrongly twice before the cause was found: first as
-  "never executed, while stock alarms always did", then as a node-wide
-  stoppage. **Root cause (2026-08-19):** netdata's `health_alarm_execute()`
-  suppresses a notification when the most recent entry for the same
-  `alarm_id` that carried `EXEC_RUN` has the **same status** as the new
-  transition — its "don't send the same notification twice" rule. That alarm
-  last executed at 07:31:50Z with status CRITICAL, so every CRITICAL since
-  is dropped as a duplicate. This entry used to read "The state persists
-  across netdata restarts, which is why restarting never helped" —
-  **superseded** 2026-08-19: it persists across a restart alone, but it also
-  resets when the alarm's `config_hash_id` changes, which a restart that picks
-  up an edited `.conf` does at the same time. The escape hatch would be a CLEAR
-  that executes and resets the chain, and `delay: down 1h multiplier 1.5 max
-  4h` in `health.d/backup.conf` blocks exactly that: every CLEAR is held an
-  hour, the alarm re-fires first, and the CLEAR is superseded (`UPDATED`)
-  before its delay expires. The two mechanisms interlock. **Not**
-  recipient-specific, contrary to the first two write-ups: a throwaway
-  `to: sysadmin` alarm on vps02 fired and carried `EXEC_RUN` with
-  `exec_code=0`. Script, config and token were never at fault — replaying
-  netdata's real-mode arguments by hand delivers, as `netdata` and as
-  `root`. The lesson: **an alarm can look armed on the dashboard while being
-  permanently silent for one status.** Verify with a real transition, never
-  an interactive `alarm-notify.sh test`, and never make a Netdata alarm the
-  only delivery path for something that matters.
-
-- Netdata's alarm dedup state resets when an alarm's `config_hash_id` changes,
-  not merely on restart (measured 2026-08-19: `046da83b…` → `4686c70f…` at the
-  04:46:03Z restart, no transition recorded, and the wedge was gone by the
-  10:01:03Z drill). So when an alarm is stuck silent, edit its `.conf` and
-  redeploy; do not just restart netdata. And re-run the
-  stale/recover/stale drill after any change to `health.d/backup.conf`, to
-  prove CRITICAL → CLEAR → CRITICAL all still execute.
-
-- `sed -i` does **not** propagate into a bind-mounted single file: it writes
-  a new inode and the container keeps reading the old one. Use
-  `cat new > file` for in-place edits of mounted configs (`netdata.conf`,
-  `health.d/*.conf`) on these nodes.
-
-- `delay: down 1h multiplier 1.5 max 4h` in `health.d/backup.conf` holds
-  every CLEAR for an hour and cancels it outright if the alarm re-fires
-  first, so a flapping alarm never sends a recovery (`delay: 3600` on every
-  CLEAR in the transition records). Fine for a dashboard, useless as
-  notification.
-
-- rclone's S3 backend calls `CreateBucket` before uploading, to create the
-  bucket if it is missing. An R2 token scoped to Object Read & Write cannot
-  do that, so every upload died with `403 AccessDenied: CreateBucket` while
-  the credentials were in fact fine. Fix is
-  `RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true`, not a wider token. Read the API
-  call named in a 403 before assuming the key is wrong.
-
-- vps01's system clock is **UTC-4**, not UTC (seen in the backup log's
-  `-04:00` stamps while rclone logged UTC). Any cron entry written as plain
-  UTC would fire four hours off, so do not assume these nodes are UTC.
-  This entry used to end "the backup crontab pins `CRON_TZ` for this reason;
-  do the same for anything else scheduled here" — **superseded**: Debian's
-  cron ignores `CRON_TZ` entirely (see the entry below). Schedule hourly and
-  gate on `TZ=<zone> date +%H` inside the script instead.
-
-- `deploy.yml`'s "Install backup cron" step pipes into `crontab -`, which
-  **replaces the deploy user's entire crontab**, it does not append. That is
-  fine while the backup is its only entry; the moment a second scheduled job
-  exists on vps01, this step will silently delete it. Add the second entry to
-  the same step rather than installing it by hand.
-
-- Dokploy v0.29.14 has **no 2FA and no login/audit log** (absent or
-  license-gated). Verified empirically, not just from docs: 30 days of
-  `docker service logs dokploy` is 38 lines with zero auth events. Don't
-  plan a security control around either existing. Authentication and the
-  access log both live in Cloudflare Access instead (Zero Trust → Logs →
-  Access), which is the better placement anyway: it records attempts
-  that never reach the origin.
-
-- vps00 and vps01 once shared one `CLOUDFLARE_TUNNEL_TOKEN`. Cloudflare
-  load-balanced `dokploy.maybeit.work` across both connectors; vps01 had
-  nothing on that origin port, so ~2/3 of requests 502'd. Fixed by giving
-  vps01 its own tunnel + token (rail 2). Never reuse another node's token
-  when adding a service here.
-
-- Debian 12's cron **ignores `CRON_TZ`** (verified empirically on vps01,
-  2026-08-18: a `CRON_TZ=Asia/Manila` entry scheduled to fire 3 minutes out
-  in Manila time never ran). The backup was therefore scheduled for 03:00
-  *node-local*, not Manila, and `deploy.yml`'s comment claimed otherwise.
-  Fixed by running the script hourly and gating on `TZ=Asia/Manila date +%H`
-  inside the script. Never trust a timezone-aware cron entry here without
-  testing it with a near-term throwaway entry.
-
-- `deploy.yml`'s `rsync -az --delete stacks/vps01/` **deleted
-  `/opt/stacks/vps01/backup/`** on every deploy: the run log, the local
-  archive, and the `.last-success` stamp the Netdata age alarm reads. The
-  alarm did its job and sat CRIT for ~13.7h unnoticed. Fixed with
-  `--exclude 'backup/'`. Any node-side state living under a directory an
-  rsync `--delete` targets needs an exclude, added in the same commit as the
-  state.
+- **When a container reads a secret file, check the *in-container* uid and
+  test as that user, not root.** `deploy.yml` wrote
+  `health_alarm_notify.conf` with `umask 077` — `600 deploy:deploy` (uid
+  1000), unreadable by the container's netdata user (uid 201) — so every
+  alarm on all three nodes failed to deliver from setup until 2026-08-18
+  while the config looked present and correct on the host. Write it into
+  the netdataconfig volume as uid 201 (Alert delivery above).
+- **Set `SEND_EMAIL="NO"` in the notify templates.** `alarm-notify.sh`
+  enables email **by default**, so with no MTA every alert also ran
+  sendmail (`account default not found`, error 78) — a steady error stream
+  that hid the broken config above. Check a notifier's real default before
+  writing that an unlisted method is disabled.
+- **Never `sed -i` a bind-mounted single file:** it writes a new inode and
+  the container keeps reading the old one. Use `cat new > file` for
+  `netdata.conf` and `health.d/*.conf`.
+- **Dokploy v0.29.14 has no 2FA and no login/audit log** (verified
+  empirically, not from docs). Don't plan a security control around
+  either; authentication and the access log live in Cloudflare Access
+  (Zero Trust → Logs → Access), which also records attempts that never
+  reach the origin.
+- **Never reuse another node's tunnel token** (rail 2). vps00 and vps01
+  once shared one, so Cloudflare load-balanced `dokploy.maybeit.work`
+  across both connectors and ~2/3 of requests 502'd on the node with
+  nothing on that origin port.

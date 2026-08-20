@@ -4,35 +4,32 @@
 > makes the agent more reliable, not because it reads nicely. If a rule
 > helps the agent but confuses Ex, keep it and add one clarifying line.
 
-Map, not manual. Budgets apply to what is always in context: ~500 lines
-each, for this root and for every directory `CLAUDE.md`. Skills are exempt:
-they load on demand, so their cost is paid only when used; keep them
-scannable, not short. Anything longer than a couple of lines of install
-commands, config, or multi-step workflow belongs in `.claude/skills/`, not
-here.
+Map, not manual. ~500 lines each for this root and every directory
+`CLAUDE.md`, because they are always in context. Skills are exempt — they
+load on demand, so keep them scannable, not short. Anything longer than a
+couple of lines of install commands, config, or multi-step workflow belongs
+in `.claude/skills/`.
 
 ## What / where / when / why / how
 
 - **What**: `homelab-but-the-home-is-silent`, GitOps infra for a 3-node
   Debian 12 VPS homelab. Dokploy deploys, Cloudflare Tunnel is the only
   public ingress, GitHub Actions is the only path to production.
-- **Where**: `vps00` (primary, Dokploy control plane), `vps01` and
-  `vps02` (Dokploy Remote Servers). 2 vCPU / 2GB RAM each, no swap by
-  default. Each node runs its **own independent single-node Swarm**:
-  three separate swarms, not one cluster, so nothing needs 2377/7946
-  open between them (verified 2026-08-16). All three run `cloudflared`,
-  Netdata, and a Dokploy-installed `dokploy-traefik`.
-- **When**: work in progress. Provisioning/hardening done and CI-
-  deployable; first workload live. `main` is protected against deletion
-  and force-pushes by a GitHub ruleset (verified by attempting a rewind
-  and being rejected), so a history rewrite is now a deliberate act:
-  disable the ruleset, rewrite, re-enable. Don't assume you can
-  force-push.
+- **Where**: `vps00` (primary, Dokploy control plane), `vps01`, `vps02`
+  (Dokploy Remote Servers). 2 vCPU / 2GB RAM each, no swap by default. Each
+  node runs its **own independent single-node Swarm** — three swarms, not
+  one cluster, so nothing needs 2377/7946 open between them (verified
+  2026-08-16). All three run `cloudflared`, Netdata, `dokploy-traefik`.
+- **When**: work in progress. Provisioning/hardening done and
+  CI-deployable; first workload live. A GitHub ruleset protects `main`
+  against deletion and force-pushes (verified by attempting a rewind and
+  being rejected), so a rewrite is deliberate: disable the ruleset,
+  rewrite, re-enable. Don't assume you can force-push.
 - **Why**: learn GitOps end to end on real, cheap, constrained hardware.
   The constraints are the point, not accidents to design around.
-- **How**: infra under `infra/`, workloads under `stacks/`, push to
-  `main`, `validate.yml` gates `deploy.yml`, one approval gates production
-  and all three nodes then deploy in parallel.
+- **How**: infra under `infra/`, workloads under `stacks/`, push to `main`,
+  `validate.yml` gates `deploy.yml`, one approval gates production and all
+  three nodes then deploy in parallel.
 
 ## Directory map
 
@@ -40,10 +37,11 @@ here.
 |---|---|---|
 | `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml`: cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
+| `stacks/vps01/` | Backups (booking + ezBookkeeping), R2 retention, drills, staleness alerting | exists → `stacks/vps01/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
 | `dokploy/` | Compose apps Dokploy pulls from git (not `deploy.yml`) | exists → `dokploy/CLAUDE.md` |
-| `worker/status/` | Cloudflare Worker: status page + health poller | exists → worker/status/CLAUDE.md |
+| `worker/status/` | Cloudflare Worker: status page + health poller | exists → `worker/status/CLAUDE.md` |
 | `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`); read-only history, nothing deploys from here | none: no rails of its own |
 
 Keep this column current the same commit you add or remove a directory
@@ -51,28 +49,28 @@ file.
 
 ## Reading protocol: use the distributed context, don't just write it
 
-**Before working in any directory:** read its `CLAUDE.md` first if one
-exists. Check, don't assume it's already in context. Its rails apply on
-top of root's for everything you do there.
+**Before working in any directory:** read its `CLAUDE.md` if one exists.
+Check, don't assume it's in context. Its rails apply on top of root's.
 
-**After a context compaction, or any point where you're unsure what's
-still in context:** re-read this file and the active directory's
-`CLAUDE.md` before continuing, and say in one line that you did. Losing
-these rules mid-session is the most likely way a long session goes bad.
+**After a compaction, or whenever you're unsure what's still in context:**
+re-read this file and the active directory's `CLAUDE.md`, and say in one
+line that you did. Losing these rules mid-session is the most likely way a
+long session goes bad.
 
 **If a directory file contradicts root:** root wins. Stop, name the two
-conflicting lines, ask. Then fix the loser in the same turn and log it.
+conflicting lines, ask, then fix the loser in the same turn and log it.
 Never silently pick one.
 
 ## Hard rails: never break these
 
 1. **No open inbound ports except SSH (22).** Public traffic goes through
-   Cloudflare Tunnel, never a direct port. UFW alone does not enforce
-   this: Docker's published ports bypass it. Enforced by
-   `harden-node.sh` (`DOCKER-USER` drops + `daemon.json` loopback bind);
-   checked by sweeping ports from off-node after any provisioning run:
-   `nc -z -G 3 -w 3 <ip> <port>` over 22/80/443/2377/3000/19999 must
-   answer on 22 and nothing else.
+   Cloudflare Tunnel, never a direct port. UFW alone does not enforce this:
+   Docker's published ports bypass it. Enforced by `harden-node.sh`
+   (`DOCKER-USER` drops + `daemon.json` loopback bind). Neither covers
+   ingress-mode Swarm publishes, which traverse `DOCKER-INGRESS` --
+   see `scripts/CLAUDE.md`. Checked by sweeping
+   from off-node after any provisioning run — `nc -z -G 3 -w 3 <ip> <port>`
+   over 22/80/443/2377/3000/19999 must answer on 22 and nothing else.
 2. **One tunnel token per node, never shared.** A shared token means
    requests can land on the wrong node and 502.
 3. **`network_mode: host` on every `cloudflared` service.** Bridge mode
@@ -83,24 +81,25 @@ Never silently pick one.
    `infra/inventory.example.yaml` stays redacted.
 6. **CI deploy user: key-only, no sudo, no password login.** Dokploy uses
    its own separate credential.
-7. **One approval gates production; all three nodes then deploy in
-   parallel.** Sequential until 2026-08-19, changed at Ex's request: an
-   `environment:` on each deploy job prompted for approval three times per
-   run, and the gate is now a single `approve` job the three deploys hang
-   off. The sequencing did buy something real, a bad stack file reaching
-   one node before the others, and that protection is gone: what remains is
-   `validate.yml`, the single approval, and `git revert` (rail 12). Never
-   drop the approval gate too.
+7. **One approval gates production, in every workflow that reaches it** —
+   `deploy.yml` via a single `approve` job the three parallel node deploys
+   hang off, `deploy-worker.yml` via `environment: production` on its lone
+   deploy job (it had no gate at all until 2026-08-20). Mechanism and why:
+   `.github/workflows/CLAUDE.md`. Node deploys were sequential until
+   2026-08-19; dropping that lost a real protection, a bad stack file
+   reaching one node before the others. What remains is `validate.yml`, the
+   single approval, and `git revert` (rail 12). Never drop the gate too.
 8. **`validate.yml` passes before `deploy.yml` runs.** Fix lint failures;
    never bypass them.
 9. **Biome lints/formats all JS, TS, JSON, JSONC, CSS.** No ESLint, no
    Prettier. Config: `biome.json`, see the `tooling-setup` skill.
-10. **`yamllint` lints every `.yml`/`.yaml` file** until Biome ships YAML
-    support ([tracked, not shipped](https://github.com/biomejs/biome/issues/2365)).
+10. **`yamllint` lints every `.yml`/`.yaml`** until Biome ships YAML support
+    ([tracked, not shipped](https://github.com/biomejs/biome/issues/2365)).
     Config: `.yamllint`, see the `tooling-setup` skill.
-11. **Never print secret material in full**: tunnel tokens, key
-    contents, `.env` values, in your own chat output, not just commits.
-    Redact (`TUNNEL_TOKEN=***redacted***`).
+11. **Never print secret material in full** — tunnel tokens, key contents,
+    `.env` values — in chat output, not just commits. Redact
+    (`TUNNEL_TOKEN=***redacted***`). Do not lean on gitleaks for this; see
+    the failure log for what it actually scans.
 12. **Rollback is `git revert` + push, not manual node surgery.** Let
     `deploy.yml` redeploy the last-known-good stack.
 
@@ -109,21 +108,19 @@ Never silently pick one.
 Every change runs through this before you report it done.
 
 ```sh
-pre-commit run --all-files   # yamllint --strict, actionlint, gitleaks,
-                             # shellcheck -s sh, trailing-whitespace,
-                             # large-file/private-key checks, and two
-                             # local hooks: no-real-ips (rail 5),
-                             # biome ci . (rail 9)
+pre-commit run --all-files   # every hook in .pre-commit-config.yaml:
+                             # yamllint --strict, actionlint, gitleaks,
+                             # shellcheck -s sh, the pre-commit-hooks
+                             # basics, and two local hooks --
+                             # no-real-ips (rail 5), biome ci . (rail 9)
 shellcheck scripts/*.sh      # every script stays shellcheck-clean
 git ls-files '*CLAUDE.md' | xargs wc -l
 ```
 
-- The `git ls-files` line prints but never fails; acting on it is on you:
-  any `CLAUDE.md` over ~500 lines gets fixed before you report done. It
-  lists *tracked* files, so a brand-new one counts from the moment you
-  `git add` it. Do not "simplify" it to a shell glob or to `find`: both
-  silently miss the dot-directories, `.claude/` and `.github/` among them
-  (see failure log).
+- The `git ls-files` line prints but never fails; acting on it is on you.
+  Any `CLAUDE.md` over ~500 lines gets fixed before you report done. It
+  lists *tracked* files, so a new one counts once you `git add` it. Never
+  swap it for a glob or `find` — both are wrong, see the failure log.
 - `biome ci .` finding nothing to lint is a pass, not a skip.
 - Scripts stay idempotent: trace or run twice, confirm the second is a
   no-op.
@@ -131,191 +128,185 @@ git ls-files '*CLAUDE.md' | xargs wc -l
   `infra/inventory.example.yaml` with a real IP. Pin
   `.pre-commit-config.yaml` hook revs exactly, same as any tool.
 
-**Definition of done:**
-
-- Stack/compose change → `docker compose config` passes, plus
-  `pre-commit`.
-- Workflow change → `actionlint` passes, and you can state what would've
-  caught the bug you're fixing.
-- Script change → idempotency check above, done and stated.
-- Anything else → `pre-commit run --all-files` green is the floor. Unsure
-  what "done" means for an unlisted change type? Ask.
+**Definition of done:** stack/compose change → `docker compose config`
+passes, plus `pre-commit`. Workflow change → `actionlint` passes, and you
+can state what would've caught the bug you're fixing. Script change →
+idempotency check above, done and stated. Anything else → `pre-commit run
+--all-files` green is the floor. Unsure for an unlisted change type? Ask.
 
 ## Tooling
 
 Five tools: Biome and yamllint (linters), superpowers (workflow skills),
-rtk (compresses bash output before it hits context), caveman (terse
-output + commit messages). All install-if-missing and pre-approved; say
-what you installed in your summary.
+rtk (compresses bash output before it hits context), caveman (terse output
++ commit messages). All install-if-missing and pre-approved; say what you
+installed in your summary.
 
 Install commands, hard-railed configs, and the superpowers skill-mapping
-table live in **`.claude/skills/tooling-setup/SKILL.md`**. Load it when
-you actually need it: a tool check fails, a config file is missing, or
-setup is the task, not routinely at session start. It is a skill
-precisely so it stays out of context until needed.
-
-Never inline its contents into this file or a directory file.
+table live in **`.claude/skills/tooling-setup/SKILL.md`**. Load it when you
+need it — a tool check fails, a config is missing, or setup is the task —
+not routinely at session start. It is a skill precisely so it stays out of
+context until needed. Never inline it here or in a directory file.
 
 ## Failure log (cross-cutting only)
 
-Directory-specific mistakes go in that directory's `CLAUDE.md`.
+Directory-specific mistakes go in that directory's `CLAUDE.md`. The
+incident history behind every one-line rule in every failure log here:
+`.claude/skills/failure-log/SKILL.md`.
 
-- Dokploy's control plane was uncapped by default and ate a
-  disproportionate share of a 2GB node. New control-plane-style
-  services get an explicit cap from the start. Detail moved to
-  `scripts/CLAUDE.md` (the fix is `cap-dokploy-resources.sh`).
-- Fail2Ban and the `docker compose pull`-on-empty-stack gotchas moved to
-  `scripts/CLAUDE.md` and `.github/workflows/CLAUDE.md` respectively:
-  each is specific to one script/workflow, not cross-cutting.
-- Pin exact versions/commits for Biome, rtk, caveman, yamllint. Never
+- **Assert effective values, never the strings you wrote.** A config you
+  authored is no proof the tool read it, honored it, or won against another
+  source. Three lost sessions: Biome's `preset: "none"`, an rtk config at a
+  path rtk never reads, an sshd drop-in outranked by another file while
+  `sshd -t` still passed (`scripts/`, `infra/`). Make the tool print what
+  it resolved.
+- **A rail with no enforcement point is undetectable drift.** Rail 9 had no
+  pre-commit hook and no `validate.yml` step until a `local` hook was added
+  (`language: node`, `additional_dependencies: ["@biomejs/biome@2.5.8"]`,
+  matching `biome.json`'s `$schema`; bump both together). Same class as
+  rail 5's hook, the uninstalled `pre-commit`, and the budget check. Give
+  every new rail a check that runs.
+- **`pre-commit` was configured but never installed as a git hook** (no
+  `.git/hooks/pre-commit`), so `git commit` ran nothing locally; only
+  `validate.yml` caught anything, after a push. Run `pre-commit install` in
+  a fresh clone — a config file is not an installed hook.
+- **`gitleaks` scans staged changes only.** Entry: `gitleaks protect
+  --verbose --redact --staged`, `pass_filenames: false` — so under
+  `--all-files` in `validate.yml` nothing is staged and it scans nothing
+  (re-verified 2026-08-20). Never express a repo-wide content rule as a
+  `.gitleaks.toml` rule and assume CI enforces it; use a `local` hook
+  taking filenames. Keep gitleaks as a commit-time check, but don't credit
+  it with coverage it lacks.
+- **Budget check: `git ls-files '*CLAUDE.md' | xargs wc -l`, nothing else.**
+  A `wc -l */CLAUDE.md` glob skips dot-directories (`.claude/`,
+  `.github/`); under rtk a `find` either errors out or walks untracked
+  worktrees and reports a wrong count with exit 0, looking correct.
+  Silently wrong does more damage than loudly broken. **When a rule
+  mandates a tool that rewrites commands, run the rule's own commands under
+  that tool first.** Superseded `find` history archived in
+  `docs/superpowers/failure-log-archive.md`.
+- **Never size a dataset with `du` on its volume.** `du -sh` on
+  `booking-ptpwn8_mysql-data` said 203M; that became "~200MB of real
+  appointments" and reached five documents before anyone dumped the
+  database. Real: 14 tables, ~126 rows, 0.4 MB — the rest is MySQL 8.0's
+  ibdata1, redo/undo tablespaces, binlogs. Query
+  `information_schema.tables`, or dump and size the dump. **An inferred
+  number is said once, hedged, until measured — never copied into a second
+  document.**
+- **Pin `biome.json`'s `$schema` and syntax to the exact version
+  installed**, never to an older doc or skill: Biome 2.x's schema moved
+  fast, and `biome migrate --write` produced `linter.rules.preset: "none"`,
+  silently disabling every rule — verify the migrated `linter` block by
+  hand. The current spellings live in `tooling-setup`, which carried the
+  1.x ones the whole time this entry called them wrong (fixed 2026-08-16):
+  **when a log entry says a config shape is wrong, grep the skills for it
+  the same turn.** Original entry in
+  `docs/superpowers/failure-log-archive.md`.
+- **Never hand-create a config at a path a doc asserts; make the tool say
+  where it reads from.** `tooling-setup` called `~/.config/rtk/config.toml`
+  rtk's path; macOS rtk reads `~/Library/Application Support/rtk/` instead,
+  so the config never loaded and rtk ran on defaults —
+  `display.max_width = 120` chopped output mid-path for a session
+  (2026-08-19). `rtk config --create` writes a populated default at the
+  platform's real path; edit that in place. It exits 1 even on success —
+  judge it by its "Created:" line, not its status.
+- **A `git filter-repo` rewrite invalidates every commit SHA already
+  written down** — handoffs, plans, specs, and the rewrite's own commit
+  message. Grep `docs/` for short SHAs before force-pushing one; cite
+  commits by *message* in documents meant to outlive a rewrite.
+- **Pin exact versions/commits** for Biome, rtk, caveman, yamllint. Never
   `latest`.
-- yamllint's default `truthy` rule flags `on:` in GitHub Actions
-  workflows as a boolean. Fix `.yamllint` (`check-keys: false`), never
-  the workflow file.
-- A `wc -l CLAUDE.md */CLAUDE.md */*/CLAUDE.md` budget check silently
-  skips `.github/`: shell globs don't match dot-directories. This entry
-  used to end "Use `find`" — **superseded** 2026-08-19. Under rtk, which
-  this same file mandates as tooling, the documented
-  `find . -name CLAUDE.md -not -path './node_modules/*' -exec wc -l {} +`
-  exits 1 with "rtk find does not support compound predicates or actions",
-  and the bare `find . -name CLAUDE.md` that rtk *does* accept returns a
-  silently wrong count instead: it walks untracked directories, so with
-  three agent worktrees present it reported 28 files, the 7 real ones plus
-  21 copies under `.claude/worktrees/` (measured 2026-08-19). Exit 0,
-  looking correct. A silently wrong answer beats a loud failure for
-  damage. Use
-  `git ls-files '*CLAUDE.md' | xargs wc -l`: it runs under rtk, includes
-  dot-directories, and skips `node_modules/` for free by only listing
-  tracked files. Fourth instance of the rail 9 / rail 5 / uninstalled
-  pre-commit hook class, a check that exists on paper and does not
-  reliably run — and the first where the check appeared to succeed. When a
-  rule mandates a tool that rewrites commands, run the rule's own commands
-  under that tool before writing them down.
-- Biome 2.x's config schema moved fast: `files.ignore` → `files.includes`
-  with `!` negation, top-level `organizeImports` → `assist.actions.source`,
-  `linter.rules.recommended: true` → `linter.rules.preset: "recommended"`
-  (not `"none"`; `biome migrate --write` mis-converted `recommended: true`
-  to `preset: "none"`, which silently disables all lint rules; verify the
-  migrated `linter` block by hand, don't trust the tool output blindly).
-  Always resolve the exact Biome version being installed and pin
-  `biome.json`'s `$schema` and syntax to that version, not to whatever an
-  older doc/skill shows.
-- Rail 9 (Biome lints everything) existed in this file but was never
-  gate-enforced: no pre-commit hook, no validate.yml step. Fixed by
-  adding a `local` pre-commit hook (`language: node`,
-  `additional_dependencies: ["@biomejs/biome@2.5.8"]`, matching
-  `biome.json`'s `$schema`) so `pre-commit run --all-files` actually
-  runs it. A rail without a wired-in check is undetectable drift;
-  double-check new rails have an enforcement point, not just a sentence.
-- A `git filter-repo` rewrite invalidates every commit SHA already
-  written down: handoffs, plans, specs, and the rewrite's own commit
-  message. Before force-pushing a rewrite, grep `docs/` for short SHAs
-  and plan to annotate them; cite commits by *message* in documents
-  meant to outlive a rewrite. Found the hard way: the security handoff
-  cited `2e8e44d` for its own scrub commit, which the rewrite had
-  already turned into `87ff87b`.
-- `pre-commit` was configured but never installed as a git hook (no
-  `.git/hooks/pre-commit`), so `git commit` ran no checks locally; only
-  `validate.yml` caught anything, after a push. Run `pre-commit install`
-  in a fresh clone; a config file is not an installed hook. Third
-  instance of the same class as rail 9 and rail 5: the check existed on
-  paper and nothing invoked it.
-- The `gitleaks` pre-commit hook's entry is `gitleaks protect --staged`:
-  it scans *staged changes only*. Under `pre-commit run --all-files` in
-  `validate.yml` nothing is staged, so it silently scans nothing. Never
-  express a repo-wide content rule as a custom `.gitleaks.toml` rule and
-  assume CI enforces it; use a `local` hook that takes filenames. gitleaks
-  still earns its place as a commit-time secret check; just do not credit
-  it with coverage it does not have.
-- The `tooling-setup` skill's Biome config block sat at the 1.x
-  spellings (`files.ignore`, top-level `organizeImports`,
-  `rules.recommended: true`) for as long as the log entry above said
-  they were wrong, so following the skill would have reintroduced the
-  exact bug the log warns about. Fixed 2026-08-16. When a failure-log
-  entry says a config shape is wrong, grep the skills for that shape in
-  the same turn; a log entry and a skill that contradict each other is
-  worse than neither.
-- Never size a dataset with `du` on its volume. `du -sh` on
-  `booking-ptpwn8_mysql-data` reported 203M, that number was written down as
-  "~200MB of real appointments", and it was then copied into `README.md`,
-  `stacks/CLAUDE.md`, `dokploy/CLAUDE.md`, the booking compose header and a
-  commit message before anyone dumped the database. The real dataset is 14
-  tables, ~126 rows, 0.4 MB; the rest is MySQL 8.0's own ibdata1, redo/undo
-  tablespaces and binlogs. Measure the data, not its container: query
-  `information_schema.tables`, or take an actual dump and size that. And a
-  number that is inferred rather than measured gets said once, hedged, until
-  it is measured, never copied into a second document.
-- The `tooling-setup` skill called `~/.config/rtk/config.toml` the
-  hard-railed rtk config path. On macOS rtk reads
-  `~/Library/Application Support/rtk/config.toml` instead, so a config
-  written at the documented path is never loaded and rtk silently runs on
-  its defaults: `display.max_width = 120` chopped command output mid-path
-  for a whole session (2026-08-19) and cost several detours re-running
-  commands. Fixed by running `rtk config --create`, which writes a
-  populated default at whatever path that platform actually uses, then
-  editing it in place; the skill now says so. `rtk config --create` exits
-  1 even on success, so judge it by its "Created:" line, not its status.
-  Same class as the Biome entry above: a documented config path or
-  spelling that the tool does not honor is indistinguishable from no
-  config at all. Never hand-create a config at a path a doc asserts; make
-  the tool tell you where it reads from.
+- **yamllint's `truthy` rule flags `on:`** in Actions workflows as a
+  boolean. Fix `.yamllint` (`check-keys: false`), never the workflow file.
+- **New control-plane-style services get an explicit memory cap from the
+  start.** Dokploy's was uncapped and ate a disproportionate share of a 2GB
+  node; fix is `cap-dokploy-resources.sh`, detail in `scripts/CLAUDE.md`.
+- Fail2Ban and `docker compose pull`-on-empty-stack live in
+  `scripts/CLAUDE.md` and `.github/workflows/CLAUDE.md`: one script, one
+  workflow, not cross-cutting.
 
 ## Propagation protocol
 
-Distributed context: this root file, one `CLAUDE.md` per working
-directory, skills in `.claude/skills/` for anything longer. Root is the
-map; directory files carry local rails, vocabulary, and failure logs.
+Distributed context: this root file, one `CLAUDE.md` per working directory,
+skills in `.claude/skills/` for anything longer. Root is the map; directory
+files carry local rails, vocabulary, and failure logs.
 
 **On first substantive work in a directory with no `CLAUDE.md`:**
 
 1. Skip directories that only contain other directories; create the file
-   where the files actually are (`.github/workflows/`, not `.github/`).
+   where the files are (`.github/workflows/`, not `.github/`).
 2. Create `<directory>/CLAUDE.md`, opening with `Parent: ../CLAUDE.md`.
-3. Fill in only what's true there: purpose, local rails, vocabulary,
+3. Fill in only what's true there — purpose, local rails, vocabulary,
    directory-specific commands. Don't repeat root.
 4. End with an empty `## Failure log` heading.
-5. Sweep root's failure log: move any entry that turns out to be about
-   this directory down into the new file, and say so in your summary.
+5. Sweep root's failure log: move any entry that is really about this
+   directory into the new file, and say so in your summary.
 6. Mark the row `exists → <directory>/CLAUDE.md` in the directory map.
 
 **Whenever corrected, or you catch a mistake, or find something true that
 wasn't written down:**
 
-1. One line, imperative, in that directory's failure log: "Do not run X;
-   it causes Y. Do Z instead."
-2. Repo-wide lesson → root's log instead; say so in your summary.
-3. Log it in the same commit/turn as the fix. Never batch for later.
-4. Never delete a superseded line; replace it in place.
+1. One line, imperative, in that directory's failure log: "Do not run X; it
+   causes Y. Do Z instead." **Keep the reason** — a rule without one gets
+   deleted by a future agent who thinks it is redundant. Repo-wide lesson →
+   root's log instead; say so in your summary. The incident story goes in
+   the `failure-log` skill, not inline: the rule is what must be seen while
+   skimming, the story is what is needed once you are already there.
+2. Log it in the same commit/turn as the fix. Never batch for later.
+3. Never delete a superseded line. Replace it in place; or, only when its
+   situation can no longer occur, move the **full original text** to
+   `docs/superpowers/failure-log-archive.md` and leave a one-line pointer
+   naming the lesson and saying it is archived. When in doubt, keep it
+   inline. Compression is not supersession: a lesson that still applies
+   gets shorter, not moved.
 
-**Keeping this current:**
+**A lesson becomes a hard rail only when it gains a check.** This is the
+graduation criterion, and it exists because the most-repeated failure in
+this repo is a rail that reads well and enforces nothing — rail 5, rail 9,
+`pre-commit` itself, the budget check, the sshd drop-in, and a code comment
+citing a `check-rails.sh` that did not exist for months. Promoting lessons
+to rails without checks makes that worse, not better. Sort every lesson
+three ways:
 
-- A directory file past ~500 lines signals splitting the directory, not
-  trimming the file; ask before restructuring.
-- Anything long and reusable → a skill, referenced by one line, never
-  inlined. Never create a directory's `CLAUDE.md` speculatively.
+- **Checkable** → make it a rail, one line, and add the check to
+  `scripts/check-rails.sh` or `.pre-commit-config.yaml` in the same commit.
+  Watch the check fail on a deliberately broken copy before trusting it; a
+  check nobody saw fail is the bug it was meant to prevent.
+- **Judgement, not mechanizable** ("measure, don't infer") → a one-line
+  heuristic in the directory file that needs it. Not a rail; rails inflate
+  and stop being read.
+- **Fixed one-off that cannot recur** → archive it.
+
+Rails stay few and enforced. Twelve get followed; thirty get skimmed.
+
+**Keeping this current:** a directory file past ~250 lines is worth
+splitting by sub-topic (`stacks/` → `stacks/vps01/`, 2026-08-20) or moving
+narrative to a skill; past ~500 signals splitting the directory itself, and
+that needs asking first. Measure cost in words, not lines — rewrapping a
+file to a narrower column changes the line count and nothing else. Anything
+long and reusable → a skill, referenced by one line, never inlined. Never
+create a directory's `CLAUDE.md` speculatively.
 
 ## Self-audit: on demand
 
 Ex runs this manually. When asked: review every `CLAUDE.md` and skill,
 **and `README.md`**, for stale map rows, superseded-but-unreplaced log
-lines, rails that no longer match reality, and anything over budget.
-Report drift, fix what's unambiguous, ask before restructuring.
+lines, rails that no longer match reality, and anything over budget. Report
+drift, fix what's unambiguous, ask before restructuring.
 
 `README.md` is in scope and easy to forget precisely because it isn't a
-`CLAUDE.md`. It is also the only public document here, so a stale claim
-in it is a claim made to strangers: it asserted "no open inbound port
-except SSH, enforced by UFW" while three ports answered from the
-internet.
+`CLAUDE.md` — and it's the only public document here, so a stale claim in
+it is a claim made to strangers. It asserted "no open inbound port except
+SSH, enforced by UFW" while three ports answered from the internet.
 
-**Recommend one, unprompted, when:** the failure log gains 3+ entries in
-a session, a hard rail needed double-checking against real behavior, or
-the repo's structure no longer matches the directory map. One line.
+**Recommend one, unprompted, when:** the failure log gains 3+ entries in a
+session, a hard rail needed double-checking against real behavior, or the
+repo's structure no longer matches the directory map. One line.
 
 ## When you're unsure
 
-Ask before: opening an inbound port, changing tunnel/token/SSH/auth
-setup, changing deploy order or rollback behavior, or removing a guard
-that looks redundant. State assumptions at the top of your summary.
+Ask before: opening an inbound port, changing tunnel/token/SSH/auth setup,
+changing deploy order or rollback behavior, or removing a guard that looks
+redundant. State assumptions at the top of your summary.
 
 Ex is not an engineer. Before a non-trivial infra decision, not after,
 explain in plain terms what and why, in 1-3 sentences. Hard-rail-adjacent

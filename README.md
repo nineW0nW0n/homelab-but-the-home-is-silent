@@ -34,7 +34,8 @@ swarms, not one cluster.
 `scripts/` use RFC 5737 documentation addresses (`203.0.113.x`), and a
 pre-commit hook fails the commit if a routable IPv4 address appears in a
 tracked text file. It matches dotted quads only: IPv6 literals pass, binary
-files are not scanned, and `worker/status/package-lock.json` is excluded.
+files are not scanned, and `worker/status/package-lock.json` and
+`worker/status/node_modules/` are excluded.
 Note the `vps0N.maybeit.work` names are
 inventory labels with no DNS records; they are not substitutes for an
 address.
@@ -80,8 +81,9 @@ what `ufw status` says. Two layers close it, both applied by
 - `"ip": "127.0.0.1"` in `/etc/docker/daemon.json`, so newly published
   ports do not land on `0.0.0.0` by default.
 
-The second does not cover Swarm host-mode or ingress-mode publishes, which
-is why both exist. The check that matters is a port sweep from off-node,
+Neither layer covers ingress-mode Swarm publishes, which traverse a
+different chain (`DOCKER-INGRESS`); nothing here publishes that way today.
+That is precisely why the check that matters is a port sweep from off-node,
 not `ufw status`.
 
 Public hostnames that should not be public are behind **Cloudflare
@@ -124,7 +126,7 @@ worth naming next to a zero-inbound-ports posture.
   workflows/
     validate.yml                     pre-commit over the whole repo, reusable via workflow_call
     deploy.yml                       one approval, then all three nodes in parallel
-    deploy-worker.yml                tests + deploys the status Worker
+    deploy-worker.yml                tests + deploys the status Worker (same production approval)
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
 stacks/
@@ -196,7 +198,11 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 - UFW: deny-all-incoming except SSH, on every node, plus `DOCKER-USER`
   drops, because UFW does not govern container-published ports (see
   [Network model](#-network-model)).
-- sshd: key-only auth (`PasswordAuthentication no`, `UsePAM no`).
+- sshd: key-only auth (`PasswordAuthentication no`, `UsePAM no`,
+  `PermitRootLogin prohibit-password`), written to
+  `/etc/ssh/sshd_config.d/00-hardening.conf` so it is read before the
+  cloud-init drop-in that sets `PasswordAuthentication yes`, and asserted
+  against `sshd -T` afterwards.
 - Fail2Ban: aggressive sshd jail, `backend = systemd` (these images ship
   without rsyslog, so the default file-based jail backend has nothing to
   tail).
