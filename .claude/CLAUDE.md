@@ -136,13 +136,21 @@ idempotency check above, done and stated. Anything else → `pre-commit run
 
 ## Tooling
 
-Five tools: Biome and yamllint (linters), superpowers (workflow skills),
-rtk (compresses bash output before it hits context), caveman (terse output
-+ commit messages). All install-if-missing and pre-approved; say what you
-installed in your summary.
+Tools: Biome and yamllint (linters), superpowers (workflow skills), rtk
+(compresses bash output before it hits context), caveman (terse output +
+commit messages). All install-if-missing and pre-approved; say what you
+installed in your summary. No count here on purpose — a hardcoded one goes
+stale the next time this list changes.
 
-Install commands, hard-railed configs, and the superpowers skill-mapping
-table live in **`.claude/skills/tooling-setup/SKILL.md`**. Load it when you
+Cloudflare MCP servers read live account state — Access apps and policies,
+per-tunnel ingress, DNS, WAF rules, Worker deploys and secret-binding
+*names*. Verify those against the account instead of asserting them, and
+never against rail 1: Cloudflare cannot see what listens on a node, only
+the off-node port sweep can. `cloudflare-api`'s `execute` also writes, so
+"ask before changing tunnel/token/SSH/auth setup" governs it.
+
+Install commands, hard-railed configs, and the skill/MCP mapping tables
+live in **`.claude/skills/tooling-setup/SKILL.md`**. Load it when you
 need it — a tool check fails, a config is missing, or setup is the task —
 not routinely at session start. It is a skill precisely so it stays out of
 context until needed. Never inline it here or in a directory file.

@@ -72,6 +72,24 @@ skips `node_modules/` free. **When a rule mandates a tool that rewrites
 commands, run the rule's own commands under that tool first.** Superseded
 `find` history archived in `docs/superpowers/failure-log-archive.md`.
 
+### Never hash the working tree
+
+**Any deployed-vs-repo comparison pins to an explicit ref — `git cat-file
+blob <ref>:<path>` — and never hashes the working tree**, which is shared
+mutable state under concurrent agents. An agent proving the Worker deployed
+to Cloudflare matched the repo SHA-1'd `worker/status/src/page.html` and
+compared it against the hash embedded in the deployed module's part name;
+its first and second measurements **disagreed** (2026-08-20). The tool was
+not lying and the deploy had not changed: a concurrent process moved `HEAD`
+between two bash calls (`docs/claude-md-self-audit` →
+`docs/mcp-and-skills-in-context`), and this repo additionally carries three
+live agent worktrees under `.claude/worktrees/`. The disagreement is what
+saved it — had the two measurements happened to agree, a wrong "deployed
+matches repo" would have been recorded as verified. Same class as the
+gitleaks `--staged` scan that scans nothing under `--all-files` and the
+`find`-based budget check that returned a silently wrong count with exit 0:
+a measurement that produces a confident number from the wrong input.
+
 ### The 203M that wasn't
 
 **Never size a dataset with `du` on its volume.** `du -sh` on
@@ -589,9 +607,37 @@ than as a policy that needed narrowing.
 
 The `wrangler login` OAuth token can't read or write Access config, and the
 Zero Trust API returns `success: true` with an **empty result set** rather
-than a 403. Never read that as "no Access apps configured" — curl the
-hostname and look for the `302` to `<team>.cloudflareaccess.com`. Access
-work is dashboard-only.
+than a 403. Never read that as "no Access apps configured" — an empty list
+from that API means "look at your token's scopes first", and curling the
+hostname for the `302` to `<team>.cloudflareaccess.com` stays a valid
+cross-check.
+
+**The conclusion drawn from that, "Access work is dashboard-only", was
+wrong; superseded 2026-08-20 by live calls on this account.** The symptom
+was diagnosed right and the cause wrong: this is **credential scope**, not
+an API limitation. The `wrangler login` OAuth token lacks Access scopes,
+and the Zero Trust API's failure mode for an under-scoped token is that
+empty success — which is exactly what made it read as a platform limit. A
+differently-scoped credential reads the same endpoints fine: the
+`cloudflare-api` MCP server's credential got `success: true`, HTTP 200, and
+**5 real apps** from `GET /accounts/{id}/access/apps` — `dokploy`
+(`dokploy.maybeit.work`), a second path-scoped `dokploy` app on
+`dokploy.maybeit.work/api/deploy`, and
+`vps00-metrics`/`vps01-metrics`/`vps02-metrics`. Policies are readable per
+app: `dokploy.maybeit.work` carries only `owner email allow`; the
+path-scoped `/api/deploy` app carries `webhook-bypass` (decision `bypass`,
+include `everyone`); `vps00-metrics` carries `status-worker service auth`
+(decision `non_identity`, include `service_token`) plus `owner email
+allow`. `GET /accounts/{id}/access/service_tokens` returns one token,
+`status-worker`. That independently **confirms** the security claim in
+`worker/status/CLAUDE.md` that the `status-worker` service-token policy was
+detached from the Dokploy application — it is genuinely absent from that
+app's policy list, which until now was assertable only from the dashboard.
+
+Generalised, because it is this repo's most-repeated failure class: **an
+empty success response is not evidence of absence, and "the platform can't
+do this" is a conclusion that needs a second credential tried before it
+gets written down.**
 
 ### A security comment citing a script that did not exist
 
