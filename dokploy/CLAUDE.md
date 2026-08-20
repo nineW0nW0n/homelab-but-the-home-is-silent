@@ -46,8 +46,36 @@ Cloudflare, nothing here creates it, and it leaves `/api/deploy/*` guarded by
 the webhook URL's secret alone — **treat those URLs (Dokploy app →
 Deployments tab) as secrets.**
 
-When autodeploy silently stops, check Access first: its failure mode is a
-redirect, not an error.
+**Autodeploy is dead again as of 2026-08-19, and the cause is not Access.**
+The zone-level WAF rule `Block non-local traffic` was last updated
+2026-08-19T02:57:55Z; the last Dokploy deployment of any app is
+2026-08-18T09:04:46Z. Its expression blocks every source outside PH for every
+host but the apex — and **GitHub's webhook servers are not in PH**, so their
+POST to `dokploy.maybeit.work/api/deploy/<secret>` is `403`ed at the WAF,
+which evaluates *before* Access. The 2026-08-18 bypass application is intact
+and simply never reached. PR #44 merged with `autoDeploy = t` on the `booking`
+compose app and nothing deployed.
+
+So the failure mode has changed shape: it used to be a `302` from Access, it
+is now a `403` from the WAF, and both look identical from GitHub's side —
+silence. **Verify against Dokploy's own tables, not by curling from here**
+(from a PH client everything looks fine):
+
+```sh
+# on vps00 -- last deployment of any app, and whether autoDeploy is even on
+docker exec $(docker ps -qf name=dokploy-postgres) \
+  psql -U dokploy -d dokploy -c 'SELECT title, status, "createdAt" FROM deployment ORDER BY "createdAt" DESC LIMIT 3;'
+docker exec $(docker ps -qf name=dokploy-postgres) \
+  psql -U dokploy -d dokploy -c 'SELECT name, "sourceType", "autoDeploy", branch FROM compose;'
+```
+
+A recent merge to a `dokploy/` path with no matching deployment row is the
+symptom. Fixing it means carving `dokploy.maybeit.work/api/deploy` out of the
+geo rule, or scoping that rule so it cannot swallow a webhook — an unresolved
+decision, deliberately not made here. Until then, redeploy from Dokploy's UI.
+
+When autodeploy silently stops, check the WAF rule first and Access second:
+both fail as silence, and neither raises anything.
 
 **Run these from a PH client — Ex's laptop, not a node and not CI.** The zone
 carries a WAF rule `(ip.src.country ne "PH" and http.host ne "maybeit.work")`,

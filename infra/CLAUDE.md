@@ -44,19 +44,24 @@ keypairs from CI, so a key that works here works there. By convention
 `IdentitiesOnly yes`) and a `vps0N-root` alias for root, so `ssh vps01` is the
 normal way in.
 
-**vps01 is the exception** (verified 2026-08-20): its `deploy`
-`authorized_keys` holds two keys, `ci-deploy` **and `dokploy`** — the same key
-Dokploy uses as `root@` on that node, added by hand (mtime 2026-08-16, four
-days after root's). `deploy` is in the `docker` group, so this is a second
-root-equivalent path onto vps01 that nothing else in the repo mentions. Not
-privilege escalation — Dokploy already holds root there — but it is an
-undocumented access path. **Do not remove it; that is Ex's call.**
+**vps01 briefly had a second key and no longer does.** Its `deploy`
+`authorized_keys` held `dokploy` alongside `ci-deploy` — the same key Dokploy
+uses as `root@` there, added by hand (mtime 2026-08-16). Since `deploy` is in
+the `docker` group, that was a second root-equivalent path onto vps01 that
+nothing in the repo mentioned. **Removed 2026-08-20**, after confirming from
+Dokploy's own database that it connects as `root` on port 22 — so the `deploy`
+copy bought nothing. Backup kept on the node as
+`authorized_keys.bak.20260820`; root's copy untouched, so Dokploy is unaffected.
 
 | Node  | `deploy` authorized_keys | `root` authorized_keys   |
 |-------|--------------------------|--------------------------|
 | vps00 | `ci-deploy`              | `vps-maybeit`            |
-| vps01 | `ci-deploy`, `dokploy`   | `vps-maybeit`, `dokploy` |
+| vps01 | `ci-deploy`              | `vps-maybeit`, `dokploy` |
 | vps02 | `ci-deploy`              | `vps-maybeit`, `dokploy` |
+
+**Check Dokploy's own record before reasoning about how it reaches a node**:
+`SELECT name, username, port FROM server;` in `dokploy-postgres` on vps00. It
+is the only authoritative answer, and it is what settled this.
 
 `~/.ssh/id_ed25519_vps` (comment `vps-maybeit`) is the **root** key, not a
 dead one: `root@` accepts it on all three nodes (verified 2026-08-18), and it
