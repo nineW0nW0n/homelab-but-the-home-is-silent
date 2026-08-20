@@ -209,7 +209,8 @@ assume.
 **Deliberately not used here, so don't re-litigate it:**
 `cloudflare:cloudflare` (a superset of `wrangler` + `cloudflare-one` +
 docs, at more context than the three of them); `durable-objects`,
-`agents-sdk`, `turnstile`, `email-service`, `sandbox-*` (none of that
+`agents-sdk`, `cloudflare:turnstile-spin`,
+`cloudflare:cloudflare-email-service`, `sandbox-*` (none of that
 exists in this repo); the design skills `theme-factory`,
 `ui-ux-pro-max`, `frontend-design`, `design`, `banner-design`, `dataviz`
 (`page.html` is a verbatim copy from `nineW0nW0n/maybeitwork-site` —
@@ -238,14 +239,12 @@ measured against this account, not read off a doc page.
   It is not a substitute for the real doc page when precision matters:
   it returns duplicated changelog chunks with no per-chunk version
   metadata.
-- **`cloudflare-observability`** — returns nothing today. Not "no
-  traffic": `observability_values` for `$metadata.service` over 7d
-  returned zero values, and `GET
-  /accounts/{id}/workers/scripts/maybeit-status/settings` has no
-  `observability` key at all. The fix is a two-line `[observability]` /
-  `enabled = true` block in `worker/status/wrangler.toml` plus a
-  redeploy, giving 7-day retention. Until that ships, don't reach for
-  this server.
+- **`cloudflare-observability`** — works, as of 2026-08-20. Filter on
+  `$metadata.service = maybeit-status`; retention is 7 days. Measured
+  that day: 29 events over 24h. The empty result set before then was
+  absent config, not absent traffic — `worker/status/wrangler.toml`'s
+  `[observability]` block is what changed, and its own comment records
+  it.
 - **`cloudflare-builds`** — dead weight here. Workers Builds is
   Cloudflare-side git-connected CI; this repo deploys through
   `deploy-worker.yml` and `wrangler-action`. Measured `total_count: 0`,

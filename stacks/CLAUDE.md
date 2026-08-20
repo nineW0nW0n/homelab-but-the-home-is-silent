@@ -17,19 +17,40 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
+Six hostnames are live (verified 2026-08-20), across three tunnels:
+
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
-  (`dokploy`, 24h session) since 2026-08-16, policies mirroring the `*-metrics`
-  apps exactly: `status-worker service auth` (service token, so the status
-  Worker can still poll it) then `owner email allow`. Unauthenticated must
-  `302` to `old-firefly-996b.cloudflareaccess.com`; a `200` means the policy
-  detached and the control plane is open again.
+  (`dokploy`, 24h session) since 2026-08-16, carrying **one** policy:
+  `owner email allow`. It does **not** carry a service-token policy — that
+  was detached 2026-08-20 so this public Worker's credential could not reach
+  the deploy control plane, and re-adding one to "match the `*-metrics` apps"
+  re-opens exactly what was closed. Unauthenticated must `302` to
+  `old-firefly-996b.cloudflareaccess.com`; a `200` means the policy detached
+  and the control plane is open again. Probe `/` only, and **from a PH
+  client** — the zone's geo rule 403s everything else before Access is
+  reached, and `/api/deploy` is a separate bypass app that answers `401`.
+- `vps00-metrics.maybeit.work` → `http://localhost:19999` on vps00, same
+  tunnel. Behind its own Access app; the `status-worker` service token opens
+  the three `*-metrics` apps and nothing else.
 - `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
   Traefik, forwarding to whichever container the Domain in Dokploy's UI points
   at), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
-- vps02's Netdata → `http://localhost:19999`, token
-  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, and
-  vps02's first workload *from this repo*.
+- `budget.maybeit.work` → `http://localhost:80` on vps01, same tunnel:
+  ezBookkeeping, the SQLite dataset `vps01/CLAUDE.md` backs up. Behind its
+  own Access application (`budget`, 24h session) since 2026-08-20, one
+  policy: `owner email allow`. Until then the zone geo rule was the only
+  thing in front of it, so it was open to anyone in PH. No service-token
+  policy — nothing automated polls it. **Access breaks non-browser
+  ezBookkeeping clients**, which cannot complete the login flow; if a
+  mobile or desktop client needs to sync, that is the trade-off to revisit.
+- `vps01-metrics.maybeit.work` → `http://localhost:19999` on vps01, same
+  tunnel, behind Access.
+- `vps02-metrics.maybeit.work` → `http://localhost:19999` on vps02, token
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, behind
+  Access, and vps02's first workload *from this repo*.
+
+Every tunnel's catch-all is `http_status:404`.
 
 **One token per node (rail 2):** Cloudflare load-balances a hostname across
 *every* connector on its tunnel — a route is not pinned to a node — so one
@@ -129,7 +150,8 @@ control: a throwaway alarm with that same recipient on vps02 fired
 `ram_in_use`, `disk_space_usage` and `disk_inode_usage` have never executed
 a notification, so they sit in the "no prior `EXEC_RUN`" branch and will
 fire on their first real transition. The backup alarm's silence was specific
-to its own dedup state (see failure log), not a property of the recipient.
+to its own dedup state (`vps01/CLAUDE.md` failure log — that entry moved
+there with the backup sections), not a property of the recipient.
 
 Backups, R2 retention and locks, restore/alarm drills and the backup
 staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
@@ -137,6 +159,13 @@ staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
 ## Failure log
 
 Incident histories behind these rules: `failure-log` skill (`stacks/`).
+
+- **A newly created Access application 404s at the edge before it starts
+  `302`ing** — seconds, not minutes (observed 2026-08-20 creating the
+  `budget` app). Do not read that 404 as a broken route and start unpicking
+  the tunnel: check the ingress and the origin, then re-probe. The control
+  that settles it is curling the *other* Access-protected hosts; when they
+  all answer the same, propagation is done.
 
 - **When a container reads a secret file, check the *in-container* uid and
   test as that user, not root.** `deploy.yml` wrote

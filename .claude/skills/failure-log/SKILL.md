@@ -72,23 +72,23 @@ skips `node_modules/` free. **When a rule mandates a tool that rewrites
 commands, run the rule's own commands under that tool first.** Superseded
 `find` history archived in `docs/superpowers/failure-log-archive.md`.
 
-### Never hash the working tree
+### A split that left the parent's copy behind
 
-**Any deployed-vs-repo comparison pins to an explicit ref — `git cat-file
-blob <ref>:<path>` — and never hashes the working tree**, which is shared
-mutable state under concurrent agents. An agent proving the Worker deployed
-to Cloudflare matched the repo SHA-1'd `worker/status/src/page.html` and
-compared it against the hash embedded in the deployed module's part name;
-its first and second measurements **disagreed** (2026-08-20). The tool was
-not lying and the deploy had not changed: a concurrent process moved `HEAD`
-between two bash calls (`docs/claude-md-self-audit` →
-`docs/mcp-and-skills-in-context`), and this repo additionally carries three
-live agent worktrees under `.claude/worktrees/`. The disagreement is what
-saved it — had the two measurements happened to agree, a wrong "deployed
-matches repo" would have been recorded as verified. Same class as the
-gitleaks `--staged` scan that scans nothing under `--all-files` and the
-`find`-based budget check that returned a silently wrong count with exit 0:
-a measurement that produces a confident number from the wrong input.
+**A directory split is not finished until the parent's copy is deleted.**
+The 2026-08-20 `stacks/` → `stacks/vps01/` split wrote the child and
+trimmed only part of the parent, leaving 195 duplicated lines. Nothing
+looked stale, because every *dated* claim still agreed between the two
+copies; the damage was confined to the places one copy had been fixed and
+the other had not. The parent's `mysqldump` line had lost `--databases
+easyappointments` while the child and `backup-booking.sh` kept it — and
+eight lines later the parent contradicted itself, saying "the dump is
+`--databases`, so it recreates `easyappointments` itself". The parent also
+still carried a passage already recorded as archived, and an "archived
+passages are pointed to below" banner whose every pointer sat inside the
+duplicated block. Two copies do not stay equal: one gets fixed. Delete the
+parent's copy in the same commit as the split, then grep the repo for
+pointers into what you deleted — `.github/workflows/deploy.yml` cited a
+warning three times that survived only in the moved text.
 
 ### The 203M that wasn't
 
@@ -102,7 +102,9 @@ the rest is MySQL 8.0's ibdata1, redo/undo tablespaces, binlogs.
 **The fix this entry prescribed was itself wrong, and lasted longer than
 the bug.** It said to query `information_schema.tables`. That was done, it
 returned 126, and "~126 rows" was copied into `README.md`, root's failure
-log, this skill and `stacks/vps01/CLAUDE.md`. But InnoDB's `TABLE_ROWS` is
+log, this skill, `stacks/vps01/CLAUDE.md`, and
+`dokploy/booking/docker-compose.yml`'s header comment. But InnoDB's
+`TABLE_ROWS` is
 an **estimate**: measured 2026-08-20 with `COUNT(*)` across all 14 tables,
 the real total is 128 — `information_schema` undercounted `ea_migrations`
 (0 vs 1) and `ea_users` (3 vs 4). The restore drill's "128 rows total",
@@ -116,8 +118,11 @@ paragraph instead of a corrected number — **when a remedy tells you to
 measure, check that the tool it names counts rather than estimates.** A
 prescribed fix inherits none of the scrutiny the original mistake got, so
 a wrong remedy propagates further than the bug it replaced: this one
-reached four documents, one of them public. **An inferred number is said
-once, hedged, until measured — never copied into a second document.**
+reached five files, one of them public. The correction pass proved that
+thesis a second time — it enumerated four of the five sites and missed the
+compose header, which was still wrong in the repo when the 2026-08-20
+audit found it. **An inferred number is said once, hedged, until measured —
+never copied into a second document.**
 
 ### Biome 2.x's schema moved fast
 
@@ -151,6 +156,19 @@ message. Grep `docs/` for short SHAs before force-pushing one; cite
 commits by *message* in documents meant to outlive a rewrite. The
 security handoff cited `2e8e44d` for its own scrub commit, which the
 rewrite had already turned into `87ff87b`.
+
+### `claude plugin disable` overwrote `settings.json`
+
+**`claude plugin disable --scope project` overwrites
+`.claude/settings.json`, it does not merge.** Running it on 2026-08-20
+dropped this repo's entire `permissions.allow` block. It was recoverable
+only because the block was still in the agent's context — nothing else held
+a copy. Read the file, run the command, diff it, restore what it dropped.
+The nuance: `.claude/settings.json` is git-tracked here **now** (since
+commit `59b8c1f`, the same day), so `git diff` would catch a repeat — but
+it was untracked at the moment of the incident, which is exactly why
+nothing caught it. A destructive write to an untracked file has no `git
+diff` to save you, and that is how a silent overwrite becomes permanent.
 
 ### Pin exact versions
 
@@ -530,6 +548,24 @@ alongside `--exclude 'backup-booking/'`, `--exclude '.r2.env'`,
 `--delete` targets needs an exclude, added in the same commit as the state.
 
 ## `worker/status/`: the status Worker and its poller
+
+### Never hash the working tree
+
+**Any deployed-vs-repo comparison pins to an explicit ref — `git cat-file
+blob <ref>:<path>` — and never hashes the working tree**, which is shared
+mutable state under concurrent agents. An agent proving the Worker deployed
+to Cloudflare matched the repo SHA-1'd `worker/status/src/page.html` and
+compared it against the hash embedded in the deployed module's part name;
+its first and second measurements **disagreed** (2026-08-20). The tool was
+not lying and the deploy had not changed: a concurrent process moved `HEAD`
+between two bash calls (`docs/claude-md-self-audit` →
+`docs/mcp-and-skills-in-context`), and this repo additionally carries three
+live agent worktrees under `.claude/worktrees/`. The disagreement is what
+saved it — had the two measurements happened to agree, a wrong "deployed
+matches repo" would have been recorded as verified. Same class as the
+gitleaks `--staged` scan that scans nothing under `--all-files` and the
+`find`-based budget check that returned a silently wrong count with exit 0:
+a measurement that produces a confident number from the wrong input.
 
 ### Netdata chart ids were guesses
 

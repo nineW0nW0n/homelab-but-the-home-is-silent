@@ -124,7 +124,8 @@ else
   err "$h rail 1: missing -- rail 1 has no enforcement at all"
 fi
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
-echo "        are closed: nc -z -G 3 -w 3 <ip> 22 80 443 2377 3000 19999"
+echo "        are closed: nc -z -w 3 <ip> 22 80 443 2377 3000 19999"
+echo "        (no -G: BSD-only, Debian nc exits 1 without connecting)"
 
 # --- markup sinks in the public status page ----------------------------
 # page.html is served to anonymous visitors and is a vendored copy of a

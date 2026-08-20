@@ -21,7 +21,7 @@ in `.claude/skills/`.
   one cluster, so nothing needs 2377/7946 open between them (verified
   2026-08-16). All three run `cloudflared`, Netdata, `dokploy-traefik`.
 - **When**: work in progress. Provisioning/hardening done and
-  CI-deployable; first workload live. A GitHub ruleset protects `main`
+  CI-deployable; two workloads live. A GitHub ruleset protects `main`
   against deletion and force-pushes (verified by attempting a rewind and
   being rejected), so a rewrite is deliberate: disable the ruleset,
   rewrite, re-enable. Don't assume you can force-push.
@@ -42,7 +42,7 @@ in `.claude/skills/`.
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
 | `dokploy/` | Compose apps Dokploy pulls from git (not `deploy.yml`) | exists → `dokploy/CLAUDE.md` |
 | `worker/status/` | Cloudflare Worker: status page + health poller | exists → `worker/status/CLAUDE.md` |
-| `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`); read-only history, nothing deploys from here | none: no rails of its own |
+| `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`), plus the failure-log archive the propagation protocol writes to; nothing deploys from here | none: no rails of its own |
 
 Keep this column current the same commit you add or remove a directory
 file.
@@ -68,15 +68,24 @@ Never silently pick one.
    Docker's published ports bypass it. Enforced by `harden-node.sh`
    (`DOCKER-USER` drops + `daemon.json` loopback bind). Neither covers
    ingress-mode Swarm publishes, which traverse `DOCKER-INGRESS` --
-   see `scripts/CLAUDE.md`. Checked by sweeping
-   from off-node after any provisioning run — `nc -z -G 3 -w 3 <ip> <port>`
-   over 22/80/443/2377/3000/19999 must answer on 22 and nothing else.
+   see `scripts/CLAUDE.md`. Partially checked by `scripts/check-rails.sh`
+   (source-level only); proving the nodes are closed still needs a sweep
+   from off-node after any provisioning run — `nc -z -w 3 <ip> <port>` over
+   22/80/443/2377/3000/19999 must answer on 22 and nothing else. **No
+   `-G 3`**: that is BSD/macOS source-routing, and Debian's
+   netcat-traditional exits 1 with "invalid hop pointer" without opening a
+   socket — sweep from a node and every port reads closed (verified
+   2026-08-20). `-w 3` alone works on both.
 2. **One tunnel token per node, never shared.** A shared token means
-   requests can land on the wrong node and 502.
+   requests can land on the wrong node and 502. Checked by
+   `scripts/check-rails.sh`; off-node, each tunnel must show exactly one
+   distinct connector `client_id`.
 3. **`network_mode: host` on every `cloudflared` service.** Bridge mode
-   breaks `localhost:PORT` origin URLs.
+   breaks `localhost:PORT` origin URLs. Checked by `scripts/check-rails.sh`.
 4. **Explicit `mem_limit`/`mem_reservation` on every app service.** Classic
    Compose key: `deploy.resources` isn't honored by `docker compose up`.
+   Checked by `scripts/check-rails.sh`, which also fails on a `deploy:`
+   block.
 5. **Real IPs are never committed.** Use the inventory key/hostname;
    `infra/inventory.example.yaml` stays redacted.
 6. **CI deploy user: key-only, no sudo, no password login.** Dokploy uses
@@ -111,8 +120,9 @@ Every change runs through this before you report it done.
 pre-commit run --all-files   # every hook in .pre-commit-config.yaml:
                              # yamllint --strict, actionlint, gitleaks,
                              # shellcheck -s sh, the pre-commit-hooks
-                             # basics, and two local hooks --
-                             # no-real-ips (rail 5), biome ci . (rail 9)
+                             # basics, and three local hooks --
+                             # no-real-ips (rail 5), check-rails (rails 2,
+                             # 3, 4, 7 + rail 1 partial), biome ci (rail 9)
 shellcheck scripts/*.sh      # every script stays shellcheck-clean
 git ls-files '*CLAUDE.md' | xargs wc -l
 ```
@@ -238,9 +248,10 @@ incident history behind every one-line rule in every failure log here:
 - **`claude plugin disable --scope project` overwrites
   `.claude/settings.json`, it does not merge.** It dropped this repo's
   `permissions.allow` block on 2026-08-20; the entry was recoverable only
-  because it was still in context. Read the file, run the command, diff it,
-  restore what it dropped — and note an untracked settings file has no `git
-  diff` to save you, which is how a silent overwrite becomes permanent.
+  because it was still in context: the file was untracked at that moment, so
+  `git diff` had nothing to show. It is tracked now, which is why a repeat
+  would be caught — but read the file, run the command, diff it, and restore
+  what it dropped anyway.
 - **Pin exact versions/commits** for Biome, rtk, caveman, yamllint. Never
   `latest`.
 - **yamllint's `truthy` rule flags `on:`** in Actions workflows as a
