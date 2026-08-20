@@ -20,9 +20,12 @@ jobs:
   validate:
     uses: ./.github/workflows/validate.yml
 
+  # Rail 7: one approval gates production. Only one deploy job here, so the
+  # environment sits on it directly -- no separate 'approve' job needed.
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    environment: production
     defaults:
       run:
         working-directory: worker/status
