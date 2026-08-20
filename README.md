@@ -261,7 +261,7 @@ its own stamp file that the same staleness check watches, so the two backups
 can go stale independently. The dump is rejected and the alert left to fire if
 it carries fewer than 10 `CREATE TABLE` statements -- an empty-but-existing
 database dumps as a complete, valid file, and uploading that would age out the
-last real copy. It is not much data: 14 tables and about 126
+last real copy. It is not much data: 14 tables and 128
 rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
 own tablespaces and binlogs, not appointments. Real customer bookings all the
 same. A forced end-to-end run of the backup passed on 2026-08-19 and the

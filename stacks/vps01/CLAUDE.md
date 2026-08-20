@@ -174,7 +174,7 @@ Archive `booking-mysql-<STAMP>.sql.gz` under `daily/` (`weekly/` Sundays);
 retention and lock rules are the shared ones above.
 
 The dataset is tiny and the archive size is not a mistake: `easyappointments` is
-14 tables, ~126 rows, 0.4 MB (`information_schema.tables`, 2026-08-19), and the
+14 tables, **128 rows** (`COUNT(*)` across all 14, 2026-08-20), 0.4 MB, and the
 full dump is 31,064 bytes uncompressed with all 14 `CREATE TABLE` and 9 `INSERT`
 statements. The volume's 203M on disk is MySQL 8.0's own ibdata1, redo/undo
 tablespaces and binlogs. Small, but real customer booking data, and until this
@@ -190,7 +190,8 @@ was tested), 6083 bytes, `Dump completed` trailer intact, restored into a
 throwaway `mysql:8.0` container on a throwaway volume, `--network none`, no
 published ports, `--memory 512m`. Compared against production with read-only
 metadata queries only: 14/14 tables in both, per-table row counts identical
-across all 14 (128 rows total), 140 columns / 26
+across all 14 (128 rows total, re-confirmed by `COUNT(*)` 2026-08-20 — this
+figure was right and the "~126" it used to sit beside was not), 140 columns / 26
 `information_schema.statistics` rows / 25 constraints / 0 routines / 0 triggers
 / 0 views on both sides. Production never written to, no row contents read
 either side. Torn down completely — container and volume removed, temp archive
