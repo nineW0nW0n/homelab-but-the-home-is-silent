@@ -46,20 +46,32 @@ Cloudflare, nothing here creates it, and it leaves `/api/deploy/*` guarded by
 the webhook URL's secret alone — **treat those URLs (Dokploy app →
 Deployments tab) as secrets.**
 
-**Autodeploy is dead again as of 2026-08-19, and the cause is not Access.**
-The zone-level WAF rule `Block non-local traffic` was last updated
-2026-08-19T02:57:55Z; the last Dokploy deployment of any app is
-2026-08-18T09:04:46Z. Its expression blocks every source outside PH for every
-host but the apex — and **GitHub's webhook servers are not in PH**, so their
-POST to `dokploy.maybeit.work/api/deploy/<secret>` is `403`ed at the WAF,
-which evaluates *before* Access. The 2026-08-18 bypass application is intact
-and simply never reached. PR #44 merged with `autoDeploy = t` on the `booking`
-compose app and nothing deployed.
+**Autodeploy has now been broken twice, by two different layers in front of
+the same URL.** First Access (`302`, fixed 2026-08-18 with the bypass app),
+then the zone WAF rule `Block non-local traffic` (`403`, 2026-08-19 to
+2026-08-20). That rule blocks every source outside PH for every host but the
+apex — and **GitHub's webhook servers are not in PH** — so their POST to
+`/api/deploy/<secret>` died at the WAF, which evaluates *before* Access. The
+bypass app was intact the whole time and simply never reached. PR #44 merged
+with `autoDeploy = t` and nothing deployed; the gap is visible as a
+two-day hole in the `deployment` table.
 
-So the failure mode has changed shape: it used to be a `302` from Access, it
-is now a `403` from the WAF, and both look identical from GitHub's side —
-silence. **Verify against Dokploy's own tables, not by curling from here**
-(from a PH client everything looks fine):
+Fixed 2026-08-20 with a custom rule **ordered above** the block:
+`http.host eq "dokploy.maybeit.work" and starts_with(http.request.uri.path,
+"/api/deploy")`, action Skip → all remaining custom rules. Order is the whole
+trick; below the block rule it does nothing. Verified from vps01, which is
+not in PH: `/` still `403`s (the dashboard stays geo-blocked) while
+`/api/deploy/test` returns `404`, i.e. it reaches Dokploy.
+
+That leaves `/api/deploy/*` guarded by the webhook URL's secret alone, from
+anywhere — which is what this file already said the bypass app implies. The
+tighter alternative, scoping to GitHub's published IP ranges, was rejected on
+purpose: those ranges rotate, nothing here tracks them, and the failure mode
+would be another silent `403`.
+
+**Both failures presented as silence** — GitHub sees a non-2xx and nothing
+here raises anything. So verify against Dokploy's own tables, never by
+curling from a PH client, where everything looks fine either way:
 
 ```sh
 # on vps00 -- last deployment of any app, and whether autoDeploy is even on
@@ -69,10 +81,15 @@ docker exec $(docker ps -qf name=dokploy-postgres) \
   psql -U dokploy -d dokploy -c 'SELECT name, "sourceType", "autoDeploy", branch FROM compose;'
 ```
 
-A recent merge to a `dokploy/` path with no matching deployment row is the
-symptom. Fixing it means carving `dokploy.maybeit.work/api/deploy` out of the
-geo rule, or scoping that rule so it cannot swallow a webhook — an unresolved
-decision, deliberately not made here. Until then, redeploy from Dokploy's UI.
+A merge with no matching deployment row is the symptom; the fallback while
+you diagnose is a manual redeploy from Dokploy's UI.
+
+Note **Dokploy is not path-filtered**: it runs a deployment for *every* app on
+any push to `main`, not only when `dokploy/` changed — a README-only merge
+produces a row for both apps. Harmless, because `docker compose up -d` with an
+unchanged compose is a no-op: after PR #46, `ezbookkeeping` was still `Up 13
+hours` and `booking-ptpwn8-mysql-1` `Up 2 days`. Do not read a deployment row
+as evidence a container was recreated, or its absence as proof nothing shipped.
 
 When autodeploy silently stops, check the WAF rule first and Access second:
 both fail as silence, and neither raises anything.

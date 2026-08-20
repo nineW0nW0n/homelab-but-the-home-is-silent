@@ -113,8 +113,11 @@ across every hostname, with one exemption for the `maybeit.work` apex so
 the status page is publicly readable. `booking` and `budget` are therefore
 unreachable outside PH by design. Any non-PH client, including GitHub
 Actions runners and the nodes themselves, gets a `403` that looks exactly
-like an outage and is not one. The rule lives only in the Cloudflare
-dashboard, so nothing in this repo can restore it.
+like an outage and is not one. One path is exempted, ordered above the
+block: `dokploy.maybeit.work/api/deploy`, because GitHub's webhook servers
+are not in PH either and the geo rule silently killed Dokploy's autodeploy
+for two days before anyone noticed. Both rules live only in the Cloudflare
+dashboard, so nothing in this repo can restore them.
 
 All three Netdata agents are also **claimed into Netdata Cloud**, an
 outbound HTTPS connection to a third party from every node. It opens no
