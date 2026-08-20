@@ -78,10 +78,10 @@ on the first means the dashboard itself is unprotected.
   sits orphaned on disk. `MYSQL_ROOT_PASSWORD` and `DB_PASSWORD` stay in
   Dokploy's environment tab. The volume is 203M on disk but the dataset is a
   fraction of that -- the rest is MySQL 8.0's own ibdata1, redo/undo
-  tablespaces and binlogs. Measured figures live in `stacks/CLAUDE.md`; do not
+  tablespaces and binlogs. Measured figures live in `stacks/vps01/CLAUDE.md`; do not
   restate them here, they were wrong in four places once already.
   Small but real customer data; its off-site backup lives in
-  `stacks/vps01/backup-booking.sh` (see `stacks/CLAUDE.md` for schedule,
+  `stacks/vps01/backup-booking.sh` (see `stacks/vps01/CLAUDE.md` for schedule,
   drills and the `MYSQL_PWD` handling).
 
 ### Known gap: booking disables EasyAppointments' CalDAV SSRF check
