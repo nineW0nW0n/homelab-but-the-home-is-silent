@@ -185,6 +185,33 @@ Retention lives in **R2 lifecycle rules**, not in the script: `daily/`
 expires at 7 days, `weekly/` (Sundays) at 28. Deletion is server-side so a
 script bug cannot erase history.
 
+**R2 bucket lock rules** cover what lifecycle does not: a *deliberate* delete.
+The token in `.r2.env` on vps01 is Object Read & Write, and write includes
+delete, so anyone who takes that node could wipe every backup off-site. Added
+2026-08-20 with `wrangler r2 bucket lock add`:
+
+| Rule | Prefix | Retention |
+|---|---|---|
+| `lock-daily-3d` | `daily/` | 3 days |
+| `lock-weekly-14d` | `weekly/` | 14 days |
+
+Within those windows an object cannot be deleted or overwritten **by anyone**,
+including the node, the token, and the account. The staleness alert fires at
+36h, comfortably inside both, so a wipe is detected while the data still
+exists.
+
+Retention is deliberately *shorter* than the matching lifecycle window. A lock
+at or above the lifecycle period blocks lifecycle's own deletion and the bucket
+grows without limit; one day short of it, the lock lapses and lifecycle cleans
+up as before. Never set a lock retention >= its prefix's expiry.
+
+R2 has no object versioning, so lock rules are the whole mechanism -- do not go
+looking for a versioning setting to enable. And a lock cannot be shortened or
+lifted for objects already under it: removing a rule only stops it applying to
+new uploads. Worst case for reversing this decision is 14 days of undeletable
+`weekly/` objects, which at this bucket's size (66 kB, 8 objects, measured
+2026-08-20) costs nothing.
+
 **The staleness alert does not go through Netdata.** `check-backup-age.sh`
 runs hourly, reads the same `.last-success` stamp and calls the Telegram API
 itself: alert on crossing 36h, re-alert every 12h while stale, one message on
@@ -281,7 +308,9 @@ does not cry wolf. Known ceiling: it catches a *table-less* database, not an
 Closing that needs a row floor; not worth the code today.
 
 Archive name `booking-mysql-<STAMP>.sql.gz` under `daily/` (`weekly/` on
-Sundays); retention is the same server-side R2 lifecycle rules, 7 and 28 days.
+Sundays); retention is the same server-side R2 lifecycle rules, 7 and 28 days,
+under the same lock rules (3 and 14 days) described in the ezBookkeeping
+section above -- one bucket, both apps.
 
 **Smoke test passed 2026-08-19**: a `FORCE_BACKUP=1` run went end to end,
 dump, trailer check, upload, stamp, and the object is present in R2 as
