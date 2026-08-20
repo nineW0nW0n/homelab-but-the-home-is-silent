@@ -192,6 +192,16 @@ incident history behind every one-line rule in every failure log here:
   mandates a tool that rewrites commands, run the rule's own commands under
   that tool first.** Superseded `find` history archived in
   `docs/superpowers/failure-log-archive.md`.
+- **A directory split is not finished until the parent's copy is deleted.**
+  The 2026-08-20 `stacks/vps01/` split wrote the child and trimmed only part
+  of the parent, leaving 195 duplicated lines that then drifted: the parent's
+  `mysqldump` line lost `--databases` while the child and the script kept it,
+  and the parent contradicted itself eight lines later. It also carried a
+  passage already recorded as archived, and an "archived passages are
+  pointed to below" banner whose every pointer sat in the duplicated block.
+  Two copies do not stay equal — one gets fixed. Delete the parent's copy in
+  the same commit, then grep the repo for pointers into what you deleted:
+  `deploy.yml` cited a warning that only survived in the moved text.
 - **Never size a dataset with `du` on its volume.** `du -sh` on
   `booking-ptpwn8_mysql-data` said 203M; that became "~200MB of real
   appointments" and reached five documents before anyone dumped the

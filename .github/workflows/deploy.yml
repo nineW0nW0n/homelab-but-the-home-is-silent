@@ -155,7 +155,7 @@ jobs:
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
-            # see the Dokploy project-prefix warning in stacks/CLAUDE.md.
+            # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
             running=$(docker inspect -f "{{.State.Running}}" \
               cloudflared-vps00 2>/dev/null || echo missing)
             [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
@@ -337,7 +337,7 @@ jobs:
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
-            # see the Dokploy project-prefix warning in stacks/CLAUDE.md.
+            # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
             running=$(docker inspect -f "{{.State.Running}}" \
               cloudflared-vps01 2>/dev/null || echo missing)
             [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
@@ -462,7 +462,7 @@ jobs:
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
-            # see the Dokploy project-prefix warning in stacks/CLAUDE.md.
+            # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
             running=$(docker inspect -f "{{.State.Running}}" \
               cloudflared-vps02 2>/dev/null || echo missing)
             [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }

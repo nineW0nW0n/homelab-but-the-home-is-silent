@@ -83,28 +83,31 @@ this bucket's size (66 kB, 8 objects, measured 2026-08-20) costs nothing.
 `/opt/stacks/vps01/backup/.last-success` backdated to 100h,
 `check-backup-age.sh` run, Netdata given time to transition, recovered, then
 driven stale a second time — testing whether the chain goes silent after a
-CRITICAL. Both paths passed all three stages. `check-backup-age.sh`, the real
-delivery path, sent 4/4 Telegram messages with a clean `.stale-alerted`
-lifecycle. Netdata executed four consecutive transitions, no suppression:
+CRITICAL. Both paths passed all three stages, first CRITICAL, CLEAR, second
+CRITICAL. `check-backup-age.sh`, the real delivery path, sent 4/4 Telegram
+messages with a clean `.stale-alerted` lifecycle, no caveats. Netdata executed
+four consecutive transitions, no suppression:
 `10:01:03Z CLEAR -> CRITICAL val=100 flags=PROCESSED,EXEC_RUN,EXEC_IN_PROGRESS,SAVED exec_code=0 delay=0`;
 `10:11:03Z CRITICAL -> CLEAR val=0 delay=300` held exactly 300s then executed,
-the first executed CLEAR since 2026-08-18;
+the first executed CLEAR on this alarm since 2026-08-18;
 `10:21:03Z CLEAR -> CRITICAL val=100 flags=PROCESSED,EXEC_RUN,SAVED exec_code=0`
 undeduped; then a fourth transition, another executed CLEAR. Before the drill,
 the last transition that executed was `08-18 07:31:50Z UNINITIALIZED ->
 CRITICAL flags=…,EXEC_RUN,EXEC_FAILED exec_code=1`; everything after it up to
 `08-19 00:13:53Z` carried no `EXEC_RUN`, and all three CLEARs in that window
-showed `delay=3600, flags=UPDATED` — the wedged chain. This is also the only
-evidence anywhere that a Netdata alarm here really executes a notification
-(`../CLAUDE.md`, alert delivery).
+showed `delay=3600, flags=UPDATED` — the wedged chain. This is the evidence
+that *this* alarm really executes a notification (`../CLAUDE.md`, alert
+delivery).
 
 **Not proven: that `down 5m` fixed the wedge.** The alarm was already unwedged
 when the drill started (its first CRITICAL executed with no executed CLEAR ahead
-of it) — the `04:46:03Z` restart and config-hash change in the failure log below
-are at least as plausible a cause. Confirmed: the alarm now delivers CRITICAL
-and CLEAR reliably, and `down 5m` demonstrably lets a CLEAR land where a re-fire
-would otherwise supersede it (under `down 1h` the 10:11 CLEAR would have been
-due 11:11, after the 10:17 re-stale).
+of it) — the `04:46:03Z` netdata restart picked up the new `backup.conf`, and
+the config-hash change in the failure log below followed. The escape from the
+original wedge is at least as attributable to the config-hash change as to the
+delay value. Confirmed: the alarm now delivers CRITICAL and CLEAR reliably, and
+`down 5m` demonstrably lets a CLEAR land where a re-fire would otherwise
+supersede it (under `down 1h` the 10:11 CLEAR would have been due 11:11, after
+the 10:17 re-stale).
 
 **Restore drill last passed: 2026-08-18.** Archive pulled from R2, extracted
 into throwaway volumes, booted as a second container on `127.0.0.1:18080`:
