@@ -28,9 +28,6 @@ services:
       - -c
       - |
         echo 'ServerName booking.maybeit.work' >> /etc/apache2/apache2.conf
-        sed -i \
-          's/protected bool $$enable_ssrf_check = true;/protected bool $$enable_ssrf_check = false;/' \
-          /var/www/html/application/libraries/Caldav_sync.php
         exec /usr/local/bin/docker-entrypoint.sh
     depends_on:
       - mysql
