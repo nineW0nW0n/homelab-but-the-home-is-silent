@@ -47,8 +47,10 @@ fi
 # shellcheck source=/dev/null
 . "$ENV_FILE"
 
-# --data-urlencode keeps the token out of the URL and the message safe to
-# send verbatim. -sS is quiet but still prints real errors.
+# --data-urlencode covers chat_id and text only, so the message is safe to
+# send verbatim. The bot token sits in the URL path and cannot move to the
+# body: it is in argv, readable via /proc/<pid>/cmdline by any local user.
+# Accepted on a single-admin node. -sS is quiet but still prints real errors.
 notify() {
     curl -sS -m 20 -o /dev/null \
         "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
