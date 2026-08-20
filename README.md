@@ -11,10 +11,18 @@ inbound ports, GitHub Actions as the only path to production.
 > **Status: work in progress.** Nodes are provisioned, hardened, and
 > deployable via CI. Dokploy, Cloudflare Tunnel and two workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
-> `budget.maybeit.work` (ezBookkeeping), both on vps01. Only the latter is
-> backed up off-site so far. Expect rough edges. `main` is protected
+> `budget.maybeit.work` (ezBookkeeping), both on vps01. ezBookkeeping is
+> backed up nightly off-site to Cloudflare R2; the booking database's backup
+> is written and restore-drilled but not yet scheduled on the node (PR #31
+> installs the cron). Expect rough edges. `main` is protected
 > against force-push and deletion, so fixes land as new commits, not
 > rewrites.
+
+<!-- When PR #31 merges AND a deploy has been approved on main, three places
+     stop being true: the booking clause in the NOTE above, the "(PR #31, not
+     yet on main)" tag on vps01/backup-booking.sh in the file listing, and the
+     "not yet running" opening of the booking paragraph under ## Backups.
+     Update all three in the same commit. -->
 
 ## 🗺️ Topology
 
@@ -31,9 +39,12 @@ swarms, not one cluster.
 2 vCPU / 2GB RAM each. Real IPs are never committed.
 `infra/inventory.example.yaml` is the redacted template, usage examples in
 `scripts/` use RFC 5737 documentation addresses (`203.0.113.x`), and a
-pre-commit hook fails the commit if a routable address appears in a tracked
-file. Note the `vps0N.maybeit.work` names are inventory labels with no DNS
-records; they are not substitutes for an address.
+pre-commit hook fails the commit if a routable IPv4 address appears in a
+tracked text file. It matches dotted quads only: IPv6 literals pass, binary
+files are not scanned, and `worker/status/package-lock.json` is excluded.
+Note the `vps0N.maybeit.work` names are
+inventory labels with no DNS records; they are not substitutes for an
+address.
 
 vps01/vps02 are managed as Dokploy **Remote Servers**, not Swarm workers:
 each node stays independent and hosts its own apps rather than pooling
@@ -127,6 +138,7 @@ stacks/
   vps0N/docker-compose.yml           per-node cloudflared connector + Netdata
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
+  vps01/backup-booking.sh            nightly MySQL dump to R2 (PR #31, not yet on main)
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
 dokploy/
   ezbookkeeping/, booking/           compose apps Dokploy clones from this repo itself
@@ -139,7 +151,7 @@ scripts/
   harden-node.sh                     UFW, key-only sshd, Fail2Ban, DOCKER-USER drops
   add-swap.sh                        swap file (these nodes ship with none)
   cap-dokploy-resources.sh           memory-cap Dokploy's own control plane
-  setup-maintenance.sh               cap container logs and journald, weekly docker prune
+  setup-maintenance.sh               cap container logs and journald, weekly docker prune, unattended security upgrades
 ```
 
 Two deploy paths, one repo: `deploy.yml` rsyncs `stacks/` to the nodes and
@@ -152,9 +164,11 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 ## CI/CD
 
 - `validate.yml` runs on every PR and push to `main`: pre-commit over all
-  files: `yamllint --strict`, `actionlint`, `shellcheck`, `gitleaks`,
-  `biome ci`, a no-real-IP check, trailing-whitespace, large-file and
-  private-key checks.
+  files: `yamllint --strict`, `actionlint`, `shellcheck`, `biome ci`, a
+  no-real-IP check, trailing-whitespace, large-file and private-key
+  checks. `gitleaks` also runs, but only usefully at commit time: its
+  hook is `gitleaks protect --staged`, which scans staged changes, and
+  nothing is staged in CI, so it contributes no coverage there.
 - `deploy.yml` runs on push to `main` (paths: `stacks/**`, `deploy.yml`
   itself) or manual dispatch. It calls `validate.yml` first (nothing deploys unless
   lint passes), then waits for a single **manual approval** on the
@@ -240,12 +254,15 @@ hand: pull the newest archive, extract it into throwaway volumes, boot a
 second container against them, then delete all of it. That drill is what
 caught the schedule silently never firing.
 
-`booking.maybeit.work`'s MySQL database is covered too, an hour later at
-04:00: a hot `mysqldump --single-transaction` taken inside the MySQL
-container, so the booking site never goes down for it. It writes its own
-stamp file and the same staleness check watches it, so the two backups can
-go stale independently. Until it was added this was the only production data
-here without an off-site copy. It is not much data: 14 tables and about 126
+`booking.maybeit.work`'s MySQL database has a backup written but **not yet
+running**: `backup-booking.sh` lives on PR #31, not on `main`, and no deploy
+run has installed its cron, so the only runs so far were forced by hand. Once
+that merges and a deploy is approved it runs at 04:00, an hour after
+ezBookkeeping so two backups never overlap on a 2GB node: a hot `mysqldump
+--single-transaction` taken inside the MySQL container, so the booking site
+never goes down for it, writing its own stamp file that the same staleness
+check watches, so the two backups can go stale independently. Until it lands,
+this is the only production data here without a scheduled off-site copy. It is not much data: 14 tables and about 126
 rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
 own tablespaces and binlogs, not appointments. Real customer bookings all the
 same. A forced end-to-end run of the backup passed on 2026-08-19 and the
