@@ -207,10 +207,16 @@ eff=\$(sshd -T) || { echo "FATAL: sshd -T failed; check host keys" >&2; exit 1; 
 printf '%s\n' "\$eff" | grep -E \
   '^(passwordauthentication|permitrootlogin|permitemptypasswords|usepam) ' || true
 bad=
-for want in 'passwordauthentication no' 'permitemptypasswords no' 'usepam no' \
-  'permitrootlogin prohibit-password'; do
+for want in 'passwordauthentication no' 'permitemptypasswords no' 'usepam no'; do
   printf '%s\n' "\$eff" | grep -qx "\$want" || bad="\$bad [\$want]"
 done
+# sshd -T normalises 'prohibit-password' to its legacy synonym
+# 'without-password' (OpenSSH 9.2 on Debian 12), so accept either spelling --
+# the drop-in is written with the modern one. Measured 2026-08-20: asserting
+# the literal we wrote failed on a node that had applied it correctly.
+printf '%s\n' "\$eff" |
+  grep -qE '^permitrootlogin (prohibit-password|without-password)\$' ||
+  bad="\$bad [permitrootlogin prohibit-password]"
 if [ -n "\$bad" ]; then
   echo "FATAL: sshd effective config is not what this script wrote." >&2
   echo "FATAL: missing:\$bad -- check for an earlier-sorting drop-in in" >&2
