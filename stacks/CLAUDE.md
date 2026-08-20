@@ -234,8 +234,10 @@ Ex's password manager) gets you the books but invalidates every session.
 
 ## booking MySQL backups (vps01)
 
-Nightly at **04:00 Asia/Manila** (staggered an hour off ezBookkeeping so two
-backups never run at once on a 2GB node), same R2 bucket, same hourly-cron
+Nightly at **04:00 Asia/Manila** once PR #31 merges and a deploy installs the
+cron -- not scheduled on vps01 yet; the forced runs and the restore drill below
+are all that have executed. Staggered an hour off ezBookkeeping so two
+backups never run at once on a 2GB node, same R2 bucket, same hourly-cron
 + in-script hour gate, same `FORCE_BACKUP=1` escape hatch. Two files in
 `stacks/vps01/`: `backup-booking.sh`, and the shared `check-backup-age.sh`
 invoked as `check-backup-age.sh booking /opt/stacks/vps01/backup-booking`.
@@ -249,14 +251,34 @@ Unlike ezBookkeeping, **nothing is stopped**: a hot `mysqldump
 --single-transaction --routines --triggers` inside
 `booking-ptpwn8-mysql-1` gives a consistent InnoDB snapshot with no downtime
 on a live booking site. `MYSQL_ROOT_PASSWORD` is expanded *inside* the
-container (`docker exec ... sh -c 'exec mysqldump -p"$MYSQL_ROOT_PASSWORD"'`),
-so it never appears in a host process argument or a log line.
+container, and passed via `MYSQL_PWD`, not `-p`. Superseded 2026-08-20: the
+old `-p"$MYSQL_ROOT_PASSWORD"` form was documented here as never reaching "a
+host process argument", which was wrong. A container's PID namespace is a
+child of the host's, so `ps -ef` on vps01 lists container argv in full and the
+password was readable by any local user for the length of the dump. `MYSQL_PWD`
+moves it to the process environment (`/proc/<pid>/environ`, root and same-uid
+only) — better, not gone; MySQL's own docs still call `MYSQL_PWD` insecure.
+The host script's argv and env stay clean either way, which is the part the
+single-quoting buys.
 
 `set -o pipefail` is not POSIX, so `mysqldump | gzip` reports gzip's exit
 status and a half-written dump would look like a success. The script proves
-the dump instead: `gzip -cd | tail -5 | grep 'Dump completed'`, and on failure it
-deletes the archive and exits non-zero **without** stamping, so the staleness
-alert fires rather than a truncated dump reaching R2.
+the dump instead, in two branches so the log names the cause that fired:
+`gzip -cd | tail -5 | grep 'Dump completed'` for the trailer, then a floor of
+10 `^CREATE TABLE` lines. On either failure it deletes the archive and exits
+non-zero **without** stamping, so the staleness alert fires rather than a bad
+dump reaching R2.
+
+The table floor exists because the trailer alone is not enough: an
+empty-but-existing database dumps as a complete, valid, trailer-carrying file
+with zero tables, and that is exactly what a Dokploy app rename produces (the
+volume name derives from it, so `MYSQL_DATABASE` recreates `easyappointments`
+empty and MySQL starts happily — see the `dokploy/booking/docker-compose.yml`
+header). Uncaught, it uploads green while the R2 lifecycle rules age out the
+last real copy. 14 tables measured 2026-08-19; the floor is 10 so schema churn
+does not cry wolf. Known ceiling: it catches a *table-less* database, not an
+*empty* one — reinstall EasyAppointments before 04:00 and 14 empty tables pass.
+Closing that needs a row floor; not worth the code today.
 
 Archive name `booking-mysql-<STAMP>.sql.gz` under `daily/` (`weekly/` on
 Sundays); retention is the same server-side R2 lifecycle rules, 7 and 28 days.
@@ -291,7 +313,8 @@ until this backup it was the only production dataset with no off-site copy.
 
 **Restore:** pull the archive, then
 `gzip -cd booking-mysql-*.sql.gz | docker exec -i booking-ptpwn8-mysql-1 sh -c
-'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD"'`. The dump is `--databases`, so
+'MYSQL_PWD=$MYSQL_ROOT_PASSWORD; export MYSQL_PWD; exec mysql -uroot'` --
+`MYSQL_PWD`, not `-p`, for the same host-`ps` reason as the dump side above. The dump is `--databases`, so
 it recreates `easyappointments` itself. Drill it into a throwaway container
 first, never straight into production.
 
