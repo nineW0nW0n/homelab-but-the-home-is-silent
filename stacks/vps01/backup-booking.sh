@@ -9,8 +9,11 @@
 # hot logical dump; InnoDB plus --single-transaction takes the dump inside one
 # repeatable-read snapshot, so a live booking site stays up and the dump is
 # still a consistent point in time. mysqldump runs inside the MySQL container
-# so MYSQL_ROOT_PASSWORD is expanded there and never reaches a host process
-# argument, a log line or an env file (rail 11).
+# so MYSQL_ROOT_PASSWORD is expanded there and never reaches this script's
+# argv, a log line or an env file (rail 11). A container's PID namespace is a
+# child of the host's, though, so `ps -ef` on vps01 does list container argv:
+# the password goes in MYSQL_PWD inside the container, never on mysqldump's
+# command line.
 #
 # 04:00, not 03:00, so it never overlaps backup-ezbookkeeping.sh: 2GB node.
 set -eu
@@ -50,7 +53,7 @@ fi
 
 log "dumping $DB_NAME from $DB_CONTAINER"
 docker exec "$DB_CONTAINER" sh -c \
-    'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
+    'MYSQL_PWD=$MYSQL_ROOT_PASSWORD; export MYSQL_PWD; exec mysqldump -uroot \
         --single-transaction --routines --triggers --databases easyappointments' \
     | gzip -c > "${WORK_DIR}/${ARCHIVE}"
 
@@ -58,8 +61,25 @@ docker exec "$DB_CONTAINER" sh -c \
 # status and a failed or half-written mysqldump would look like success.
 # mysqldump ends a complete dump with "-- Dump completed on ...", so that
 # trailer surviving decompression proves both halves of the pipe finished.
+#
+# The trailer alone is not enough: an empty-but-existing database dumps as a
+# complete, valid, trailer-carrying file with zero tables. That is exactly what
+# renaming the Dokploy app produces (the volume name is derived from it, so
+# MYSQL_DATABASE recreates `easyappointments` empty and MySQL starts happily,
+# see dokploy/booking/docker-compose.yml), and it would upload green while R2
+# lifecycle rules aged out the last real copy. So the check also floors the
+# table count: the real database has 14 tables (measured 2026-08-19), and 10
+# leaves room for schema churn without false alarms.
+# Kept as two branches so the log names the cause that actually fired: at 04:00
+# "only 0 tables" and "no trailer" call for different responses.
+TABLES=$(gzip -cd "${WORK_DIR}/${ARCHIVE}" | grep -c '^CREATE TABLE') || TABLES=0
 if ! gzip -cd "${WORK_DIR}/${ARCHIVE}" | tail -5 | grep -q 'Dump completed'; then
     log "ERROR: dump incomplete (no 'Dump completed' trailer); not uploading"
+    rm -f "${WORK_DIR}/${ARCHIVE}"
+    exit 1
+fi
+if [ "$TABLES" -lt 10 ]; then
+    log "ERROR: dump has only $TABLES tables, need 10+ (empty database?); not uploading"
     rm -f "${WORK_DIR}/${ARCHIVE}"
     exit 1
 fi
