@@ -221,6 +221,12 @@ incident history behind every one-line rule in every failure log here:
   written down** — handoffs, plans, specs, and the rewrite's own commit
   message. Grep `docs/` for short SHAs before force-pushing one; cite
   commits by *message* in documents meant to outlive a rewrite.
+- **`claude plugin disable --scope project` overwrites
+  `.claude/settings.json`, it does not merge.** It dropped this repo's
+  `permissions.allow` block on 2026-08-20; the entry was recoverable only
+  because it was still in context. Read the file, run the command, diff it,
+  restore what it dropped — and note an untracked settings file has no `git
+  diff` to save you, which is how a silent overwrite becomes permanent.
 - **Pin exact versions/commits** for Biome, rtk, caveman, yamllint. Never
   `latest`.
 - **yamllint's `truthy` rule flags `on:`** in Actions workflows as a
