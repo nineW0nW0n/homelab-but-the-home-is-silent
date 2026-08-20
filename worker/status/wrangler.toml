@@ -19,4 +19,6 @@ id = "8fbd60e3276e4a40a63609f9ed56e1fd"
 
 [vars]
 NODE_HOSTS = "vps00-metrics.maybeit.work,vps01-metrics.maybeit.work,vps02-metrics.maybeit.work"
-DOKPLOY_HOST = "dokploy.maybeit.work"
+# No DOKPLOY_HOST: the Worker deliberately does not poll Dokploy. See
+# src/poll.js and CLAUDE.md -- sending this public Worker's Access service
+# token to the deploy control plane bought an up/down flag only /debug showed.

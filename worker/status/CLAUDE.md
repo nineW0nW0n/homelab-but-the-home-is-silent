@@ -19,21 +19,20 @@ why (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`
   `Text` module rule (`import page from './page.html'` in `index.js`).
   Copy-paste, not a submodule: one static file doesn't justify the
   ceremony.
-- `src/poll.js`: polls each node's Netdata API and Dokploy, both
-  through Access-gated tunnel routes, returns a status snapshot.
-  `fetch` is injectable for testing. The Dokploy check sends the same
-  service token as the Netdata calls and uses `redirect: 'manual'` with
-  a 2xx requirement, see failure log.
+- `src/poll.js`: polls each node's Netdata API through Access-gated
+  tunnel routes, returns a status snapshot. `fetch` is injectable for
+  testing. It does **not** poll Dokploy -- removed 2026-08-20, see the
+  blast-radius entry in the failure log.
 - `src/index.js`: the `fetch` handler polls fresh, writes the snapshot
   to KV, then serves `page.html` at `/`, the page's own JSON contract at
   `/status.json` (3 nodes, ordered from `NODE_HOSTS`, not
   `Object.entries(snapshot.nodes)`, whose insertion order isn't
   guaranteed to match since `pollAll` fills it from concurrent
-  promises), or the raw snapshot (dokploy included) at `/debug`. No
+  promises), or the raw snapshot at `/debug`. No
   `scheduled` handler, deliberately, see failure log.
-- No dokploy row on the page itself: `page.html`'s design hardcodes
-  exactly 3 status-dot slots, one per VPS node, no 4th slot for it.
-  Still visible at `/debug` if needed.
+- No dokploy anywhere: `page.html` hardcodes exactly 3 status-dot slots,
+  one per VPS node, and the poll behind it is gone too. Check Dokploy by
+  loading `dokploy.maybeit.work`.
 
 ## Public exposure
 
@@ -109,7 +108,7 @@ first, then the workflow reference.
   `[triggers]` block, `index.js` has no `scheduled()` handler, and the
   `fetch()` handler polls fresh on every page load instead of reading a
   cached KV snapshot. Trade-off accepted deliberately: page load is
-  slower (waits on live Netdata + Dokploy calls) in exchange for
+  slower (waits on live Netdata calls) in exchange for
   actually working. KV write stays, only to carry `lastSeen` forward
   across visits when a node's down at the current one.
 - Separately, vps02's Cloudflare Tunnel showed `Inactive` / 0 replicas
@@ -138,16 +137,34 @@ first, then the workflow reference.
   guessed (see `queryRaw` vs `queryPercent` in `poll.js`); load1 is
   normalized to a 0-100 score by dividing by `NODE_VCPUS` (2, this
   homelab's fixed spec) instead.
-- A reachability check that accepts any non-5xx is not a reachability
-  check once the target sits behind Access. `pollDokploy` did a plain
-  `GET` with no service token and `up = res.status < 500`; putting
-  Access in front of `dokploy.maybeit.work` would have kept the tile
-  green forever, because the runtime follows the Access `302` to a
-  `200` login page. Fixed by sending the service token and using
-  `redirect: 'manual'` plus an explicit 2xx test. Whenever a polled
-  origin gains an auth gate, re-check what the poller is actually
-  proving: "up" must mean the origin answered, not that its login
-  page did.
+- Weigh a credential's blast radius against what the call buys, not
+  against whether the call is correct. `pollDokploy` was correct: service
+  token, `redirect: 'manual'`, explicit 2xx test. It was also a public
+  internet Worker holding a credential that opens the **deploy control
+  plane**, to produce an up/down boolean that `toStatusJson`'s allowlist
+  kept off the public page entirely -- it surfaced only in `/debug`, which
+  only Ex can open. A leak of the Worker's secret was full infra access,
+  not a CPU graph. Removed 2026-08-20 and the service token dropped from
+  the Dokploy Access policy. `test/poll.test.js` guards it: `pollAll` must
+  request no host outside `NODE_HOSTS`, with `DOKPLOY_HOST` still set in
+  that test's env so a stale var can never bring the behaviour back.
+  Superseded, kept for the lesson: a reachability check that accepts any
+  non-5xx is not a reachability check once the target sits behind Access.
+  `pollDokploy` originally did a plain `GET` with no token and
+  `up = res.status < 500`; the runtime follows the Access `302` to a `200`
+  login page, so the tile would have stayed green forever. Whenever a
+  polled origin gains an auth gate, re-check what the poller proves: "up"
+  must mean the origin answered, not that its login page did.
+- `dokploy.maybeit.work` and each `*-metrics` host are **separate** Access
+  applications, not one shared app -- confirmed 2026-08-20 by their
+  distinct `aud`/`kid` in the login redirect. A comment in `poll.js` said
+  they shared an application, which is why one service token opening both
+  read as unavoidable rather than as a policy that needed narrowing.
+- The `wrangler login` OAuth token cannot read or write Access config: the
+  Zero Trust API returns `success: true` with an empty result set rather
+  than a 403. Do not read that as "no Access apps configured" -- curl the
+  hostname and look for the `302` to `<team>.cloudflareaccess.com`. Access
+  work is dashboard-only.
 - `src/index.js`'s `PAGE_HEADERS` comment claimed `page.html` "writes data
   with textContent, never innerHTML" while the vendored page did use
   `innerHTML` for the metric readout. A comment asserting a security
