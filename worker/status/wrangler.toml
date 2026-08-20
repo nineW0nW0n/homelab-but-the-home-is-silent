@@ -13,6 +13,13 @@ type = "Text"
 globs = ["**/*.html"]
 fallthrough = true
 
+# Workers Logs, 7-day retention. Off until 2026-08-20, which is why the
+# cloudflare-observability MCP returned an empty set for this Worker --
+# absent config, not absent traffic. Workers created after the default
+# flipped get this for free; maybeit-status predates it.
+[observability]
+enabled = true
+
 [[kv_namespaces]]
 binding = "STATUS_KV"
 id = "8fbd60e3276e4a40a63609f9ed56e1fd"
