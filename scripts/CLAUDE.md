@@ -2,9 +2,17 @@ Parent: ../.claude/CLAUDE.md
 
 # scripts/: provisioning & bootstrap
 
-Idempotent POSIX `sh`, one-time-per-node unless noted. `shellcheck -s sh`
-clean is the bar (pre-commit enforces it). Run twice, confirm the second
-run is a no-op, before calling a script change done.
+Idempotent POSIX `sh`, one-time-per-node unless noted — except
+`check-rails.sh`, which touches no node at all. `shellcheck -s sh` clean is
+the bar (pre-commit enforces it). Run twice, confirm the second run is a
+no-op, before calling a script change done.
+
+**`ssh-add` first.** No node script passes `-i`, and the usage examples take
+a bare IP, which matches no `Host` block in `~/.ssh/config`, so
+`IdentityFile`/`IdentitiesOnly` never apply either. All seven silently
+depend on the right key already being agent-loaded: run `ssh-add
+~/.ssh/id_ed25519_vps`, or pass the `vps0N-root` alias instead of a bare IP.
+Symptom when you forget: `Permission denied (publickey)`.
 
 ## Scripts
 
@@ -39,6 +47,16 @@ run is a no-op, before calling a script change done.
   volumes), enables `unattended-upgrades` (Debian's shipped security-only
   origins, never overridden). No RAM-freeing cron: dropping page cache
   frees nothing real, and swap plus the Dokploy caps cover memory pressure.
+- `check-rails.sh`: **not a provisioning script** — no node, no ssh, no
+  arguments; a repo-wide check that runs on every commit via
+  `.pre-commit-config.yaml` and again under `pre-commit run --all-files` in
+  `validate.yml`. It enforces rails 2, 3, 4 and 7 mechanically, rail 1
+  partially (source-level only — that the `DOCKER-USER` drop and the
+  `daemon.json` loopback bind still exist in `harden-node.sh`; only an
+  off-node sweep proves the nodes), plus a markup-sink grep over the public
+  status page. It is listed here because this repo's most-repeated failure
+  is a rail with no enforcement point, and an enforcement point missing from
+  its own directory file is the next best way to lose one.
 
 ## Failure log
 
@@ -68,7 +86,14 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
 - **Never read `ufw status` as real exposure** — Docker's `nat`/`DOCKER`
   rules are evaluated before ufw's chains. Filter in `DOCKER-USER`, plus
   `DOCKER-INGRESS` for ingress-mode Swarm publishes, which
-  `harden-node.sh` does **not** cover. Sweep the ports from off-node.
+  `harden-node.sh` does **not** cover. Sweep the ports from off-node. That
+  gap is latent, not live, as of 2026-08-20: vps00 runs two Swarm services
+  (`dokploy` publishes 3000 with `PublishMode: host`, `dokploy-postgres`
+  publishes nothing) and vps01/vps02 run zero, so the fleet has no
+  ingress-mode publish anywhere — the next Swarm workload is what springs
+  it. Note `iptables -S DOCKER-INGRESS` errors with "chain is incompatible,
+  use 'nft' tool" on all three, so that chain is not inspectable with the
+  legacy tool.
 - **Never persist `DOCKER-USER` rules with `iptables-persistent`** — its
   boot restore races Docker creating the chain; use the
   `docker-wan-drop.service` oneshot, `After=docker.service`. Three things
@@ -76,9 +101,18 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
   chain, and install with `enable` + `restart`, never `enable --now`.
 - **The `daemon.json` loopback bind is inactive until Docker restarts,**
   which `harden-node.sh` deliberately never does; the `DOCKER-USER` drops
-  close the node meanwhile. `"ip"` also misses Swarm host-mode publishes,
-  so vps00's 3000 rests on that one rule — check `systemctl is-active
-  docker-wan-drop` before trusting a sweep taken from inside the node.
+  close the node meanwhile. It is **active on all three as of 2026-08-20** —
+  dockerd has restarted since, plausibly via `unattended-upgrades`:
+  `iptables -t nat -S DOCKER` shows `-d 127.0.0.1/32` scoping on 80/443 and
+  `ss` shows `127.0.0.1:80`/`127.0.0.1:443`. Don't re-derive that from
+  scratch; do re-check it after a reinstall.
+- **`"ip"` misses Swarm host-mode publishes, so vps00's 3000 rests on the
+  `DOCKER-USER` rule alone** — proven, not inferred: 3000's DNAT is unscoped
+  (`-A DOCKER ! -i docker_gwbridge -p tcp --dport 3000 -j DNAT`, no `-d`),
+  and the DROP counter moved 25 → 34 under three external SYNs to it. UFW
+  never sees those packets — DNAT'd in PREROUTING, routed via FORWARD. Check
+  `systemctl is-active docker-wan-drop` before trusting a sweep taken from
+  inside the node.
 - **Two scripts write `daemon.json`** — `setup-maintenance.sh` recognises
   harden's by an exact match on `{"ip":"127.0.0.1"}`; change what either
   writes, fix the other's match in the same commit.

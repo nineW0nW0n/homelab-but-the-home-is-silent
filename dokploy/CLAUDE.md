@@ -49,6 +49,12 @@ Deployments tab) as secrets.**
 When autodeploy silently stops, check Access first: its failure mode is a
 redirect, not an error.
 
+**Run these from a PH client — Ex's laptop, not a node and not CI.** The zone
+carries a WAF rule `(ip.src.country ne "PH" and http.host ne "maybeit.work")`,
+which fires *before* Access, so from vps01 all three lines return `403` and
+match none of the documented outcomes (verified 2026-08-20). A uniform 403 is
+the geo rule, not evidence about Access.
+
 ```sh
 curl -s -o /dev/null -w '%{http_code}\n' https://dokploy.maybeit.work/            # 302, Access
 curl -s -o /dev/null -w '%{http_code}\n' https://dokploy.maybeit.work/api/trpc/x  # 302, Access

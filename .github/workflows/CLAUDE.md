@@ -12,7 +12,10 @@ then `wrangler deploy`, entirely separate from the node deploy path; see
 1. `validate.yml` runs on every PR and push to `main`: `pre-commit run
    --all-files --show-diff-on-failure` (yamllint --strict, actionlint,
    gitleaks, shellcheck, trailing-whitespace, large-file/private-key
-   checks, plus the `no-real-ips` and `biome ci` local hooks). Also
+   checks, plus three local hooks: `no-real-ips`, `check-rails` — which
+   mechanically asserts rail 7, this directory's own rail, by requiring
+   every deploying job to carry `environment: production` or `needs:` a job
+   that does — and `biome ci`). Also
    callable via `workflow_call`; both deploy workflows call it first (rail
    8).
 2. `deploy.yml` runs on push to `main` (paths: `stacks/**`, itself) or
@@ -35,11 +38,14 @@ then `wrangler deploy`, entirely separate from the node deploy path; see
    edits don't force a recreate on their own.
 4. vps01 only: the rsync excludes `backup/`, `backup-booking/`, `.r2.env`,
    `.telegram.env` (failure log), two extra steps write those two
-   credential files, and one heredoc installs all four cron entries at once
-   because `crontab -` **replaces** the whole crontab. Those four (two
-   backups, two staleness checks) fire hourly and self-gate on their own
-   Asia/Manila hour, 03:00 and 04:00, because Debian's cron ignores
-   `CRON_TZ`.
+   credential files, and one brace group piped to `crontab -` installs all
+   four entries at once because `crontab -` **replaces** the whole crontab.
+   All four fire hourly, because Debian's cron ignores `CRON_TZ` — but only
+   the two *backups* self-gate on their own Asia/Manila hour (03:00, 04:00).
+   The two staleness checks are **ungated** and run every hour, which is
+   exactly why `.r2.env`/`.telegram.env` must be rsync-excluded: see the
+   failure log below, where a deploy overlapping the `:30` check made it
+   exit 1.
 5. Each deploy job ends with `Verify vps0N`, checking the node's own origin
    over the SSH connection it already holds: Netdata answers 200 on
    loopback, `cloudflared-vps0N` is running, and on vps01 both apps answer
@@ -112,8 +118,13 @@ its power.
 
 The real controls are per-node keys (blast radius) and required reviewers
 on the `production` environment: a human approves before any deploy runs,
-which is what stops an automated exfiltration path. Both in place since
-2026-08-16. **Every deploy now waits for Ex to approve it** in the Actions
+which is what stops an automated exfiltration path. The environment was
+created 2026-08-12 and carries a `required_reviewers` rule naming
+`nineW0nW0n` (verified 2026-08-20 against a live `waiting` run with an empty
+approvals list — the gate observed holding, not inferred from config). Two
+limits it does **not** impose: `can_admins_bypass: true` and
+`prevent_self_review: false`, so it stops an automated path, not the sole
+admin. **Every deploy now waits for Ex to approve it** in the Actions
 tab; a run sitting at "Waiting" is the protection working, not a stuck job.
 
 Three controls live in GitHub settings, not this repo, so `git revert`

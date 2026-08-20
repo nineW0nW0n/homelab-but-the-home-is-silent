@@ -10,10 +10,12 @@
 # is untouched. Do not rename the Dokploy app: the volume name is derived
 # from it, and a rename silently starts MySQL on an empty database.
 #
-# That data is small: 14 tables, ~126 rows, 0.4 MB in `easyappointments`
-# (measured 2026-08-19). The volume is 203M on disk, but that is MySQL 8.0's
-# own ibdata1, redo/undo tablespaces and binlogs, not appointments. Small
-# does not mean unimportant: it is real customer booking data.
+# That data is small -- the volume is 203M on disk, but that is MySQL 8.0's
+# own ibdata1, redo/undo tablespaces and binlogs, not appointments. Measured
+# figures live in stacks/vps01/CLAUDE.md and are deliberately not restated
+# here: this header carried a stale row count until 2026-08-20, the fifth
+# site of a number that was wrong in four others. Small does not mean
+# unimportant: it is real customer booking data.
 #
 # MYSQL_ROOT_PASSWORD and DB_PASSWORD come from Dokploy's environment tab
 # (rail 11), never from this file.
