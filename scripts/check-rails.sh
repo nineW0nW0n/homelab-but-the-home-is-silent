@@ -126,5 +126,23 @@ fi
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
 echo "        are closed: nc -z -G 3 -w 3 <ip> 22 80 443 2377 3000 19999"
 
+# --- markup sinks in the public status page ----------------------------
+# page.html is served to anonymous visitors and is a vendored copy of a
+# designed front-end, re-copied by hand. It writes poll data with
+# textContent and real elements, never innerHTML -- but nothing enforced
+# that, while a comment in index.js claimed this grep already existed. It
+# did not, for months. Now it does, and the claim is true.
+#
+# Not a general XSS scanner: the page takes no user input and reads no
+# query params. This catches a re-copy that reintroduces a sink.
+pg=worker/status/src/page.html
+if [ -f "$pg" ]; then
+  if grep -nE '\.(inner|outer)HTML|insertAdjacentHTML|document\.write|new Function' "$pg"; then
+    err "$pg: markup sink in the public status page -- write with textContent"
+  fi
+else
+  err "$pg: missing -- the markup-sink check scanned nothing"
+fi
+
 [ "$fail" -eq 0 ] || { echo "check-rails: FAILED" >&2; exit 1; }
-echo "check-rails: rails 1 (partial), 2, 3, 4, 7 OK across $found compose files"
+echo "check-rails: rails 1 (partial), 2, 3, 4, 7 + markup sinks OK across $found compose files"

@@ -6,9 +6,11 @@ const SNAPSHOT_KEY = 'snapshot'
 
 // Defense in depth, not a fix for a live XSS: page.html takes no user
 // input and writes data with textContent and real elements, never
-// innerHTML. That is enforced upstream by the site repo's
-// scripts/check-rails.sh, not by convention -- this comment was silently
-// false for a while before that grep existed.
+// innerHTML. Enforced by scripts/check-rails.sh, which greps this repo's
+// page.html for markup sinks -- true since 2026-08-20. It was NOT true
+// when this comment first claimed it: the script did not exist, and the
+// claim sat here unchallenged for months. Verify a named check exists
+// before citing it.
 //
 // 'unsafe-inline' is required for both script and style: page.html is a
 // vendored copy of the designed front-end with two inline <script> blocks

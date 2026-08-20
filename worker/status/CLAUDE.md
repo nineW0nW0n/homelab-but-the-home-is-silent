@@ -161,7 +161,9 @@ the workflow reference.
 - A comment asserting a security invariant is worthless unless something
   checks it: `index.js`'s `PAGE_HEADERS` comment claimed `page.html` "writes
   data with textContent, never innerHTML" while the vendored page did use
-  `innerHTML` for the metric readout. The site repo's
-  `scripts/check-rails.sh` greps for markup sinks now. When you re-copy
-  `page.html`, re-read every comment here that claims something about its
-  contents — the copy can falsify them silently.
+  `innerHTML` for the metric readout. It then said `scripts/check-rails.sh`
+  greps for markup sinks — that script did not exist until 2026-08-20, so
+  the fix and its stated enforcement were both fiction for months. The grep
+  is real now (`check-rails.sh`, fire-tested). When you re-copy `page.html`,
+  re-read every comment claiming something about its contents, and verify a
+  named check exists before citing it.

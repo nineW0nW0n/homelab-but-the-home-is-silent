@@ -23,7 +23,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install pre-commit
-        run: pip install pre-commit
+        # Pinned, not `latest`: this is the gate, so an upstream release
+        # must never change what passes here without a commit saying so.
+        # 4.6.2 is what the repo runs locally. Bump deliberately.
+        run: pip install pre-commit==4.6.2
 
       - name: Cache pre-commit envs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
