@@ -109,6 +109,14 @@ run is a no-op, before calling a script change done.
   open on 22 for real, not just misconfigured. Fifth instance of the
   check-that-never-ran class; here the check ran and answered a different
   question than the one being asked.
+- Assert `permitrootlogin` against **both** spellings. `sshd -T` normalises
+  `prohibit-password` to the legacy `without-password` (OpenSSH 9.2, Debian
+  12), so asserting the literal the drop-in writes fails on a node that applied
+  it perfectly. Caught 2026-08-20 on the first real run: the assertion fired,
+  correctly and for the wrong reason. Note what its placement bought -- the
+  failure landed after UFW, sshd, `DOCKER-USER` and Fail2Ban had all applied,
+  so a bogus assertion cost nothing. Assert effective values, not the strings
+  you wrote.
 - The `00-hardening.conf` drop-in owns `PermitRootLogin` too, and the `sshd -T`
   assertion requires `prohibit-password`. Measured 2026-08-20: the provider
   image sets `PermitRootLogin yes` at line 33 of `/etc/ssh/sshd_config`, so the
