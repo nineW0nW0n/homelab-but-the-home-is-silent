@@ -26,8 +26,9 @@ Dokploy/VPS; the design spec says why
 - `src/index.js`: returns `page.html` for every path except `/status.json`
   and `/debug`, with no KV read and no poll (the shell needs no data). Those
   two read the KV snapshot, re-poll only if stale, write back via
-  `ctx.waitUntil`. `/status.json` is the page's contract: 3 nodes ordered
-  from `NODE_HOSTS`, never from `Object.entries(snapshot.nodes)`, which
+  `ctx.waitUntil`. `/status.json` is the page's contract (`src/shape.js`, v2
+  since 2026-08-21): `{ polledAt, nodes: [...] }`, nodes ordered from
+  `NODE_HOSTS`, never from `Object.entries(snapshot.nodes)`, which
   `pollAll` fills from concurrent promises so insertion order isn't
   guaranteed to match. `/debug` is the raw snapshot, key-gated.
 - `src/debug-auth.js`: `isDebugAuthorized`, kept out of `index.js` so
