@@ -205,11 +205,15 @@ incident history behind every one-line rule in every failure log here:
 - **Never size a dataset with `du` on its volume.** `du -sh` on
   `booking-ptpwn8_mysql-data` said 203M; that became "~200MB of real
   appointments" and reached five documents before anyone dumped the
-  database. Real: 14 tables, ~126 rows, 0.4 MB — the rest is MySQL 8.0's
-  ibdata1, redo/undo tablespaces, binlogs. Query
-  `information_schema.tables`, or dump and size the dump. **An inferred
-  number is said once, hedged, until measured — never copied into a second
-  document.**
+  database. Real: 14 tables, **128 rows**, 0.4 MB — the rest is MySQL 8.0's
+  ibdata1, redo/undo tablespaces, binlogs. **Count rows with `COUNT(*)`, not
+  `information_schema.tables`** — its `TABLE_ROWS` is an InnoDB *estimate*,
+  and this entry's own "~126" came from it and was wrong by two rows
+  (`ea_migrations` 0 vs 1, `ea_users` 3 vs 4; measured 2026-08-20). Use
+  `information_schema` for byte sizes, never for row counts. The remedy
+  prescribed here was itself an estimate for a year — **an inferred number
+  is said once, hedged, until measured, never copied into a second document,
+  and "measured" means the tool that counts, not the one that guesses.**
 - **Pin `biome.json`'s `$schema` and syntax to the exact version
   installed**, never to an older doc or skill: Biome 2.x's schema moved
   fast, and `biome migrate --write` produced `linter.rules.preset: "none"`,

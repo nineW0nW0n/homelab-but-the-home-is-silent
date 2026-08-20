@@ -96,11 +96,28 @@ a measurement that produces a confident number from the wrong input.
 `booking-ptpwn8_mysql-data` said 203M; that became "~200MB of real
 appointments" and reached `README.md`, `stacks/CLAUDE.md`,
 `dokploy/CLAUDE.md`, the booking compose header and a commit message
-before anyone dumped the database. Real: 14 tables, ~126 rows, 0.4 MB —
-the rest is MySQL 8.0's ibdata1, redo/undo tablespaces, binlogs. Query
-`information_schema.tables`, or dump and size the dump. **An inferred
-number is said once, hedged, until measured — never copied into a second
-document.**
+before anyone dumped the database. Real: 14 tables, **128 rows**, 0.4 MB —
+the rest is MySQL 8.0's ibdata1, redo/undo tablespaces, binlogs.
+
+**The fix this entry prescribed was itself wrong, and lasted longer than
+the bug.** It said to query `information_schema.tables`. That was done, it
+returned 126, and "~126 rows" was copied into `README.md`, root's failure
+log, this skill and `stacks/vps01/CLAUDE.md`. But InnoDB's `TABLE_ROWS` is
+an **estimate**: measured 2026-08-20 with `COUNT(*)` across all 14 tables,
+the real total is 128 — `information_schema` undercounted `ea_migrations`
+(0 vs 1) and `ea_users` (3 vs 4). The restore drill's "128 rows total",
+which came from real per-table counts, had been sitting sixteen lines
+below the wrong figure in the same file, disagreeing with it, since the
+day both were written.
+
+So: **count rows with `COUNT(*)`; use `information_schema` for byte sizes
+only.** And the wider lesson, which is why this entry gets a second
+paragraph instead of a corrected number — **when a remedy tells you to
+measure, check that the tool it names counts rather than estimates.** A
+prescribed fix inherits none of the scrutiny the original mistake got, so
+a wrong remedy propagates further than the bug it replaced: this one
+reached four documents, one of them public. **An inferred number is said
+once, hedged, until measured — never copied into a second document.**
 
 ### Biome 2.x's schema moved fast
 
