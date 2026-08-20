@@ -11,7 +11,6 @@ test('pollAll marks a node up with parsed cpu/mem/disk percentages', async () =>
     CF_ACCESS_CLIENT_ID: 'id',
     CF_ACCESS_CLIENT_SECRET: 'secret',
     NODE_HOSTS: 'vps00-metrics.maybeit.work',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
   }
   const fetchFn = async (url) => {
     if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, 85])
@@ -30,7 +29,6 @@ test('pollAll marks a node up with parsed cpu/mem/disk percentages', async () =>
   // load1 0.5 / 2 vCPUs * 100 = 25
   assert.equal(snapshot.nodes.vps00.load, 25)
   assert.equal(snapshot.nodes.vps00.swap, 10)
-  assert.equal(snapshot.dokploy.up, true)
 })
 
 test('pollAll marks a node down on fetch failure, without throwing', async () => {
@@ -38,10 +36,8 @@ test('pollAll marks a node down on fetch failure, without throwing', async () =>
     CF_ACCESS_CLIENT_ID: 'id',
     CF_ACCESS_CLIENT_SECRET: 'secret',
     NODE_HOSTS: 'vps01-metrics.maybeit.work',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
   }
-  const fetchFn = async (url) => {
-    if (url.includes('dokploy')) return new Response('', { status: 200 })
+  const fetchFn = async () => {
     throw new Error('network error')
   }
   const snapshot = await pollAll(env, fetchFn)
@@ -49,7 +45,6 @@ test('pollAll marks a node down on fetch failure, without throwing', async () =>
   assert.ok(snapshot.nodes.vps01.lastPolled)
   // first-ever poll, no previous snapshot to carry a lastSeen forward from
   assert.equal(snapshot.nodes.vps01.lastSeen, null)
-  assert.equal(snapshot.dokploy.up, true)
 })
 
 test('pollAll carries the previous lastSeen forward when a node fails after being up before', async () => {
@@ -57,21 +52,17 @@ test('pollAll carries the previous lastSeen forward when a node fails after bein
     CF_ACCESS_CLIENT_ID: 'id',
     CF_ACCESS_CLIENT_SECRET: 'secret',
     NODE_HOSTS: 'vps01-metrics.maybeit.work',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
   }
   const fetchFn = async () => {
     throw new Error('network error')
   }
   const previousSnapshot = {
     nodes: { vps01: { up: true, lastSeen: '2026-08-01T00:00:00.000Z' } },
-    dokploy: { up: false, lastSeen: '2026-07-30T00:00:00.000Z' },
   }
   const snapshot = await pollAll(env, fetchFn, previousSnapshot)
   assert.equal(snapshot.nodes.vps01.up, false)
   assert.equal(snapshot.nodes.vps01.lastSeen, '2026-08-01T00:00:00.000Z')
   assert.notEqual(snapshot.nodes.vps01.lastPolled, snapshot.nodes.vps01.lastSeen)
-  assert.equal(snapshot.dokploy.up, false)
-  assert.equal(snapshot.dokploy.lastSeen, '2026-07-30T00:00:00.000Z')
 })
 
 test('pollAll fails a node closed when a Netdata dimension value is non-numeric', async () => {
@@ -79,7 +70,6 @@ test('pollAll fails a node closed when a Netdata dimension value is non-numeric'
     CF_ACCESS_CLIENT_ID: 'id',
     CF_ACCESS_CLIENT_SECRET: 'secret',
     NODE_HOSTS: 'vps00-metrics.maybeit.work',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
   }
   const fetchFn = async (url) => {
     if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, null])
@@ -96,7 +86,6 @@ test('pollAll sums busy-state dimensions when Netdata reports no idle dimension'
     CF_ACCESS_CLIENT_ID: 'id',
     CF_ACCESS_CLIENT_SECRET: 'secret',
     NODE_HOSTS: 'vps00-metrics.maybeit.work',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
   }
   const fetchFn = async (url) => {
     // Shape confirmed against a live vps00 node: no "idle" dimension,
@@ -121,7 +110,6 @@ test('pollAll clamps load to 100 when load1 exceeds vCPU count', async () => {
     CF_ACCESS_CLIENT_ID: 'id',
     CF_ACCESS_CLIENT_SECRET: 'secret',
     NODE_HOSTS: 'vps00-metrics.maybeit.work',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
   }
   const fetchFn = async (url) => {
     if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, 85])
@@ -135,55 +123,6 @@ test('pollAll clamps load to 100 when load1 exceeds vCPU count', async () => {
   }
   const snapshot = await pollAll(env, fetchFn)
   assert.equal(snapshot.nodes.vps00.load, 100)
-})
-
-test('pollAll marks dokploy down on a 5xx response', async () => {
-  const env = {
-    CF_ACCESS_CLIENT_ID: 'id',
-    CF_ACCESS_CLIENT_SECRET: 'secret',
-    NODE_HOSTS: '',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
-  }
-  const fetchFn = async () => new Response('', { status: 502 })
-  const snapshot = await pollAll(env, fetchFn)
-  assert.equal(snapshot.dokploy.up, false)
-})
-
-test('pollAll marks dokploy down on an Access login redirect', async () => {
-  const env = {
-    CF_ACCESS_CLIENT_ID: 'id',
-    CF_ACCESS_CLIENT_SECRET: 'secret',
-    NODE_HOSTS: '',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
-  }
-  // Without redirect:manual the runtime follows this to a 200 login
-  // page and the check silently reports Access, not Dokploy.
-  const fetchFn = async () =>
-    new Response('', {
-      status: 302,
-      headers: { location: 'https://old-firefly-996b.cloudflareaccess.com/' },
-    })
-  const snapshot = await pollAll(env, fetchFn)
-  assert.equal(snapshot.dokploy.up, false)
-})
-
-test('pollAll sends the Access service token to dokploy', async () => {
-  const env = {
-    CF_ACCESS_CLIENT_ID: 'id',
-    CF_ACCESS_CLIENT_SECRET: 'secret',
-    NODE_HOSTS: '',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
-  }
-  let seen = null
-  const fetchFn = async (_url, options) => {
-    seen = options
-    return new Response('', { status: 200 })
-  }
-  const snapshot = await pollAll(env, fetchFn)
-  assert.equal(snapshot.dokploy.up, true)
-  assert.equal(seen.headers['CF-Access-Client-Id'], 'id')
-  assert.equal(seen.headers['CF-Access-Client-Secret'], 'secret')
-  assert.equal(seen.redirect, 'manual')
 })
 
 test('isFresh: missing, stale, and future-stamped snapshots all poll again', async () => {
@@ -209,10 +148,35 @@ test('pollAll stamps a top-level polledAt the freshness check can use', async ()
     CF_ACCESS_CLIENT_ID: 'id',
     CF_ACCESS_CLIENT_SECRET: 'secret',
     NODE_HOSTS: '',
-    DOKPLOY_HOST: 'dokploy.maybeit.work',
   }
   const fetchFn = async () => new Response('', { status: 200 })
   const snapshot = await pollAll(env, fetchFn)
   assert.ok(snapshot.polledAt, 'snapshot has polledAt')
   assert.equal(isFresh(snapshot), true)
+})
+
+test('pollAll never requests the Dokploy host, so the Access token cannot reach it', async () => {
+  // Regression guard for the 2026-08-20 removal. The Worker is public and its
+  // Access service token opens the deploy control plane; polling Dokploy put
+  // that credential on the wire for an up/down boolean only /debug ever showed.
+  // DOKPLOY_HOST is still set here deliberately -- a stale var must not be
+  // enough to bring the behaviour back.
+  const env = {
+    CF_ACCESS_CLIENT_ID: 'id',
+    CF_ACCESS_CLIENT_SECRET: 'secret',
+    NODE_HOSTS: 'vps00-metrics.maybeit.work',
+    DOKPLOY_HOST: 'dokploy.maybeit.work',
+  }
+  const requested = []
+  const fetchFn = async (url) => {
+    requested.push(url)
+    return new Response('', { status: 200 })
+  }
+  const snapshot = await pollAll(env, fetchFn)
+  assert.ok(requested.length > 0, 'the node was actually polled')
+  assert.ok(
+    requested.every((url) => url.includes('vps00-metrics.maybeit.work')),
+    `unexpected host polled: ${requested.find((u) => !u.includes('vps00-metrics.maybeit.work'))}`,
+  )
+  assert.equal(snapshot.dokploy, undefined)
 })

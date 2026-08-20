@@ -40,7 +40,7 @@ const PAGE_HEADERS = {
 }
 
 // Page's own DATA CONTRACT (see src/page.html): array of up to 3
-// { name, load, cpu, mem, swap, disk }, raw 0-100 percents. No dokploy --
+// { name, load, cpu, mem, swap, disk }, raw 0-100 percents --
 // the page hardcodes exactly 3 status-dot slots, mapped by ARRAY INDEX,
 // not by name. Order must come from NODE_HOSTS, not Object.entries(nodes)
 // -- pollAll fills that object from concurrent promises, so insertion
@@ -78,8 +78,8 @@ export default {
     }
 
     // /debug returns the raw snapshot: per-node error strings (Netdata
-    // internals, HTTP status codes) and Dokploy reachability. No secrets,
-    // but it is a recon aid, so it takes a shared header.
+    // internals, HTTP status codes). No secrets, but it is a recon aid, so
+    // it takes a shared header.
     //
     // Fails closed: if DEBUG_KEY is unset the route is 404 for everyone,
     // rather than open to everyone. 404 rather than 403 on a bad key too
@@ -111,8 +111,8 @@ export default {
       'x-content-type-options': 'nosniff',
       'cache-control': `public, max-age=${Math.floor(POLL_TTL_MS / 1000)}`,
     }
-    // Raw snapshot (includes dokploy + per-node `error` on down nodes) --
-    // not linked from the page, just a diagnostic escape hatch.
+    // Raw snapshot (includes per-node `error` on down nodes) -- not linked
+    // from the page, just a diagnostic escape hatch.
     if (pathname === '/debug') {
       // Never cached: it is gated by a shared key, and a cached copy could
       // outlive a rotated key or be served to the wrong client.
