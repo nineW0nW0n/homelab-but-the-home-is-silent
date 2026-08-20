@@ -12,8 +12,10 @@ inbound ports, GitHub Actions as the only path to production.
 > deployable via CI. Dokploy, Cloudflare Tunnel and two workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
 > `budget.maybeit.work` (ezBookkeeping), both on vps01. ezBookkeeping is
-> backed up nightly off-site to Cloudflare R2, and so is the booking
-> database. Expect rough edges. `main` is protected
+> backed up nightly off-site to Cloudflare R2; the booking database is
+> scheduled the same way, with its first unattended run due 2026-08-21 —
+> until one lands, only a forced end-to-end run has been proven.
+> Expect rough edges. `main` is protected
 > against force-push and deletion, so fixes land as new commits, not
 > rewrites.
 
@@ -87,8 +89,11 @@ That is precisely why the check that matters is a port sweep from off-node,
 not `ufw status`.
 
 Public hostnames that should not be public are behind **Cloudflare
-Access**: the Dokploy dashboard and all three Netdata endpoints require
-authentication at the edge, before the tunnel.
+Access**: the Dokploy dashboard, all three Netdata endpoints, and
+`budget.maybeit.work` require authentication at the edge, before the
+tunnel. `booking.maybeit.work` is deliberately **not** — it is the public
+booking page clients use, and locking it behind Access would defeat its
+purpose. Do not "fix" that.
 
 `cloudflared` runs in token mode (`tunnel run` + `TUNNEL_TOKEN`), and
 public-hostname routing is configured in the Cloudflare Zero Trust
@@ -172,9 +177,12 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   gates on every deploy was not worth the staged rollout on three nodes
   that are already independent. Per node: SSH in via
   `webfactory/ssh-agent` with that node's own key and a pinned
-  `known_hosts`, `rsync --delete --exclude 'backup/'` the node's stack
-  files (the exclude protects node-side state: the backup's run log and
-  its last-success stamp), write that node's tunnel token and Netdata
+  `known_hosts`, `rsync --delete` the node's stack files — excluding
+  `backup/`, `backup-booking/`, `.r2.env` and `.telegram.env`, which
+  protects node-side state the repo does not own: each backup's run log
+  and last-success stamp, and the two credential files later steps write
+  back (a deploy overlapping the hourly staleness check once made it exit
+  1 and skip that hour silently) — write that node's tunnel token and Netdata
   Cloud claim values to a remote `.env` over stdin plus separate
   `.r2.env` and `.telegram.env` credential files, then a guarded
   `docker compose pull && up -d`, guarded because a stack with no
@@ -200,14 +208,20 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   [Network model](#-network-model)).
 - sshd: key-only auth (`PasswordAuthentication no`, `UsePAM no`,
   `PermitRootLogin prohibit-password`), written to
-  `/etc/ssh/sshd_config.d/00-hardening.conf` so it is read before the
-  cloud-init drop-in that sets `PasswordAuthentication yes`, and asserted
-  against `sshd -T` afterwards.
+  `/etc/ssh/sshd_config.d/00-hardening.conf`. sshd keeps the *first* value
+  per keyword, so the `00-` prefix means no drop-in a provider image might
+  add later can outrank it — today it is the only file in that directory on
+  all three nodes. Asserted against `sshd -T` afterwards, because `sshd -t`
+  checks syntax, not which file won.
 - Fail2Ban: aggressive sshd jail, `backend = systemd` (these images ship
   without rsyslog, so the default file-based jail backend has nothing to
   tail).
-- Cloudflare Access in front of the Dokploy dashboard and every Netdata
-  endpoint. The status Worker reaches them with a service token.
+- Cloudflare Access in front of the Dokploy dashboard, every Netdata
+  endpoint, and `budget`. The status Worker holds a service token that
+  opens the three Netdata endpoints **and nothing else**: that token was
+  detached from the Dokploy application on 2026-08-20, so a public Worker
+  no longer carries a credential to the deploy control plane. `booking`
+  stays open on purpose — it is the public booking page.
 - One CI key **per node**, so a leaked Actions secret reaches one node
   rather than three, and deploys require a human approval.
 - Netdata does not get the Docker socket. A `:ro` bind on a socket
