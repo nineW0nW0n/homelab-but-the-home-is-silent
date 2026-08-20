@@ -63,9 +63,19 @@ echo "-- sshd --"
 # leave both files (identical content, 00- wins), never neither. Neither means
 # a node with no hardening drop-in at all, and Debian's compiled-in default is
 # PasswordAuthentication yes.
+#
+# PermitRootLogin is set here because these nodes are NOT stock Debian: the
+# provider image uncomments line 33 of /etc/ssh/sshd_config as
+# 'PermitRootLogin yes' (measured on all three, 2026-08-20). Every doc in this
+# repo used to say Debian's 'prohibit-password' default applied -- it does not.
+# 'prohibit-password' keeps key-based root working, which both these
+# provisioning scripts and Dokploy's Remote Server connection need, and drops
+# only the password path. Include sits at line 12, ahead of line 33, so the
+# drop-in wins.
 cat > /etc/ssh/sshd_config.d/00-hardening.conf <<'SSHD'
 PasswordAuthentication no
 KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
 UsePAM no
 SSHD
 rm -f /etc/ssh/sshd_config.d/99-hardening.conf
@@ -197,7 +207,8 @@ eff=\$(sshd -T) || { echo "FATAL: sshd -T failed; check host keys" >&2; exit 1; 
 printf '%s\n' "\$eff" | grep -E \
   '^(passwordauthentication|permitrootlogin|permitemptypasswords|usepam) ' || true
 bad=
-for want in 'passwordauthentication no' 'permitemptypasswords no' 'usepam no'; do
+for want in 'passwordauthentication no' 'permitemptypasswords no' 'usepam no' \
+  'permitrootlogin prohibit-password'; do
   printf '%s\n' "\$eff" | grep -qx "\$want" || bad="\$bad [\$want]"
 done
 if [ -n "\$bad" ]; then

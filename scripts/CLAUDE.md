@@ -109,6 +109,12 @@ run is a no-op, before calling a script change done.
   open on 22 for real, not just misconfigured. Fifth instance of the
   check-that-never-ran class; here the check ran and answered a different
   question than the one being asked.
+- The `00-hardening.conf` drop-in owns `PermitRootLogin` too, and the `sshd -T`
+  assertion requires `prohibit-password`. Measured 2026-08-20: the provider
+  image sets `PermitRootLogin yes` at line 33 of `/etc/ssh/sshd_config`, so the
+  Debian default this repo assumed never applied. `Include` sits at line 12,
+  ahead of it, so the drop-in wins. `prohibit-password` keeps key-based root
+  login, which these scripts and Dokploy's Remote Server connection both need.
 - Write a replacement drop-in **before** `rm`-ing the old name, never after.
   The interrupted state must be "both files" (identical content, `00-` wins),
   never "neither" — neither means no hardening drop-in at all, and Debian's

@@ -41,6 +41,16 @@ hand-edit it with a real value. Tracked files reference the hostname or
 
 ## Failure log
 
+- Never state a node's sshd setting from Debian's documented default. These
+  are provider images, not stock Debian: `PermitRootLogin yes` is uncommented
+  at line 33 of `/etc/ssh/sshd_config` on all three, while this file, the
+  README and a security audit all asserted `prohibit-password` because that is
+  what stock Debian ships. Not exploitable -- `PasswordAuthentication no` and
+  `KbdInteractiveAuthentication no` left keys as the only method -- but the
+  claim was false for months and only `sshd -T` on the box revealed it.
+  `sshd -t` cannot: it checks syntax, not effective values. Measured
+  2026-08-20 while checking a different sshd finding, which is the only reason
+  anyone looked.
 - "Key X is rejected by all three nodes" was recorded on 2026-08-18 after
   testing `~/.ssh/id_ed25519_vps` as `deploy@` only. It is the root key and
   works as `root@` on every node. A key is rejected *for a user*, never in
@@ -73,10 +83,16 @@ order of preference:
 1. **Docker**, for app-level work: `deploy` is in the `docker` group, which is
    how the vps01 backup script reads volumes without root.
 2. **`root@` with `~/.ssh/id_ed25519_vps`**, for the provisioning scripts.
-   `scripts/*.sh` default to `SSH_USER=root` and that default is correct;
-   `sshd` keeps Debian's `PermitRootLogin prohibit-password`, which
-   `harden-node.sh` does not change, so root is key-only. Add a
-   `Host vps0N-root` alias per node pointing at this key, since the plain
+   `scripts/*.sh` default to `SSH_USER=root` and that default is correct.
+   Root is key-only, but **not** for the reason this file used to give.
+   Superseded 2026-08-20: it said `sshd` keeps Debian's
+   `PermitRootLogin prohibit-password` default and `harden-node.sh` does not
+   change it. Measured on all three nodes, the provider image ships
+   `PermitRootLogin yes`, uncommented, at line 33 of `/etc/ssh/sshd_config` --
+   root was key-only only because `PasswordAuthentication no` removed every
+   other method. `harden-node.sh` now sets `PermitRootLogin prohibit-password`
+   in its drop-in and asserts it, so the property no longer rides on a second
+   setting staying correct. Use the `vps0N-root` ssh aliases; the plain
    `vps0N` aliases force the deploy key with `IdentitiesOnly yes`.
 3. **Dokploy**, which connects as root with its own keypair generated during
    Remote Server setup, held on vps00 and not on any laptop. It is the second
