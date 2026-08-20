@@ -19,8 +19,10 @@ run is a no-op, before calling a script change done.
   `authorized_keys` manually during dashboard setup), not `deploy`,
   which has no sudo.
 - `harden-node.sh <host>`: UFW (deny-all-incoming except 22), sshd
-  (`PasswordAuthentication no`, `UsePAM no`), Fail2Ban (aggressive sshd
-  jail). Already applied to all 3 nodes.
+  (`PasswordAuthentication no`, `UsePAM no`, in
+  `sshd_config.d/00-hardening.conf`, asserted with `sshd -T` at the end of
+  the run), Fail2Ban (aggressive sshd jail). Already applied to all 3 nodes,
+  but the `00-` name and the assertion post-date that: re-run it.
 - `add-swap.sh <host>`: 2GB swapfile, `vm.swappiness=10`. Nodes have no
   swap by default. Already applied to all 3.
 - `cap-dokploy-resources.sh <host>`: memory-caps Dokploy's own control
@@ -30,7 +32,9 @@ run is a no-op, before calling a script change done.
   (`daemon.json` log-opts, 10m x 3 files/container), caps journald disk
   use (`SystemMaxUse=200M`, restarted immediately), drops a weekly
   `/etc/cron.d/docker-prune` (Sunday 03:00, images/containers/build
-  cache older than 7d, never touches volumes). No RAM-freeing cron —
+  cache older than 7d, never touches volumes), and enables
+  `unattended-upgrades` (Debian's shipped security-only origins, not
+  overridden). No RAM-freeing cron —
   dropping page cache doesn't free anything real; swap
   (`add-swap.sh`) + Dokploy caps already cover memory pressure.
 
@@ -93,6 +97,39 @@ run is a no-op, before calling a script change done.
   installs a systemd oneshot ordered `After=docker.service`
   (`docker-wan-drop.service`) instead, which cannot lose that race.
   Verified across a real vps02 reboot, not assumed.
+- sshd keeps the **first** value it obtains for each keyword, and Debian 12's
+  `/etc/ssh/sshd_config` opens with `Include /etc/ssh/sshd_config.d/*.conf`,
+  globbed in lexical order. A provider-shipped `50-cloud-init.conf` with
+  `PasswordAuthentication yes` therefore beat the old `99-hardening.conf`
+  outright, and `sshd -t` could never reveal it: it checks syntax, not which
+  drop-in won. Renamed to `00-hardening.conf` and the *effective* config is
+  now asserted with `sshd -T`. Before re-running the script on a node, run
+  `sshd -T | grep -E '^(passwordauthentication|usepam) '` — after the rename
+  the evidence is gone. `passwordauthentication yes` means password login was
+  open on 22 for real, not just misconfigured. Fifth instance of the
+  check-that-never-ran class; here the check ran and answered a different
+  question than the one being asked.
+- Write a replacement drop-in **before** `rm`-ing the old name, never after.
+  The interrupted state must be "both files" (identical content, `00-` wins),
+  never "neither" — neither means no hardening drop-in at all, and Debian's
+  compiled-in default is `PasswordAuthentication yes`.
+- Order `harden-node.sh` by what it costs to skip: UFW, sshd, `DOCKER-USER`
+  (rail 1), then Fail2Ban, then assertions. Under `set -eu` every step is an
+  abort point for everything below it, so anything that can fail on node state
+  the script does not control belongs *after* rail 1, not before. Fail2Ban's
+  own start is exactly that — see the `backend = systemd` entry above — and it
+  used to sit two blocks ahead of the `DOCKER-USER` rules, where a failed jail
+  would silently leave published ports unfiltered. The `sshd -T` assertion is
+  last for the same reason. sshd itself stays early and is the one accepted
+  exception: it is gated by `sshd -t` on static content.
+- `systemctl enable --now` does not re-run a `RemainAfterExit=yes` oneshot
+  that is already active, so an updated `docker-wan-drop.sh` payload lands on
+  disk unapplied while the run prints the *old* rule and looks like it
+  worked. Use `enable` + `restart` when the payload can change.
+- Because `00-hardening.conf` sorts first, a later drop-in can no longer
+  override it: dropping a `10-emergency.conf` to re-enable password auth does
+  nothing. Recovery from the provider console is to edit
+  `00-hardening.conf` itself.
 - `harden-node.sh` writes `/etc/docker/daemon.json` but deliberately
   never restarts Docker: on vps00 that restarts the Swarm control
   plane and every container. The loopback-bind layer is therefore
