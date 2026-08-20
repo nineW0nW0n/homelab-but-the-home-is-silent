@@ -65,6 +65,11 @@ and keep the pre-commit hook's `additional_dependencies` pin
 (`@biomejs/biome@<version>`) in step with it: rail 9 is only enforced
 because that local hook exists.
 
+Verified 2026-08-20: `biome.json`'s `$schema`, the `biome-ci` hook's
+`additional_dependencies` in `.pre-commit-config.yaml`, and the installed
+binary are all **2.5.8**. Upstream's latest was 2.5.9 that day — that is
+not drift, it is a pin. Bump all three in one commit or none.
+
 This repo does have JS/JSON: `worker/status/`. Biome is already set up
 and wired into `.pre-commit-config.yaml`; `biome ci .` finding nothing to
 lint in a given run is a pass, not a skip.
@@ -75,14 +80,25 @@ This repo is mostly YAML, so this is the linter that actually matters day
 to day. Check: `yamllint --version`. If missing, install it:
 
 ```sh
-pip install --break-system-packages yamllint==1.38.0
+pip3 install --break-system-packages yamllint==1.38.0
 ```
+
+Plain `pip` is not on `PATH` on this machine (Homebrew Python); `pip3` is.
 
 Pinned, like everything else here: root's failure log says never `latest`
 for Biome, rtk, caveman or yamllint. `apt-get install -y yamllint` and
 `brew install yamllint` are fallbacks only when pip is unavailable — they
 install whatever the distro happens to ship, so record the version you got
-and expect lint results to differ from CI's.
+and expect lint results to differ from CI's. (Measured 2026-08-20: the
+local `yamllint` is 1.38.0 from Homebrew, which happens to match the pin.)
+
+**The version that actually gates is the pre-commit hook `rev`, not your
+local install.** `.pre-commit-config.yaml` pins
+`adrienverge/yamllint` at `v1.35.1` while this skill installs 1.38.0, so a
+rule whose behaviour changed between those two releases can pass locally
+and fail in `validate.yml`, or the reverse. Known divergence as of
+2026-08-20, left as-is deliberately (bumping a gate rev is Ex's call); if
+you bump one, bump both in the same commit.
 
 If `.yamllint` doesn't exist yet at repo root, create it with exactly
 this content (hard-railed, byte-for-byte from this repo's `.yamllint`;
@@ -153,13 +169,19 @@ Run via `pre-commit run --all-files` (already wired in) or standalone:
 Check: is the `superpowers` plugin active? If not, install it:
 
 ```
+/plugin install superpowers@claude-plugins-official
+```
+
+The official marketplace is the one already registered here, and
+`superpowers@claude-plugins-official` **6.3.0** is what is installed
+(verified 2026-08-20). Only if that marketplace is absent:
+
+```
 /plugin marketplace add obra/superpowers-marketplace
 /plugin install superpowers@superpowers-marketplace
 ```
 
-(Use `/plugin install superpowers@claude-plugins-official` instead if the
-official marketplace is already registered; don't register a second
-marketplace for the same plugin.)
+Never register a second marketplace for a plugin you already have.
 
 | Repo situation | Skill | When to invoke |
 |---|---|---|
@@ -190,7 +212,8 @@ rtk init -g          # wires the Claude Code PreToolUse hook; restart after this
 Pinned to a tag, not `refs/heads/master`: a branch URL re-pipes whatever
 upstream pushed that day into a shell. Bump it deliberately —
 `gh api repos/rtk-ai/rtk/releases/latest --jq .tag_name` — and record the
-new version here.
+new version here. Checked 2026-08-20: `v0.45.0` is both the installed
+version and upstream's latest release.
 
 Config lives where rtk itself puts it, which is **not** the same path on
 every platform: on macOS it is
@@ -248,6 +271,10 @@ curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman/bin-v1.1.1/in
 
 Pinned for the same reason as rtk above; bump with
 `gh api repos/JuliusBrussee/caveman/releases/latest --jq .tag_name`.
+Checked 2026-08-20: `bin-v1.1.1` is still upstream's latest. On this
+machine caveman is present as a **plugin** from the `JuliusBrussee/caveman`
+marketplace rather than via the installer above; either route gives you
+`/caveman`, so check for the command, not for a binary.
 
 Configured level, hard-railed: run `/caveman full` at the start of a
 session, not `ultra` or `wenyan`. This repo's output often *is* the exact

@@ -11,18 +11,11 @@ inbound ports, GitHub Actions as the only path to production.
 > **Status: work in progress.** Nodes are provisioned, hardened, and
 > deployable via CI. Dokploy, Cloudflare Tunnel and two workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
-> `budget.maybeit.work` (ezBookkeeping), both on vps01. ezBookkeeping is
-> backed up nightly off-site to Cloudflare R2; the booking database's backup
-> is written and restore-drilled but not yet scheduled on the node (PR #31
-> installs the cron). Expect rough edges. `main` is protected
+> `budget.maybeit.work` (ezBookkeeping), both on vps01. Both are backed up
+> nightly off-site to Cloudflare R2, and both backups have been restored from
+> that copy in a drill. Expect rough edges. `main` is protected
 > against force-push and deletion, so fixes land as new commits, not
 > rewrites.
-
-<!-- When PR #31 merges AND a deploy has been approved on main, three places
-     stop being true: the booking clause in the NOTE above, the "(PR #31, not
-     yet on main)" tag on vps01/backup-booking.sh in the file listing, and the
-     "not yet running" opening of the booking paragraph under ## Backups.
-     Update all three in the same commit. -->
 
 ## 🗺️ Topology
 
@@ -41,7 +34,8 @@ swarms, not one cluster.
 `scripts/` use RFC 5737 documentation addresses (`203.0.113.x`), and a
 pre-commit hook fails the commit if a routable IPv4 address appears in a
 tracked text file. It matches dotted quads only: IPv6 literals pass, binary
-files are not scanned, and `worker/status/package-lock.json` is excluded.
+files are not scanned, and `worker/status/package-lock.json` and
+`worker/status/node_modules/` are excluded.
 Note the `vps0N.maybeit.work` names are
 inventory labels with no DNS records; they are not substitutes for an
 address.
@@ -87,8 +81,9 @@ what `ufw status` says. Two layers close it, both applied by
 - `"ip": "127.0.0.1"` in `/etc/docker/daemon.json`, so newly published
   ports do not land on `0.0.0.0` by default.
 
-The second does not cover Swarm host-mode or ingress-mode publishes, which
-is why both exist. The check that matters is a port sweep from off-node,
+Neither layer covers ingress-mode Swarm publishes, which traverse a
+different chain (`DOCKER-INGRESS`); nothing here publishes that way today.
+That is precisely why the check that matters is a port sweep from off-node,
 not `ufw status`.
 
 Public hostnames that should not be public are behind **Cloudflare
@@ -131,14 +126,14 @@ worth naming next to a zero-inbound-ports posture.
   workflows/
     validate.yml                     pre-commit over the whole repo, reusable via workflow_call
     deploy.yml                       one approval, then all three nodes in parallel
-    deploy-worker.yml                tests + deploys the status Worker
+    deploy-worker.yml                tests + deploys the status Worker (same production approval)
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
 stacks/
   vps0N/docker-compose.yml           per-node cloudflared connector + Netdata
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
-  vps01/backup-booking.sh            nightly MySQL dump to R2 (PR #31, not yet on main)
+  vps01/backup-booking.sh            nightly MySQL dump to R2
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
 dokploy/
   ezbookkeeping/, booking/           compose apps Dokploy clones from this repo itself
@@ -203,7 +198,11 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 - UFW: deny-all-incoming except SSH, on every node, plus `DOCKER-USER`
   drops, because UFW does not govern container-published ports (see
   [Network model](#-network-model)).
-- sshd: key-only auth (`PasswordAuthentication no`, `UsePAM no`).
+- sshd: key-only auth (`PasswordAuthentication no`, `UsePAM no`,
+  `PermitRootLogin prohibit-password`), written to
+  `/etc/ssh/sshd_config.d/00-hardening.conf` so it is read before the
+  cloud-init drop-in that sets `PasswordAuthentication yes`, and asserted
+  against `sshd -T` afterwards.
 - Fail2Ban: aggressive sshd jail, `backend = systemd` (these images ship
   without rsyslog, so the default file-based jail backend has nothing to
   tail).
@@ -254,20 +253,18 @@ hand: pull the newest archive, extract it into throwaway volumes, boot a
 second container against them, then delete all of it. That drill is what
 caught the schedule silently never firing.
 
-`booking.maybeit.work`'s MySQL database has a backup written but **not yet
-running**: `backup-booking.sh` lives on PR #31, not on `main`, and no deploy
-run has installed its cron, so the only runs so far were forced by hand. Once
-that merges and a deploy is approved it runs at 04:00, an hour after
-ezBookkeeping so two backups never overlap on a 2GB node: a hot `mysqldump
---single-transaction` taken inside the MySQL container, so the booking site
-never goes down for it, writing its own stamp file that the same staleness
-check watches, so the two backups can go stale independently. Until it lands,
-this is the only production data here without a scheduled off-site copy. It is not much data: 14 tables and about 126
-rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
-own tablespaces and binlogs, not appointments. Real customer bookings all the
-same. A forced end-to-end run of the backup passed on 2026-08-19 and the
-archive is in R2. A restore drill passed the same day: the archive was pulled
-back down from R2 and restored into a throwaway MySQL container, and all 14
+`booking.maybeit.work`'s MySQL database is backed up the same way, by
+`backup-booking.sh`, scheduled on vps01 since 2026-08-20. It runs at 04:00, an
+hour after ezBookkeeping so two backups never overlap on a 2GB node: a hot
+`mysqldump --single-transaction` taken inside the MySQL container, so the
+booking site never goes down for it, writing its own stamp file that the same
+staleness check watches, so the two backups can go stale independently. It is
+not much data: 14 tables and about 126 rows, 0.4 MB, dumping to a 6KB gzip; the
+volume's 203MB on disk is MySQL's own tablespaces and binlogs, not
+appointments. Real customer bookings all the same. A forced end-to-end run of
+the backup passed on 2026-08-19 and the archive is in R2. A restore drill
+passed the same day: the archive was pulled back down from R2 and restored
+into a throwaway MySQL container, and all 14
 tables and every per-table row count matched production. The throwaway
 container and its volume were deleted afterwards; production was never written
 to.
