@@ -12,17 +12,10 @@ inbound ports, GitHub Actions as the only path to production.
 > deployable via CI. Dokploy, Cloudflare Tunnel and two workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
 > `budget.maybeit.work` (ezBookkeeping), both on vps01. ezBookkeeping is
-> backed up nightly off-site to Cloudflare R2; the booking database's backup
-> is written and restore-drilled but not yet scheduled on the node (PR #31
-> installs the cron). Expect rough edges. `main` is protected
+> backed up nightly off-site to Cloudflare R2, and so is the booking
+> database. Expect rough edges. `main` is protected
 > against force-push and deletion, so fixes land as new commits, not
 > rewrites.
-
-<!-- When PR #31 merges AND a deploy has been approved on main, three places
-     stop being true: the booking clause in the NOTE above, the "(PR #31, not
-     yet on main)" tag on vps01/backup-booking.sh in the file listing, and the
-     "not yet running" opening of the booking paragraph under ## Backups.
-     Update all three in the same commit. -->
 
 ## 🗺️ Topology
 
@@ -138,7 +131,7 @@ stacks/
   vps0N/docker-compose.yml           per-node cloudflared connector + Netdata
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
-  vps01/backup-booking.sh            nightly MySQL dump to R2 (PR #31, not yet on main)
+  vps01/backup-booking.sh            nightly MySQL dump to Cloudflare R2
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
 dokploy/
   ezbookkeeping/, booking/           compose apps Dokploy clones from this repo itself
@@ -254,15 +247,15 @@ hand: pull the newest archive, extract it into throwaway volumes, boot a
 second container against them, then delete all of it. That drill is what
 caught the schedule silently never firing.
 
-`booking.maybeit.work`'s MySQL database has a backup written but **not yet
-running**: `backup-booking.sh` lives on PR #31, not on `main`, and no deploy
-run has installed its cron, so the only runs so far were forced by hand. Once
-that merges and a deploy is approved it runs at 04:00, an hour after
-ezBookkeeping so two backups never overlap on a 2GB node: a hot `mysqldump
---single-transaction` taken inside the MySQL container, so the booking site
-never goes down for it, writing its own stamp file that the same staleness
-check watches, so the two backups can go stale independently. Until it lands,
-this is the only production data here without a scheduled off-site copy. It is not much data: 14 tables and about 126
+`booking.maybeit.work`'s MySQL database is covered too, scheduled on the node
+since 2026-08-20. It runs at 04:00, an hour after ezBookkeeping so two backups
+never overlap on a 2GB node: a hot `mysqldump --single-transaction` taken
+inside the MySQL container, so the booking site never goes down for it, writing
+its own stamp file that the same staleness check watches, so the two backups
+can go stale independently. The dump is rejected and the alert left to fire if
+it carries fewer than 10 `CREATE TABLE` statements -- an empty-but-existing
+database dumps as a complete, valid file, and uploading that would age out the
+last real copy. It is not much data: 14 tables and about 126
 rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
 own tablespaces and binlogs, not appointments. Real customer bookings all the
 same. A forced end-to-end run of the backup passed on 2026-08-19 and the

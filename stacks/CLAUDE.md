@@ -261,9 +261,9 @@ Ex's password manager) gets you the books but invalidates every session.
 
 ## booking MySQL backups (vps01)
 
-Nightly at **04:00 Asia/Manila** once PR #31 merges and a deploy installs the
-cron -- not scheduled on vps01 yet; the forced runs and the restore drill below
-are all that have executed. Staggered an hour off ezBookkeeping so two
+Nightly at **04:00 Asia/Manila**, scheduled on vps01 since 2026-08-20 (cron
+verified on the node after the deploy, not inferred from the workflow).
+Staggered an hour off ezBookkeeping so two
 backups never run at once on a 2GB node, same R2 bucket, same hourly-cron
 + in-script hour gate, same `FORCE_BACKUP=1` escape hatch. Two files in
 `stacks/vps01/`: `backup-booking.sh`, and the shared `check-backup-age.sh`
