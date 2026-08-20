@@ -2,16 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<script>document.documentElement.classList.add('js')</script>
+<script>document.documentElement.classList.add('js');
+addEventListener('error', () => document.documentElement.classList.remove('js'));</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>maybeit.work</title>
-<meta name="description" content="Status for maybeit.work. It does.">
+<meta name="description" content="It might not. Today it does.">
 <meta name="theme-color" content="#F2F2F2">
 <meta property="og:title" content="maybeit.work">
-<meta property="og:description" content="It does.">
+<meta property="og:description" content="It might not. Today it does.">
+<!-- Inline SVG, no runtime request (rail 2). Same disc+corona motif as the
+     favicon below, scaled up with a scatter of field dots so a shared link's
+     preview card matches the page instead of rendering as bare text. -->
+<meta property="og:image" content="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 630'%3E%3Crect width='1200' height='630' fill='%23F2F2F2'/%3E%3Ccircle cx='600' cy='315' r='210' fill='none' stroke='%233E9E6B' stroke-width='1' opacity='0.25'/%3E%3Ccircle cx='600' cy='315' r='170' fill='none' stroke='%233E9E6B' stroke-width='1.5' opacity='0.4'/%3E%3Ccircle cx='600' cy='315' r='138' fill='%2322223B'/%3E%3Ccircle cx='600' cy='315' r='140' fill='none' stroke='%233E9E6B' stroke-width='2.4'/%3E%3Ccircle cx='210' cy='120' r='2' fill='%235A5E77'/%3E%3Ccircle cx='980' cy='500' r='2.4' fill='%235A5E77'/%3E%3Ccircle cx='1040' cy='140' r='1.6' fill='%235A5E77'/%3E%3Ccircle cx='140' cy='470' r='1.8' fill='%235A5E77'/%3E%3Ccircle cx='300' cy='520' r='1.4' fill='%235A5E77'/%3E%3Ccircle cx='900' cy='150' r='1.4' fill='%235A5E77'/%3E%3C/svg%3E">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F2F2F2'/%3E%3Ccircle cx='16' cy='16' r='9' fill='%2322223B'/%3E%3Ccircle cx='16' cy='16' r='9.8' fill='none' stroke='%233E9E6B' stroke-width='1.4'/%3E%3C/svg%3E">
 <style>
-/* Self-hosted, latin-subset, woff2, no runtime request leaves the page (rail 2).
+/* Self-hosted, latin-subset, woff2 — no runtime request leaves the page (rail 2).
    Inter ships as a single variable file covering weights 100-900. */
 @font-face {
   font-family: 'Inter';
@@ -37,12 +43,15 @@
 
 /* Light theme tokens by default. The `dark` values below are written by JS
    (applyTheme(), see script at the end of body) directly onto :root's inline
-   style, which always wins over these, these are just the pre-JS/no-JS
+   style, which always wins over these — these are just the pre-JS/no-JS
    values, matching light exactly so there's no flash once JS does run. */
 :root {
   --bg: #F2F2F2;
   --ink: #22223B;
   --ink3: #5A5E77;
+  --onDisc: #F2F2F2;
+  --gutter: clamp(40px, 5.5vw, 72px);
+  color-scheme: light dark;
   --tick: rgba(90,94,119,.5);
   --rule: rgba(90,94,119,.32);
   --scan: rgba(34,34,59,.035);
@@ -61,51 +70,114 @@ a:hover { color: var(--ink); }
   .blink { animation: none; opacity: 1; }
 }
 
-/* Hide the animated overlay until JS has actually run, content underneath
+/* Hide the animated overlay until JS has actually run — content underneath
    (the .no-js block) stays the visible default until then (rail 6).
    !important is load-bearing: .no-js has an inline display:flex, which
    beats a plain stylesheet rule regardless of the .js class. */
 html:not(.js) .js-only { display: none !important; }
 html.js .no-js { display: none !important; }
 
-.status-dot { position: relative; width: 6px; height: 6px; border-radius: 50%; }
+/* Backstop for #boot vs #h2: #boot used to carry `transition: opacity .18s
+   linear` (removed from its inline style) so its fade-out could get caught
+   mid-flight — a backgrounded/occluded tab suspends rAF and freezes any
+   in-progress CSS transition at whatever fractional value it had reached,
+   and a later forced repaint (e.g. a screenshot) then composites that
+   frozen partial opacity on top of a #h2 that had already finished
+   settling to 1 in an earlier tick, before the pause. #boot's opacity is
+   now a hard 0/1 flip with no transition, so there is no fractional value
+   to freeze — but this class is a second, stylesheet-level lock behind it:
+   once the boot readout has flipped to 0 for this cycle, !important here
+   beats any stray inline write, so a paused/resumed rAF loop or a
+   theme-toggle cache reset can never leave it re-rendered. start()
+   (initial load and REPLAY) clears the class again so the next boot hold
+   can show. Third layer: a `visibilitychange` listener (see init()) forces
+   an immediate frame() the instant the tab is shown again, so the class
+   and the inline opacity both catch up before the browser gets a chance to
+   paint whatever state was current when the tab was hidden. */
+html.booted #boot { opacity: 0 !important; }
+
+/* Idle-state dot/value opacity (.75, applied here and mirrored in the two
+   `this.set(dot/val, 'opacity', …)` idle branches in the script) went
+   through .5/.55, then .62/.68 — both measured under 3:1 in practice
+   (~1.9-2.9:1 diluting --ink3 that low against a solid --bg), despite an
+   earlier comment claiming otherwise. .75 actually clears 3:1 in both
+   themes (~3.1:1 dark, ~3.4:1 light against --bg), and is shared with the
+   other "dim but legible" chrome below (crosshair ticks, LGT/DRK, REPLAY)
+   so there's one opacity value to reason about instead of three. */
+.status-dot { position: relative; width: 9px; height: 9px; border-radius: 50%; }
+html.narrow .status-dot { width: 16px; height: 16px; }
+html.narrow .status-dot::before { inset: -6px; filter: blur(6px); }
 .status-dot::before {
   content: ''; position: absolute; inset: -4px; border-radius: 50%;
   background: inherit; filter: blur(3px); opacity: .3;
 }
 /* Width tracks the widest state each mode renders (5-metric readout vs
-   TAPPING/OK/DNGR). Breakpoint must match the `this.W < 600` check in the
-   script's chrome() method, same cutoff, two places, kept in sync by hand. */
+   ASKING/OK/BAD). Breakpoint is the NARROW_BP constant in the script —
+   resize() mirrors it onto <html class="narrow"> so this reads the same
+   cutoff as chrome()'s `this.W < NARROW_BP` check without a second
+   hand-copied number here. */
 .hud-val { min-width: 11.5em; white-space: nowrap; display: inline-block; }
-@media (max-width: 600px) { .hud-val { min-width: 4.5em; } }
+html.narrow .hud-val { min-width: 4.5em; }
 
 /* Bottom bar: pct + theme-toggle on the left, vps status center, replay +
-   ST/00 on the right, one row wide, two rows narrow (theme-toggle and
-   replay drop under pct/vps/ST00 so they stop crowding it). Breakpoint
-   matches the `this.W < 600` check in the script, see .hud-val above. */
+   NO/SLA on the right — one row wide, two rows narrow (theme-toggle and
+   replay drop under pct/vps/ST00 so they stop crowding it). Breakpoint is
+   NARROW_BP via <html class="narrow">, see .hud-val above. */
 #bar-row {
+  font-size: clamp(11px, 1.15vw, 12px);
   display: grid;
-  grid-template-columns: auto auto minmax(0,1fr) auto auto;
-  grid-template-areas: "pct theme vps replay st";
-  align-items: start;
-  column-gap: clamp(10px, 1.8vw, 22px);
+  grid-template-columns: auto minmax(0,1fr) auto;
+  grid-template-areas: "theme vps replay";
+  /* Baseline, not start: the boxed controls carry a border and 3px of padding,
+     so aligning their boxes' top edges left their text sitting lower than the
+     plain labels beside them. Every string in the bar now sits on one line. */
+  align-items: baseline;
+  column-gap: clamp(14px, 3.2vw, 32px);
   row-gap: 6px;
-  padding-top: 14px;
+  padding-top: 16px;
 }
-#pct { grid-area: pct; }
 #theme-toggle { grid-area: theme; }
-#vps-cluster { grid-area: vps; }
+#vps-cluster { grid-area: vps; justify-content: center; align-items: baseline; }
 #replay { grid-area: replay; }
-#st-el { grid-area: st; }
-@media (max-width: 600px) {
-  #bar-row {
-    grid-template-columns: auto minmax(0,1fr) auto;
-    grid-template-areas: "pct vps st" "theme vps replay";
-  }
+/* Two rows, but each one says something: the aggregate and its three node
+   lights on top, the two controls beneath. One row overlapped below ~340px
+   once the buttons' tap-target padding was counted. */
+html.narrow #bar-row {
+  font-size: 12.5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(28px, 11vw, 48px);
 }
-.replay-btn { cursor: pointer; opacity: .45; letter-spacing: .12em; transition: opacity .15s linear; }
-.replay-btn:hover { opacity: .9; }
+html.narrow .nl, html.narrow .hud-val { display: none; }
+@media (max-width: 600px) { .wide-only { display: none; } }
+html.narrow #vps-cluster { flex-wrap: nowrap; column-gap: 10px; justify-content: flex-start; }
+
+.replay-btn { cursor: pointer; opacity: 1; letter-spacing: .12em; border: 0; transition: opacity .15s linear; }
+.replay-btn:hover { opacity: .78; }
+/* Placed by resize(); the margin makes left/top the crossing point itself. */
+.crosshair { position: absolute; width: 15px; height: 15px; margin: -7px 0 0 -7px; pointer-events: none; filter: var(--hudGlow); }
 .theme-toggle { cursor: pointer; }
+/* Grows both controls to a >=44px target without moving anything: the
+   matching negative margin pulls the box back so neighbouring grid cells and
+   text stay exactly where they were (rail 4 -- static boxes, never animated). */
+.theme-toggle, .replay-btn { padding: 16px 0; margin: -16px 0; }
+.ico { display: none; width: 16px; height: 16px; }
+/* Below NARROW_BP the bar goes wordless: three lights centred, a control at
+   each end. The half-filled disc flips with the theme, so the symbol itself
+   carries the state the boxed label used to. */
+html.narrow .ico { display: block; }
+html.narrow #tl, html.narrow #td, html.narrow .sep, html.narrow .replay-btn span { display: none; }
+html.dark .ico-flip { transform: scaleX(-1); }
+html.narrow .theme-toggle, html.narrow .replay-btn { padding: 14px 14px; margin: -14px -14px; }
+/* The rule marks the two controls apart from the static labels beside them --
+   and on the toggle it doubles as "you are here". It sits on the label, not
+   the button: the buttons carry 16px of padding to reach a 44px tap target,
+   which would drop the underline 16px below the word. */
+.replay-btn span, #theme-toggle .on { border: 1px solid currentColor; padding: 3px 6px; }
+#theme-toggle:focus-visible, #replay:focus-visible {
+  outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px;
+}
 </style>
 </head>
 <body>
@@ -114,46 +186,57 @@ html.js .no-js { display: none !important; }
 
   <div class="no-js" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center; padding: 24px; box-sizing: border-box;">
     <h1 style="font-size: clamp(32px, 8vw, 48px); font-weight: 600; letter-spacing: -.02em; margin: 0; color: var(--ink)">maybeit.work</h1>
-    <p style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); margin: 0;">it does.</p>
+    <p style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); margin: 0;">it.doesn't</p>
     <ul style="list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; padding: 0; margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: .08em; color: var(--ink3);">
       <li>VPS00</li><li>VPS01</li><li>VPS02</li>
     </ul>
   </div>
 
-  <div class="js-only">
-    <canvas id="cv" style="position: absolute; inset: 0; width: 100%; height: 100%"></canvas>
+  <main class="js-only">
+    <canvas id="cv" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .28s linear"></canvas>
 
-    <div id="boot" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: flex; gap: 8px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: .22em; color: var(--ink3); text-shadow: var(--hudText); pointer-events: none; transition: opacity .18s linear">TAPPING<span class="blink">_</span></div>
+    <div id="boot" aria-hidden="true" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: flex; gap: 8px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: .08em; color: var(--ink3); text-shadow: var(--hudText); pointer-events: none">KNOCKING<span class="blink">_</span></div>
+
+    <div id="ch-tl" class="crosshair"><div style="position: absolute; top: 7px; left: 0; width: 15px; height: 1px; background: var(--ink3); opacity: .75"></div><div style="position: absolute; left: 7px; top: 0; width: 1px; height: 15px; background: var(--ink3); opacity: .75"></div></div>
+    <div id="ch-tr" class="crosshair"><div style="position: absolute; top: 7px; left: 0; width: 15px; height: 1px; background: var(--ink3); opacity: .75"></div><div style="position: absolute; left: 7px; top: 0; width: 1px; height: 15px; background: var(--ink3); opacity: .75"></div></div>
+    <div id="ch-bl" class="crosshair"><div style="position: absolute; top: 7px; left: 0; width: 15px; height: 1px; background: var(--ink3); opacity: .75"></div><div style="position: absolute; left: 7px; top: 0; width: 1px; height: 15px; background: var(--ink3); opacity: .75"></div></div>
+    <div id="ch-br" class="crosshair"><div style="position: absolute; top: 7px; left: 0; width: 15px; height: 1px; background: var(--ink3); opacity: .75"></div><div style="position: absolute; left: 7px; top: 0; width: 1px; height: 15px; background: var(--ink3); opacity: .75"></div></div>
 
     <div id="grain" style="position: absolute; inset: 0; pointer-events: none"></div>
 
     <div id="scan" style="position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, var(--scan) 0px, var(--scan) 1px, transparent 1px, transparent 3px)"></div>
     <div style="position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 50%, transparent 55%, var(--vig) 100%)"></div>
 
-    <div style="position: absolute; top: 28px; left: 28px; width: 15px; height: 15px; pointer-events: none; filter: var(--hudGlow)"><div style="position: absolute; top: 7px; left: 0; width: 15px; height: 1px; background: var(--ink3); opacity: .45"></div><div style="position: absolute; left: 7px; top: 0; width: 1px; height: 15px; background: var(--ink3); opacity: .45"></div></div>
-    <div style="position: absolute; top: 28px; right: 28px; width: 15px; height: 15px; pointer-events: none; filter: var(--hudGlow)"><div style="position: absolute; top: 7px; left: 0; width: 15px; height: 1px; background: var(--ink3); opacity: .45"></div><div style="position: absolute; left: 7px; top: 0; width: 1px; height: 15px; background: var(--ink3); opacity: .45"></div></div>
 
-    <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); pointer-events: none">
-      <div id="h1" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 48px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; color: var(--bg); white-space: nowrap; opacity: 0">maybeit.work</div>
-      <div id="h2" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 48px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; color: var(--bg); white-space: nowrap; opacity: 0">it.does</div>
+    <!-- top is 50% until JS resizes it (see Scene.resize/centerY): on a
+         tall phone the raw viewport midpoint sits low-set against the bottom
+         bar's dead space, so JS nudges this up in step with the disc. -->
+    <div id="hwrap" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); pointer-events: none">
+      <h1 id="h1" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); margin: 0; font-size: 48px; font-weight: 600; letter-spacing: -.035em; line-height: 1.1; color: var(--onDisc); white-space: nowrap; opacity: 0">maybeit.work</h1>
+      <div id="h2" aria-hidden="true" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 48px; font-weight: 600; letter-spacing: -.035em; line-height: 1.1; color: var(--onDisc); white-space: nowrap; opacity: 0">it.does</div>
     </div>
 
-    <div id="bar" style="position: absolute; left: 0; right: 0; bottom: 0; padding: 0 40px 23px; opacity: 0; text-shadow: var(--hudText); transition: opacity .5s linear">
-      <div style="height: 6px; background: repeating-linear-gradient(to right, var(--tick) 0px, var(--tick) 1px, transparent 1px, transparent 48px); margin-bottom: -1px; filter: var(--hudGlow)"></div>
+    <div id="topbar" style="position: absolute; left: 0; right: 0; top: 0; padding: 22px var(--gutter) 0; opacity: 0; text-shadow: var(--hudText); transition: opacity .28s linear">
+      <div id="top-msg" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(11px, 1.15vw, 12px); letter-spacing: .06em; color: var(--ink3); text-align: center; margin-bottom: 14px">Welcome. <span class="wide-only">Thank you for testing this site. </span>Now go away.</div>
       <div style="height: 1px; background: var(--rule); filter: var(--hudGlow)"></div>
-      <div id="bar-row" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(9.5px, 1.15vw, 12px); letter-spacing: .1em; color: var(--ink3); font-variant-numeric: tabular-nums">
-        <span id="pct" style="align-self: center">000%</span>
-        <span id="theme-toggle" class="theme-toggle" style="display: flex; gap: 6px; align-items: center; letter-spacing: .12em"><span id="tl" style="opacity: .45">LGT</span><span style="opacity: .28">/</span><span id="td" style="opacity: .45">DRK</span></span>
-        <div id="vps-cluster" style="display: flex; flex-wrap: wrap; column-gap: clamp(12px, 2.4vw, 34px); row-gap: 4px; align-items: center; justify-content: center; min-width: 0">
-          <span style="display: flex; gap: 9px; align-items: center"><span id="d0" class="status-dot" style="background: var(--ink3); opacity: .5"></span>VPS00<span id="v0" class="hud-val" style="opacity: .55">--</span></span>
-          <span style="display: flex; gap: 9px; align-items: center"><span id="d1" class="status-dot" style="background: var(--ink3); opacity: .5"></span>VPS01<span id="v1" class="hud-val" style="opacity: .55">--</span></span>
-          <span style="display: flex; gap: 9px; align-items: center"><span id="d2" class="status-dot" style="background: var(--ink3); opacity: .5"></span>VPS02<span id="v2" class="hud-val" style="opacity: .55">--</span></span>
+      <div style="position: relative; height: 6px; margin-top: -1px; filter: var(--hudGlow); background: repeating-linear-gradient(to right, var(--rule) 0 1px, transparent 1px 200px), repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 40px); background-size: 100% 6px, 100% 3px; background-position: 0 0, 0 0; background-repeat: no-repeat"><div style="position: absolute; left: 0; top: 0; width: 1px; height: 11px; background: var(--rule)"></div><div style="position: absolute; right: 0; top: 0; width: 1px; height: 11px; background: var(--rule)"></div></div>
+    </div>
+
+    <div id="bar" style="position: absolute; left: 0; right: 0; bottom: 0; padding: 0 var(--gutter) 24px; opacity: 0; text-shadow: var(--hudText); transition: opacity .28s linear">
+      <div style="position: relative; height: 6px; margin-bottom: -1px; filter: var(--hudGlow); background: repeating-linear-gradient(to right, var(--rule) 0 1px, transparent 1px 200px), repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 40px); background-size: 100% 6px, 100% 3px; background-position: 0 0, 0 3px; background-repeat: no-repeat"><div style="position: absolute; left: 0; bottom: 0; width: 1px; height: 11px; background: var(--rule)"></div><div style="position: absolute; right: 0; bottom: 0; width: 1px; height: 11px; background: var(--rule)"></div></div>
+      <div style="height: 1px; background: var(--rule); filter: var(--hudGlow)"></div>
+      <div id="bar-row" style="font-family: 'IBM Plex Mono', monospace; letter-spacing: .1em; color: var(--ink3); font-variant-numeric: tabular-nums">
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark theme" style="display: flex; gap: 6px; align-items: center; letter-spacing: .12em; font: inherit; color: inherit; background: none; appearance: none; border: 0; cursor: pointer"><span id="tl" style="opacity: .75">LIGHT</span><span class="sep" style="opacity: .5">/</span><span id="td" style="opacity: .75">DARK</span><svg class="ico ico-flip" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.8 A5.2 5.2 0 0 1 8 13.2 Z" fill="currentColor"/></svg></button>
+        <div id="vps-cluster" style="display: flex; flex-wrap: wrap; column-gap: clamp(10px, 1.6vw, 16px); row-gap: 4px; align-items: center; min-width: 0">
+          <span style="display: flex; gap: 9px; align-items: baseline"><span id="d0" class="status-dot" style="background: var(--ink3); opacity: .75"></span><span class="nl">VPS00</span><span id="v0" class="hud-val" aria-hidden="true">--</span></span>
+          <span style="display: flex; gap: 9px; align-items: baseline"><span id="d1" class="status-dot" style="background: var(--ink3); opacity: .75"></span><span class="nl">VPS01</span><span id="v1" class="hud-val" aria-hidden="true">--</span></span>
+          <span style="display: flex; gap: 9px; align-items: baseline"><span id="d2" class="status-dot" style="background: var(--ink3); opacity: .75"></span><span class="nl">VPS02</span><span id="v2" class="hud-val" aria-hidden="true">--</span></span>
         </div>
-        <span id="replay" class="replay-btn" style="justify-self: end">REPLAY</span>
-        <span id="st-el" style="opacity: .7; justify-self: end">ST/00</span>
+        <p id="sr-status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0">Three servers are being checked: VPS00, VPS01, VPS02.</p>
+        <button id="replay" class="replay-btn" type="button" aria-label="Replay animation" style="justify-self: end; font: inherit; color: inherit; background: none; appearance: none; cursor: pointer"><span>AGAIN</span><svg class="ico" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.02 6.65 A5.2 5.2 0 1 1 9.35 2.98"/><path d="M7.71 4.20 L10.80 3.37 L8.54 1.11"/></svg></button>
       </div>
     </div>
-  </div>
+  </main>
 
 </div>
 
@@ -161,27 +244,27 @@ html.js .no-js { display: none !important; }
 /* ── DATA CONTRACT ────────────────────────────────────────────────────────
  * SERVICES below is the fallback. On load, one same-origin GET /status.json
  * (rail 2 scoped exception) tries to replace it with live status from the
- * homelab's containerized Netdata agents, aggregation into that endpoint
+ * homelab's containerized Netdata agents — aggregation into that endpoint
  * happens outside this repo. Any failure (offline, timeout, bad JSON, wrong
  * shape) is swallowed and the fallback below stands, silently.
  *
- * Shape, an array of 1-3 entries (one per VPS span in the HTML), rendered
+ * Shape — an array of 1-3 entries (one per VPS span in the HTML), rendered
  * left to right in the bottom bar:
  *   { name: string,   // <= 8 chars, uppercase
- *     load: number,   // 0-100, raw percent (already normalized upstream,
- *     cpu:  number,   //   e.g. load1/nproc*100, this file does no per-core math)
+ *     load: number,   // 0-100, raw percent (already normalized upstream —
+ *     cpu:  number,   //   e.g. load1/nproc*100 — this file does no per-core math)
  *     mem:  number,
  *     swap: number,
  *     disk: number }
- * /status.json must return exactly this shape, an array, not an object.
+ * /status.json must return exactly this shape — an array, not an object.
  * Each raw percent is quantized here (÷10, rounded, clamped) into a 0-10
- * score for display, see quant() below.
+ * score for display — see quant() below.
  *
  * States the bar renders, driven by the animation clock, not by data:
  *   --                     before this service's tap beat
- *   TAPPING                during its tap
+ *   ASKING                 during its tap
  *   L07 C04 M03 S00 D05    races to 10 then settles to each metric's score
- * Per-value color: 0 dull/dead, 1-7 green (ok), 8-10 red (bad), letter and
+ * Per-value color: 0 dull/dead, 1-7 green (ok), 8-10 red (bad) — letter and
  * number share the color. The dot and overall pct (bottom left) go bad if
  * any metric on that node lands in the 8-10 band.
  * ──────────────────────────────────────────────────────────────────────── */
@@ -191,7 +274,7 @@ let SERVICES = [
   { name: 'VPS02', load: 33, cpu: 28, mem: 52, swap: 5, disk: 71 }
 ];
 
-// One same-origin fetch, short-timed, fails silent, see DATA CONTRACT above.
+// One same-origin fetch, short-timed, fails silent — see DATA CONTRACT above.
 (async () => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 800);
@@ -205,7 +288,7 @@ let SERVICES = [
       data.every(s => typeof s.name === 'string' &&
         isNum(s.load) && isNum(s.cpu) && isNum(s.mem) && isNum(s.swap) && isNum(s.disk));
     if (valid) SERVICES = data;
-  } catch { /* offline, timeout, bad JSON, wrong shape, keep fallback */ }
+  } catch { /* offline, timeout, bad JSON, wrong shape — keep fallback */ }
   finally { clearTimeout(timer); }
 })();
 
@@ -214,33 +297,62 @@ function quant(pct) { return Math.max(0, Math.min(10, Math.round(pct / 10))); }
 const METRIC_KEYS = [['L', 'load'], ['C', 'cpu'], ['M', 'mem'], ['S', 'swap'], ['D', 'disk']];
 function isBad(s) { return METRIC_KEYS.some(([, k]) => quant(s[k]) >= 8); }
 
-// Fixed constants, this build has no live tuning panel, so the prototype's
+// Single source of truth for the "narrow phone" cutoff — both the bar-row
+// grid's row-wrap and the metric-readout collapse (chrome()'s `this.W <
+// NARROW_BP` below) key off this one constant. resize() mirrors it onto
+// <html class="narrow"> so the stylesheet reads the same number via that
+// class instead of carrying its own hand-copied `@media (max-width: 600px)`
+// — one number, read in two places, instead of two numbers kept in sync by
+// hand.
+const NARROW_BP = 1200;
+
+// Fixed constants — this build has no live tuning panel, so the prototype's
 // configurable parameters become plain defaults. haloSize/corona at 0.75
 // per Ex's confirmed preference (spec's defaults were 0.6 / 1).
 const CFG = {
-  theme: 'light', dotIntensity: 8, infall: 1, drift: 1,
+  theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dotIntensity: 8, infall: 1, drift: 1,
   voidPct: 45, racePct: 25, haloSize: 0.75, corona: 0.75,
-  motion: 'auto', bootMs: 700, duration: 2500
+  motion: 'auto', bootMs: 400, duration: 2500
 };
 
-// Two readings of one palette. Dark is not an inversion of the page, it is
-// an inversion of the VOID: the disc goes near-white so it still reads as
-// an object that consumes the field, and the glow gets a wider halo to
-// survive the dark ground.
+// Two readings of one palette. Dark is not an inversion of the page — it is
+// an inversion of the VOID: the disc goes light so it still reads as an
+// object that consumes the field, and the glow gets a wider halo to survive
+// the dark ground. That inversion earns its place — a dark disc on a dark
+// ground would just disappear — but disc went through #EDEDF2 (near-white)
+// and then #C9CBDA, both landing ~10.7:1 against #191A26 at ~40vw across —
+// a light-emitting sphere, not a void-eating mass, and genuinely hard to
+// look at. #9698A7 measures ~6.0:1: still clearly the palest surface in
+// the frame, but low enough to read as consuming light rather than
+// emitting it. Same cool violet-grey hue as --ink3 so it stays in-family.
+//
+// `warn` (an amber third status color) was defined but never read anywhere —
+// the actual signal, per METRIC_KEYS/isBad below, is a hard two-band split
+// (0 dead, 1-7 ok, 8-10 bad), not a graduated one. Deleted rather than wired
+// up: adding a middle band would be a threshold/behavior change, not a
+// color one, and isn't asked for.
 const THEMES = {
   light: {
+    dark: false,
     bg: '#F2F2F2', ink: '#22223B', ink3: '#5A5E77', ink3a: [90, 94, 119],
-    disc: '#22223B', line: '34,34,59',
-    ok: [62, 158, 107], warn: [192, 138, 46], bad: [196, 72, 60],
-    okHex: '#3E9E6B', badHex: '#C4483C',
-    grain: 'rgba(34,34,59,0.20)', grainOp: '0.5', halo: 1, dotA: 1
+    disc: '#22223B', onDisc: '#F2F2F2', line: '34,34,59',
+    ok: [62, 158, 107], bad: [196, 72, 60],
+    okHex: '#22774D', badHex: '#B4382D',
+    // grainOp was 0.5 — composited with the fleck alpha above (0.20) that's
+    // a 0.10 effective speckle, which reads as dark flecks on a near-white
+    // ground (dirt) rather than the fine instrument-texture dark gets from
+    // the same math at a lower ground brightness. 0.34 lands light's
+    // composited alpha (~0.068) next to dark's (~0.067) instead of ~50%
+    // hotter, so both themes read as the same texture, not two textures.
+    grain: 'rgba(34,34,59,0.20)', grainOp: '0.34', halo: 1.25, bloom: 0.82, dotA: 1
   },
   dark: {
-    bg: '#191A26', ink: '#EDEDF2', ink3: '#7B8099', ink3a: [123, 128, 153],
-    disc: '#EDEDF2', line: '237,237,242',
-    ok: [74, 186, 126], warn: [214, 160, 62], bad: [214, 90, 77],
-    okHex: '#4ABA7E', badHex: '#D65A4D',
-    grain: 'rgba(237,237,242,0.16)', grainOp: '0.42', halo: 1.4, dotA: 0.85
+    dark: true,
+    bg: '#191A26', ink: '#EDEDF2', ink3: '#8B90A8', ink3a: [139, 144, 168],
+    disc: '#08090F', onDisc: '#EDEDF2', line: '237,237,242',
+    ok: [74, 186, 126], bad: [214, 90, 77],
+    okHex: '#39AC6F', badHex: '#E8715E',
+    grain: 'rgba(237,237,242,0.16)', grainOp: '0.42', halo: 1.4, bloom: 1, dotA: 0.85
   }
 };
 
@@ -251,7 +363,7 @@ const seg = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
 class Scene {
   constructor() {
     this.els = {};
-    ['cv','scan','grain','boot','h1','h2','bar','pct','tl','td','d0','d1','d2','d3','v0','v1','v2','v3'].forEach(id => {
+    ['cv','scan','grain','boot','h1','h2','hwrap','bar','topbar','tl','td','d0','d1','d2','d3','v0','v1','v2','v3','theme-toggle','sr-status','ch-tl','ch-tr','ch-bl','ch-br'].forEach(id => {
       this.els[id] = document.getElementById(id);
     });
     this._w = new WeakMap();
@@ -270,6 +382,15 @@ class Scene {
       this._override = this.eff() === 'dark' ? 'light' : 'dark';
       this.applyTheme(); this.grain(); this._frozen = false;
     });
+    // rAF is suspended for the whole time a tab is hidden — if the boot->race
+    // crossover (t=0, see frame()) fell inside that window, the browser can
+    // repaint the pre-hide frame the instant the tab is shown again, up to
+    // one full tick before the next rAF callback would've caught it up. Force
+    // an immediate resync on the visibility edge so that stale paint never
+    // gets a chance to show #boot ghosting over the settled headline.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) this.frame(performance.now());
+    });
     this.applyTheme();
     this.resize(true);
     this.start();
@@ -280,30 +401,128 @@ class Scene {
   applyTheme() {
     const T = this.th(), s = document.documentElement.style;
     s.setProperty('--bg', T.bg);
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', T.bg);
     s.setProperty('--ink', T.ink);
     s.setProperty('--ink3', T.ink3);
+    s.setProperty('--onDisc', T.onDisc);
     s.setProperty('--tick', `rgba(${T.ink3a.join(',')},.5)`);
     s.setProperty('--rule', `rgba(${T.ink3a.join(',')},.32)`);
     s.setProperty('--scan', `rgba(${T.line},.035)`);
-    s.setProperty('--vig', `rgba(${T.line},.055)`);
+    s.setProperty('--vig', T.dark ? 'rgba(0,0,0,0.30)' : `rgba(${T.line},.055)`);
     // HUD bloom: deliberately weaker than the status lights, so the lights
     // stay the only elements on the page that read as actually emitting.
-    s.setProperty('--hudText', `0 0 ${T.halo > 1 ? 7 : 5}px rgba(${T.ink3a.join(',')},${T.halo > 1 ? 0.3 : 0.18})`);
-    s.setProperty('--hudGlow', `drop-shadow(0 0 3px rgba(${T.ink3a.join(',')},${T.halo > 1 ? 0.28 : 0.16}))`);
+    s.setProperty('--hudText', `0 0 ${T.dark ? 7 : 5}px rgba(${T.ink3a.join(',')},${T.dark ? 0.3 : 0.18})`);
+    s.setProperty('--hudGlow', `drop-shadow(0 0 3px rgba(${T.ink3a.join(',')},${T.dark ? 0.28 : 0.16}))`);
     this._w = new WeakMap(); // colors changed under the diff cache
+    const tt = this.els['theme-toggle'];
+    if (tt) {
+      const dark = this.eff() === 'dark';
+      document.documentElement.classList.toggle('dark', dark);
+      tt.setAttribute('aria-pressed', String(dark));
+      tt.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+    }
   }
 
   dur() { return Math.max(1200, CFG.duration); }
+
+  // Short-edge reference the disc is sized from, so the composition holds on
+  // portrait and ultrawide alike. Phones take a larger share of it: at 375px
+  // the plain short-edge reading leaves the disc reading as an ornament in the
+  // middle of the screen rather than as the subject.
+  scale() { return Math.min(this.W, this.H * 1.5) * (this.W < NARROW_BP ? 1.74 : 1); }
+  discR() { return Math.min(this.scale() * CFG.voidPct / 100 / 2, this.W * 0.39, this.H * 0.33); }
 
   resize(seed) {
     const cv = this.els.cv; if (!cv) return;
     const W = window.innerWidth, H = window.innerHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.W = W; this.H = H; this.dpr = dpr;
+    // Flip the CSS breakpoint class before measuring anything below —
+    // #bar-row's row count (one vs two) changes the bar's real height, and
+    // centerY() reads that height off the DOM, so the class has to land
+    // first or it measures the previous width's layout.
+    document.documentElement.classList.toggle('narrow', W < NARROW_BP);
+    this.cy = this.centerY();
+    if (this.els.hwrap) this.els.hwrap.style.top = `${this.cy}px`;
+    this.placeMarks();
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     this.ctx = cv.getContext('2d');
     if (seed) this.seed();
+    // Base font sizes, written once per resize; the frame loop only scales.
+    const rFinal = this.discR();
+    this.capFinal = this.headSize(rFinal);
+    this.fsFinal = Math.min(this.capFinal, rFinal * 1.62 / 7.0);
+    if (this.els.h1) this.els.h1.style.fontSize = `${this.fsFinal.toFixed(1)}px`;
+    if (this.els.h2) this.els.h2.style.fontSize = `${this.capFinal.toFixed(1)}px`;
+    // cv.width above cleared the bitmap. Under reduced motion frame() has
+    // already frozen itself, so without this a rotate, a window drag or a
+    // mobile URL-bar collapse leaves the canvas permanently blank.
+    this._frozen = false;
     this.grain();
+  }
+
+  // Disc/headline vertical center. A raw H/2 reads fine everywhere except a
+  // tall phone (375x812 and similar): the bottom bar isn't really free
+  // space, so centering on the full height leaves the disc floating high
+  // with dead air below it. Bias down toward the true midpoint of the space
+  // that's actually free — between the top crosshairs and the bar's real
+  // top edge — tapered to zero as the viewport stops being notably
+  // portrait, so desktop/tablet/landscape are untouched.
+  //
+  // The old version guessed the bar's height with a hand-tuned `barBand`
+  // constant (60/80px either side of the .hud-val/NARROW_BP cutoff) and
+  // capped the bias at half of it — on a 375x812 phone that cap landed
+  // ~40px short of the bar's actual ~140px two-row height, so the disc
+  // barely moved off dead-center. Reading the bar's rendered
+  // getBoundingClientRect() instead means there's no band to guess and no
+  // second number to keep in sync with the bar's real layout — one row or
+  // two, it's measured, not assumed.
+  centerY() {
+    const W = this.W, H = this.H, ratio = H / W;
+    // Measured once per resize (cheap — one layout read), reused every frame
+    // in the draw loop to fade dots out before they cross the bar's text
+    // (rail: dots must never hurt bottom-bar legibility). Read regardless of
+    // ratio — the fade needs it even when the disc-centering bias below is
+    // tapered off.
+    const bar = this.els.bar;
+    this.barTop = bar ? bar.getBoundingClientRect().top : H - 80;
+    if (ratio <= 1.3) return H / 2;
+    const tb = this.els.topbar;
+    const topSafe = (tb ? tb.getBoundingClientRect().bottom : 40) + 16;
+    const barTop = this.barTop;
+    const trueMid = topSafe + (Math.max(topSafe, barTop) - topSafe) * 0.42;
+    // Taper the same way the old bias did: fully off at ratio 1.3, fully
+    // the measured free-space midpoint by ratio 2.0 (covers 375x812 and
+    // narrower/taller phones), linear between.
+    const taper = Math.min(1, (ratio - 1.3) / 0.7);
+    return H / 2 + (trueMid - H / 2) * taper;
+  }
+
+  // Settled headline sizes: the disc's final radius is the only input, so
+  // this is a resize-time constant, not a per-frame one.
+  headSize(R) {
+    const capW = Math.min(132, this.W * (this.W < NARROW_BP ? 0.16 : 0.105));
+    return Math.max(22, Math.min(capW, R * 1.62 / 3.7));
+  }
+
+  // The four marks sit at the corners of the band the two rules bound: on the
+  // same gutter the rules terminate on, and the same distance in from each of
+  // them. Placed here rather than in CSS because the inset depends on where
+  // the two rules actually landed, which depends on the message's wrapped
+  // height and on the bar's row count.
+  placeMarks() {
+    const tb = this.els.topbar;
+    const g = tb ? parseFloat(getComputedStyle(tb).paddingLeft) : 40;
+    const topRule = tb ? tb.getBoundingClientRect().bottom : 60;
+    const botRule = this.barTop || this.H;
+    const R = this.discR(), pad = 20;
+    const yTop = Math.max(topRule + pad, this.cy - R);
+    const yBot = Math.min(botRule - pad, this.cy + R);
+    for (const [id, sx, sy] of [['ch-tl', 0, 0], ['ch-tr', 1, 0], ['ch-bl', 0, 1], ['ch-br', 1, 1]]) {
+      const el = this.els[id]; if (!el) continue;
+      el.style.left = `${(sx ? this.W - g : g).toFixed(1)}px`;
+      el.style.top = `${(sy ? yBot : yTop).toFixed(1)}px`;
+    }
   }
 
   grain() {
@@ -324,8 +543,8 @@ class Scene {
   }
 
   seed() {
-    const W = this.W, H = this.H, cx = W / 2, cy = H / 2;
-    const rFinal = Math.min(W, H * 1.5) * CFG.voidPct / 100 / 2;
+    const W = this.W, H = this.H, cx = W / 2, cy = this.cy;
+    const rFinal = this.discR();
     const inten = CFG.dotIntensity;
     const target = Math.round((W * H / 1250) * (inten / 6));
     let s = 20240915;
@@ -338,8 +557,11 @@ class Scene {
       for (let i = 0; i < 200; i++) {
         const a = r() * 6.2832;
         const d = rIn + (rOut - rIn) * Math.sqrt(r());
-        const near = 1 / (1 + (d / rFinal - 1) * 2.1);
-        if (r() > 0.14 + 0.86 * near) continue;
+        // squared falloff + a low 0.03 keep-floor so the far field visibly
+        // thins against the band just outside the horizon, instead of the
+        // old shallow curve reading as uniform ambient noise everywhere
+        const near = 1 / (1 + (d / rFinal - 1) * 2.1) ** 2;
+        if (r() > 0.03 + 0.97 * near) continue;
         return { x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d, near };
       }
       const a = r() * 6.2832, d = rIn + (rOut - rIn) * 0.7;
@@ -360,19 +582,28 @@ class Scene {
 
   start() {
     this._frozen = false;
+    this._falling = 0;
     // an explicit REPLAY always wins over the media query
     this.reduced = !this._force && CFG.motion === 'auto' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     // boot hold: the readout is tapping the endpoints before anything is drawn.
-    // It is static text, not motion, so the reduced path keeps it, just shorter.
-    this.boot = this.reduced ? Math.min(400, CFG.bootMs) : CFG.bootMs;
+    // It is static text, not motion, so the reduced path keeps it — just shorter.
+    this.boot = this.reduced ? Math.min(400, CFG.bootMs) : (this._force ? 260 : CFG.bootMs);
     // reduced motion: jump straight to the settled frame, once
-    this.t0 = performance.now() + this.boot - (this.reduced ? this.dur() * 1.7 : 0);
+    this.t0 = performance.now() + this.boot - (this.reduced ? this.dur() * 1.18 : 0);
     this._w = new WeakMap();
     if (this.P) this.P.forEach(p => {
       if (p.ohx !== undefined) { p.hx = p.ohx; p.hy = p.ohy; }
       p.eaten = false; p.dead = false; p.fall = false; p.x = p.hx; p.y = p.hy; p.px = p.hx; p.py = p.hy;
     });
     this.set(this.els.bar, 'opacity', '0');
+    // fade the canvas out over the same .5s as the bar, so a REPLAY dissolves
+    // the completed disc/halo/headline rather than freezing it for the whole
+    // boot hold and hard-cutting to the empty seed field the instant t hits 0
+    // (frame() doesn't touch the canvas at all while t<0 — see its early
+    // return below — so without this the last painted frame just sits there).
+    this.set(this.els.cv, 'opacity', '0');
+    // new boot hold starting: drop the stylesheet lock so #boot can show again
+    document.documentElement.classList.remove('booted');
   }
 
   frame(now) {
@@ -380,25 +611,31 @@ class Scene {
     const D = this.dur(), t = now - this.t0;
     if (t < 0) { this.set(this.els.boot, 'opacity', '1'); return; }
     this.set(this.els.boot, 'opacity', '0');
+    // boot has faded once this cycle: lock it out at the stylesheet level (see
+    // html.booted rule) so a paused/resumed rAF loop or a theme-toggle cache
+    // reset can never leave it re-rendered behind the settled headline.
+    document.documentElement.classList.add('booted');
     // settled state still has the infall trickle moving, so hold ~33fps rather than 20
     if (t > D * 1.6) {
       if (now - (this._last || 0) < 30) return;
     }
     this._last = now;
+    const dt = Math.min(64, now - (this._prev || now));
+    this._prev = now;
     const T = this.th();
-    const W = this.W, H = this.H, cx = W / 2, cy = H / 2;
+    const W = this.W, H = this.H, cx = W / 2, cy = this.cy;
     const ctx = this.ctx;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
 
     // ── beats, scaled to duration (authored against 2500ms)
     const k = D / 2500;
-    const B = { bar: 0, accum: 120 * k, accumEnd: 700 * k, wave: 700 * k, waveOut: 1000 * k,
-                waveEnd: 1250 * k, race: 900 * k, raceEnd: 1250 * k, feedEnd: 2200 * k, pulse: 2200 * k };
+    const B = { bar: 0, accum: 80 * k, accumEnd: 420 * k, wave: 420 * k, waveOut: 640 * k,
+                waveEnd: 820 * k, race: 820 * k, raceEnd: 1080 * k, feedEnd: 2200 * k, pulse: 2260 * k };
 
-    // sized off the short edge, so the composition holds on portrait and ultrawide alike
-    const S = Math.min(W, H * 1.5);
-    const rFinal = S * CFG.voidPct / 100 / 2;
+    const S = this.scale();
+    const rFinal = this.discR();
     const rRace = S * CFG.racePct / 100 / 2;
     const maxWave = Math.hypot(W, H) / 2;
     const D3 = T.ink3a.join(',');
@@ -407,12 +644,13 @@ class Scene {
     let R = 0;
     if (t > B.race) R = rRace * eo(seg(t, B.race, B.raceEnd));
     if (t > B.raceEnd) R = rRace + (rFinal - rRace) * eo(seg(t, B.raceEnd, B.feedEnd));
+    if (t > B.pulse - 300 * k) R *= 1 - 0.035 * ei(seg(t, B.pulse - 300 * k, B.pulse));
 
     // gravity wave radius (out, then reflected back in)
     let wr = -1, wAmp = 0;
     if (t > B.wave && t < B.waveEnd) {
-      if (t < B.waveOut) { wr = maxWave * eo(seg(t, B.wave, B.waveOut)); wAmp = 1; }
-      else { wr = maxWave * (1 - ei(seg(t, B.waveOut, B.waveEnd))); wAmp = 0.55; }
+      if (t < B.waveOut) { wr = maxWave * seg(t, B.wave, B.waveOut) ** 0.85; wAmp = 1; }
+      else { wr = maxWave * (1 - ei(seg(t, B.waveOut, B.waveEnd))); wAmp = 0.55 + 0.45 * (1 - seg(t, B.waveOut, B.waveOut + 90 * k)); }
     }
 
     // pile in, then release outward as the void races and feeds (per-dot in the loop)
@@ -425,14 +663,18 @@ class Scene {
     // than a replay of the accumulation.
     const idle = t > B.feedEnd && R > 4;
     const flow = CFG.infall;
-    if (idle && flow > 0 && Math.random() < flow * 0.14) {
+    if (idle && flow > 0 && this._falling < 5 && Math.random() < flow * 0.0125 * dt) {
       const p = this.P[(Math.random() * this.P.length) | 0];
       if (p && !p.fall && !p.eaten) {
         const d = Math.hypot(p.x - cx, p.y - cy);
-        // only matter already near the well falls in, far dots reading as scratches
+        // only matter already near the well falls in — far dots reading as scratches
         if (d > R * 1.25 && d < R * 2.5) {
           p.fall = true; p.fr = d; p.fa = Math.atan2(p.y - cy, p.x - cx);
           p.fv = (Math.random() < 0.5 ? -1 : 1) * (13 + Math.random() * 15);
+          // squared, so most are fine threads and the occasional one is a
+          // heavy body dragging in
+          p.fsz = 0.5 + Math.random() ** 2 * 2.6;
+          this._falling++;
         }
       }
     }
@@ -453,13 +695,15 @@ class Scene {
           p.mag = 0.72 + Math.random() ** 3 * 1.75;
           p.hx = q.x; p.hy = q.y; p.near = q.near; p.sz = (1.2 + q.near * 0.8) * p.mag;
           p.x = q.x; p.y = q.y; p.px = q.x; p.py = q.y; p.fall = false;
+          this._falling--;
           continue;
         }
         // brightens as it closes on the horizon
         const close = Math.min(1, R * 2.2 / Math.max(p.fr, 1));
-        const fa2 = (0.10 + 0.26 * close) * (0.66 + p.mag * 0.3) * T.dotA;
+        const fa2 = (0.10 + 0.26 * close) * (0.66 + p.mag * 0.3) * T.dotA
+          * Math.min(1.5, 0.72 + p.fsz * 0.34);
         ctx.strokeStyle = `rgba(${D3},${fa2.toFixed(3)})`;
-        ctx.lineWidth = p.sz * 0.95; ctx.lineCap = 'round';
+        ctx.lineWidth = p.sz * 0.95 * p.fsz; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); ctx.stroke();
         continue;
       }
@@ -515,7 +759,7 @@ class Scene {
         const sp = Math.min(26, 3 + 380 / cd);
         p.x += (vx / cd) * sp; p.y += (vy / cd) * sp;
         if (cd < R * 0.96) {
-          // consumed, resample a home from the same falloff so the field's total holds
+          // consumed — resample a home from the same falloff so the field's total holds
           const q = this.sample(Math.random);
           p.mag = 0.72 + Math.random() ** 3 * 1.75;
           p.hx = q.x; p.hy = q.y; p.near = q.near; p.sz = (1.2 + q.near * 0.8) * p.mag;
@@ -529,9 +773,13 @@ class Scene {
       const near = 1 / (1 + Math.max(0, rel - 1) * 2.1);
       // brightness rides magnitude as well as depth, so the big points genuinely read as points
       let a = (0.13 + 0.24 * near) * (0.66 + p.mag * 0.3) * Math.min(1, seg(t, 0, 320 * k) * 1.2) * T.dotA;
-      // scintillation, small, and only on the brighter magnitudes, so it reads
+      // scintillation — small, and only on the brighter magnitudes, so it reads
       // as atmosphere rather than a blinking field
       if (idle) a *= 1 + Math.sin(now / 620 + p.ph * 3.1) * 0.17 * Math.min(1, p.mag);
+      // clear the bottom bar's text: ramp dots to invisible over the 56px
+      // above its top edge instead of letting them render at full brightness
+      // right behind the readout (see barTop caching note in centerY()).
+      if (this.barTop) a *= Math.min(1, Math.max(0, (this.barTop - p.y) / 56));
       if (p.eaten) {
         ctx.strokeStyle = `rgba(${D3},${(a * 2.1).toFixed(3)})`;
         ctx.lineWidth = p.sz * 1.05; ctx.lineCap = 'round';
@@ -551,20 +799,27 @@ class Scene {
 
     // ── void + event horizon
     if (R > 0.5) {
-      const c = T.bad.map((v, i) => Math.round(v + (T.ok[i] - v) * prog));
+      const cp = eo(seg(t, B.raceEnd + 260 * k, B.pulse));
+      const c = T.bad.map((v, i) => Math.round(v + (T.ok[i] - v) * cp));
       const rgba = (a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
       let breathe = 0;
       if (t > B.pulse) breathe = Math.sin((t - B.pulse) / 1400) * 0.35;
 
-      // misty accretion disc: a wide soft glow blooming outward from the horizon
+      // misty accretion disc: a wide soft glow blooming outward from the horizon.
+      // Inner stop was .62 — on top of the tempered (dark-mode) disc that still
+      // compounded into extra brightness right at the edge where the two overlap.
+      // .42 (with the rest of the falloff scaled down to match) keeps the bloom
+      // readable as a glow, not a second light source stacked on the disc.
+      ctx.save();
+      ctx.globalCompositeOperation = T.dark ? 'source-over' : 'multiply';
       const halo = R * CFG.haloSize * T.halo;
-      const g = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, R + halo);
-      const k2 = 1 + breathe * 0.22;
+      const g = ctx.createRadialGradient(cx, cy, R, cx, cy, R + halo);
+      const k2 = (1 + breathe * 0.22) * T.bloom;
       g.addColorStop(0, rgba(0));
-      g.addColorStop(0.055, rgba(0.62 * k2));
-      g.addColorStop(0.13, rgba(0.34 * k2));
-      g.addColorStop(0.3, rgba(0.15 * k2));
-      g.addColorStop(0.6, rgba(0.05 * k2));
+      g.addColorStop(0.055, rgba(0.42 * k2));
+      g.addColorStop(0.13, rgba(0.23 * k2));
+      g.addColorStop(0.3, rgba(0.10 * k2));
+      g.addColorStop(0.6, rgba(0.034 * k2));
       g.addColorStop(1, rgba(0));
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(cx, cy, R + halo, 0, 6.2832); ctx.fill();
@@ -577,10 +832,10 @@ class Scene {
         // so the horizon is continuously ringed rather than lit only when a flare fires
         if (!this.lobes) {
           this.lobes = [];
-          const N = 9;
+          const N = 15;
           for (let i = 0; i < N; i++) this.lobes.push({
-            a: (i / N) * 6.2832 + (Math.random() - 0.5) * 0.3,
-            w: 0.34 + Math.random() * 0.22,
+            a: (i / N) * 6.2832 + (Math.random() - 0.5) * 0.34,
+            w: 0.22 + Math.random() * 0.44,
             len: 0.2 + Math.random() * 0.14,
             sp: 0.00042 + Math.random() * 0.0006,
             ph: Math.random() * 6.2832,
@@ -588,13 +843,13 @@ class Scene {
           });
         }
         for (const L of this.lobes) {
-          L.a += L.dr * 16;
-          const env = 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(now * L.sp + L.ph));
-          this.plume(ctx, cx, cy, R, L.a, L.w, R * L.len * cor * (0.6 + 0.4 * env), env * 0.62, rgba);
+          L.a += L.dr * dt;
+          const env = 0.12 + 0.88 * (0.5 + 0.5 * Math.sin(now * L.sp + L.ph));
+          this.plume(ctx, cx, cy, R, L.a, L.w, R * L.len * cor * (0.6 + 0.4 * env), env * 0.62, rgba, T.bloom);
         }
 
         this.flares = this.flares || [];
-        if (t > B.race && this.flares.length < 7 && Math.random() < cor * 0.05) {
+        if (t > B.race && this.flares.length < 7 && Math.random() < cor * 0.0022 * dt) {
           this.flares.push({
             a: Math.random() * 6.2832,
             w: 0.14 + Math.random() * 0.34,          // angular width
@@ -610,27 +865,34 @@ class Scene {
           if (u >= 1) { this.flares.splice(i, 1); continue; }
           // fast ignition, long decay
           const env = u < 0.16 ? eo(u / 0.16) : (1 - (u - 0.16) / 0.84) ** 2.1;
-          f.a += f.drift * 16;
+          f.a += f.drift * dt;
           const reach = Math.min(R * 0.42, R * f.len * (0.55 + 0.45 * env));
-          this.plume(ctx, cx, cy, R, f.a, f.w, reach, env, rgba);
+          this.plume(ctx, cx, cy, R, f.a, f.w, reach, env, rgba, T.bloom);
         }
       }
+
+      ctx.restore();
 
       ctx.fillStyle = T.disc;
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fill();
 
       ctx.save();
       ctx.strokeStyle = rgba(0.9);
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = Math.max(1.6, R * 0.018);
       ctx.shadowColor = rgba(0.8); ctx.shadowBlur = 12 + breathe * 6;
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.stroke();
       ctx.restore();
       // one outward pulse on completion
-      const pu = seg(t, B.pulse, B.pulse + 620 * k);
+      const pu = seg(t, B.pulse, B.pulse + 480 * k);
       if (pu > 0 && pu < 1) {
-        ctx.strokeStyle = `rgba(${T.ok.join(',')},${(0.42 * (1 - pu)).toFixed(3)})`;
-        ctx.lineWidth = 2 - pu;
-        ctx.beginPath(); ctx.arc(cx, cy, R * (1 + 0.2 * eo(pu)), 0, 6.2832); ctx.stroke();
+        const pr = R + (Math.min(maxWave, R * 3.2) - R) * eo(pu), pa = (1 - pu) ** 1.4;
+        ctx.strokeStyle = `rgba(${T.line},${(0.5 * pa).toFixed(3)})`;
+        ctx.lineWidth = 3.4 - 2.4 * pu;
+        ctx.beginPath(); ctx.arc(cx, cy, pr, 0, 6.2832); ctx.stroke();
+        // one ring is a circle; the trailing second one is what makes it a wave
+        ctx.strokeStyle = `rgba(${T.line},${(0.26 * pa).toFixed(3)})`;
+        ctx.lineWidth = 2.2 - 1.2 * pu;
+        ctx.beginPath(); ctx.arc(cx, cy, Math.max(R, pr - 46), 0, 6.2832); ctx.stroke();
       }
     }
 
@@ -638,9 +900,9 @@ class Scene {
     if (this.reduced) this._frozen = true; // reduced motion: one static settled frame
   }
 
-  // an anisotropic radial blob sitting on the horizon along one axis, gradient-only,
+  // an anisotropic radial blob sitting on the horizon along one axis — gradient-only,
   // so it has no straight sides and no terminating arc
-  plume(ctx, cx, cy, R, a, w, reach, env, rgba) {
+  plume(ctx, cx, cy, R, a, w, reach, env, rgba, bloom = 1) {
     if (reach <= 0.5 || env <= 0.01) return;
     const rad = reach * 0.72;
     ctx.save();
@@ -648,8 +910,8 @@ class Scene {
     ctx.rotate(a);
     ctx.scale(1, Math.max(0.35, w * 2.6)); // widen across the axis, not along it
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rad);
-    g.addColorStop(0, rgba(0.34 * env));
-    g.addColorStop(0.45, rgba(0.15 * env));
+    g.addColorStop(0, rgba(0.34 * env * bloom));
+    g.addColorStop(0.45, rgba(0.15 * env * bloom));
     g.addColorStop(1, rgba(0));
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(0, 0, rad, 0, 6.2832); ctx.fill();
@@ -670,67 +932,94 @@ class Scene {
 
   chrome(t, k, B, prog, R) {
     const E = this.els, T = this.th();
-    this.set(E.bar, 'opacity', t > 60 ? '1' : '0');
+    this.set(E.bar, 'opacity', t > 0 ? '1' : '0');
+    this.set(E.topbar, 'opacity', t > 0 ? '1' : '0');
+    // canvas rides the same fade-in as the bar: it was faded to 0 in start()
+    // (see there for why), so this brings the new field back in step with
+    // the bar rather than snapping to full opacity mid-draw.
+    this.set(E.cv, 'opacity', t > 0 ? '1' : '0');
 
     // headline: maybeit.work clears fully, then it.does lands with the pulse
-    // in as soon as the void has raced to a size that can hold it, out well before the pulse
+    // in as soon as the void has raced to a size that can hold it, out well before the pulse.
+    // inB starts at B.pulse itself, not after it — the spec calls for the text
+    // swap to read as the SAME event as the ring completing, and a lag here
+    // (previously 120ms) meant the ring visibly started its shockwave before
+    // any sign of it.does. They now start on the identical frame; the 80ms
+    // gap between h1 clearing and h2 landing is the anticipation beat before
+    // that shared instant, not a delay tacked onto it.
+    // Headline size tracks the disc while the disc is still small. Both
+    // strings are set once, at their settled size, in resize(); what happens
+    // here is a scale, so the growth is compositor-only and continuous rather
+    // than a font-size rewritten every frame (which dirties layout, staircases
+    // through integer pixels, and re-hints the glyphs each step).
+    // it.does is the shorter string (7 chars vs maybeit.work's 12), so it gets
+    // the larger share of the disc -- see headSize() for the divisors and how
+    // they were derived from the real rendered widths.
+    const cap = this.headSize(R), fs = Math.min(cap, R * 1.62 / 7.0);
+    const s1 = this.fsFinal ? Math.min(1, fs / this.fsFinal) : 1;
+    const s2 = this.capFinal ? Math.min(1, cap / this.capFinal) : 1;
+
     const inA = seg(t, B.race + 40 * k, B.race + 260 * k);
     const outA = seg(t, B.feedEnd - 320 * k, B.feedEnd - 80 * k);
-    const inB = seg(t, B.pulse + 120 * k, B.pulse + 400 * k);
+    const inB = seg(t, B.pulse, B.pulse + 280 * k);
     this.set(E.h1, 'opacity', Math.max(0, inA - outA).toFixed(2));
-    this.set(E.h1, 'transform', `translate(-50%,calc(-50% + ${(-5 * outA).toFixed(1)}px))`);
+    this.set(E.h1, 'transform', `translate(-50%,calc(-50% + ${(-5 * outA).toFixed(1)}px)) scale(${s1.toFixed(3)})`);
     this.set(E.h2, 'opacity', inB.toFixed(2));
-    this.set(E.h2, 'transform', `translate(-50%,calc(-50% + ${(6 * (1 - inB)).toFixed(1)}px))`);
-
-    // headline scales with the disc while it is still small, and its ceiling scales
-    // with the viewport so it fills the void instead of floating inside it
-    const cap = Math.max(48, Math.min(72, this.W * 0.05));
-    const fs = Math.max(20, Math.min(cap, R * 1.62 / 6.1));
-    this.set(E.h1, 'fontSize', `${fs.toFixed(0)}px`);
-    this.set(E.h2, 'fontSize', `${cap.toFixed(0)}px`);
+    this.set(E.h2, 'transform', `translate(-50%,calc(-50% + ${(6 * (1 - inB)).toFixed(1)}px)) scale(${s2.toFixed(3)})`);
 
     const done = prog >= 1;
-    this.set(E.pct, 'text', `${String(Math.round(prog * 100)).padStart(3, '0')}%`);
-    this.set(E.pct, 'color', done ? (SERVICES.some(isBad) ? T.badHex : T.okHex) : T.ink3);
+    const down = SERVICES.filter(isBad);
+    // One sentence, written once the run has settled -- the mono readout above
+    // is theatre and is hidden from assistive tech, so this is the only place
+    // the actual status is stated in words.
+    if (done) this.set(E['sr-status'], 'text',
+      SERVICES.some(isBad)
+        ? `${SERVICES.filter(isBad).map(s => s.name).join(', ')} reporting a problem.`
+        : `All ${SERVICES.length} servers operating normally.`);
 
     const dark = this.eff() === 'dark';
-    this.set(E.tl, 'opacity', dark ? '.45' : '.9');
-    this.set(E.td, 'opacity', dark ? '.9' : '.45');
+    this.set(E.tl, 'opacity', dark ? '.78' : '1');
+    this.set(E.td, 'opacity', dark ? '1' : '.78');
+    E.tl.classList.toggle('on', !dark);
+    E.td.classList.toggle('on', dark);
 
     SERVICES.forEach((s, i) => {
       const dot = E[`d${i}`], val = E[`v${i}`];
       if (!dot || !val) return;
-      const tap = (900 + i * 150) * k, race = tap + 250 * k, top = race + 400 * k, land = top + 400 * k;
+      const tap = (760 + i * 190) * k, race = tap + 200 * k, top = race + 330 * k, land = top + 260 * k;
 
       // Narrow viewport: same tap timing, but collapse the 5-metric readout
-      // to one word, no room for L07 C04 M03 S00 D05 at phone width.
-      if (this.W < 600) {
+      // to one word — no room for L07 C04 M03 S00 D05 at phone width.
+      if (this.W < NARROW_BP) {
         if (t < land) {
-          this.set(val, 'text', 'TAPPING');
-          this.set(val, 'opacity', '.55'); this.set(val, 'color', T.ink3);
-          this.set(dot, 'background', T.ink3); this.set(dot, 'opacity', '.5');
+          this.set(dot, 'background', T.ink3); this.set(dot, 'opacity', '.75');
         } else {
           const bad = isBad(s);
-          this.set(val, 'text', bad ? 'DNGR' : 'OK');
-          this.set(val, 'opacity', '1'); this.set(val, 'color', bad ? T.badHex : T.okHex);
           this.set(dot, 'opacity', '1'); this.set(dot, 'background', bad ? T.badHex : T.okHex);
         }
+        // One summary for the row, written on the last node so it lands after
+        // every dot has been resolved this frame.
         return;
       }
 
       if (t < race) {
-        this.set(val, 'text', t < tap ? '--' : 'TAPPING');
-        this.set(val, 'opacity', '.55'); this.set(val, 'color', T.ink3);
-        this.set(dot, 'background', T.ink3); this.set(dot, 'opacity', '.5');
+        this.set(val, 'text', t < tap ? '--' : 'ASKING');
+        this.set(val, 'opacity', '1'); this.set(val, 'color', T.ink3);
+        this.set(dot, 'background', T.ink3); this.set(dot, 'opacity', '.75');
         return;
       }
       // Five real <span>s, built once and then only ever written through
-      // textContent/style. The TAPPING branch above sets textContent on
+      // textContent/style. The ASKING branch above sets textContent on
       // `val`, which wipes them, so re-create whenever they're gone --
       // firstElementChild is the cheap way to notice.
       let spans = this._m.get(val);
       if (!spans || val.firstElementChild !== spans[0]) {
         val.textContent = '';
+        // set()'s diff cache doesn't know textContent was just wiped by hand --
+        // without this, resizing wide (spans built, bypassing set()) then back
+        // narrow leaves the 'text' cache entry stale, so set(val,'text','OK')
+        // no-ops and the wide-mode spans stay stuck on screen at phone width.
+        this._w.delete(val);
         spans = METRIC_KEYS.map((_, j) => {
           if (j) val.appendChild(document.createTextNode(' '));
           return val.appendChild(document.createElement('span'));
@@ -740,11 +1029,14 @@ class Scene {
       METRIC_KEYS.forEach(([letter, key], j) => {
         const target = quant(s[key]);
         let n;
-        if (t < top) n = 10 * eo(seg(t, race, top));
-        else n = 10 - (10 - target) * eo(seg(t, top, land));
+        if (t < top) n = 10 * seg(t, race, top) ** 0.9;
+        else n = 10 - (10 - target) * (1 - (1 - seg(t, top, land)) ** 2);
         const v10 = Math.round(n);
         const txt = `${letter}${String(v10).padStart(2, '0')}`;
         if (spans[j].textContent !== txt) spans[j].textContent = txt;
+        // Unconditional write, not routed through set()'s diff cache: applyTheme()
+        // resets _w on a theme change but not _m, so caching this here would miss
+        // the theme toggle repainting these spans' colors.
         spans[j].style.color = v10 <= 0 ? T.ink3 : v10 >= 8 ? T.badHex : T.okHex;
       });
       this.set(val, 'opacity', '1');
@@ -754,7 +1046,8 @@ class Scene {
   }
 }
 
-new Scene().init();
+try { new Scene().init(); }
+catch (e) { document.documentElement.classList.remove('js'); console.error(e); }
 </script>
 </body>
 </html>
