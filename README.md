@@ -11,9 +11,9 @@ inbound ports, GitHub Actions as the only path to production.
 > **Status: work in progress.** Nodes are provisioned, hardened, and
 > deployable via CI. Dokploy, Cloudflare Tunnel and two workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
-> `budget.maybeit.work` (ezBookkeeping), both on vps01. Both are backed up
-> nightly off-site to Cloudflare R2, and both backups have been restored from
-> that copy in a drill. Expect rough edges. `main` is protected
+> `budget.maybeit.work` (ezBookkeeping), both on vps01. ezBookkeeping is
+> backed up nightly off-site to Cloudflare R2, and so is the booking
+> database. Expect rough edges. `main` is protected
 > against force-push and deletion, so fixes land as new commits, not
 > rewrites.
 
@@ -133,7 +133,7 @@ stacks/
   vps0N/docker-compose.yml           per-node cloudflared connector + Netdata
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
-  vps01/backup-booking.sh            nightly MySQL dump to R2
+  vps01/backup-booking.sh            nightly MySQL dump to Cloudflare R2
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
 dokploy/
   ezbookkeeping/, booking/           compose apps Dokploy clones from this repo itself
@@ -253,18 +253,20 @@ hand: pull the newest archive, extract it into throwaway volumes, boot a
 second container against them, then delete all of it. That drill is what
 caught the schedule silently never firing.
 
-`booking.maybeit.work`'s MySQL database is backed up the same way, by
-`backup-booking.sh`, scheduled on vps01 since 2026-08-20. It runs at 04:00, an
-hour after ezBookkeeping so two backups never overlap on a 2GB node: a hot
-`mysqldump --single-transaction` taken inside the MySQL container, so the
-booking site never goes down for it, writing its own stamp file that the same
-staleness check watches, so the two backups can go stale independently. It is
-not much data: 14 tables and about 126 rows, 0.4 MB, dumping to a 6KB gzip; the
-volume's 203MB on disk is MySQL's own tablespaces and binlogs, not
-appointments. Real customer bookings all the same. A forced end-to-end run of
-the backup passed on 2026-08-19 and the archive is in R2. A restore drill
-passed the same day: the archive was pulled back down from R2 and restored
-into a throwaway MySQL container, and all 14
+`booking.maybeit.work`'s MySQL database is covered too, scheduled on the node
+since 2026-08-20. It runs at 04:00, an hour after ezBookkeeping so two backups
+never overlap on a 2GB node: a hot `mysqldump --single-transaction` taken
+inside the MySQL container, so the booking site never goes down for it, writing
+its own stamp file that the same staleness check watches, so the two backups
+can go stale independently. The dump is rejected and the alert left to fire if
+it carries fewer than 10 `CREATE TABLE` statements -- an empty-but-existing
+database dumps as a complete, valid file, and uploading that would age out the
+last real copy. It is not much data: 14 tables and about 126
+rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
+own tablespaces and binlogs, not appointments. Real customer bookings all the
+same. A forced end-to-end run of the backup passed on 2026-08-19 and the
+archive is in R2. A restore drill passed the same day: the archive was pulled
+back down from R2 and restored into a throwaway MySQL container, and all 14
 tables and every per-table row count matched production. The throwaway
 container and its volume were deleted afterwards; production was never written
 to.
