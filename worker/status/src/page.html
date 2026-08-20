@@ -243,10 +243,10 @@ html.narrow .theme-toggle, html.narrow .replay-btn { padding: 14px 14px; margin:
 <script>
 /* ── DATA CONTRACT ────────────────────────────────────────────────────────
  * SERVICES below is the fallback. On load, one same-origin GET /status.json
- * (rail 2 scoped exception) tries to replace it with live status from the
- * homelab's containerized Netdata agents — aggregation into that endpoint
- * happens outside this repo. Any failure (offline, timeout, bad JSON, wrong
- * shape) is swallowed and the fallback below stands, silently.
+ * (rail 2 scoped exception) tries to replace it with live status from a
+ * same-origin aggregator that lives outside this repo. Any failure
+ * (offline, non-2xx, timeout, bad JSON, wrong shape) is swallowed and the
+ * fallback below stands, silently.
  *
  * Shape — an array of 1-3 entries (one per VPS span in the HTML), rendered
  * left to right in the bottom bar:
@@ -280,12 +280,13 @@ let SERVICES = [
   const timer = setTimeout(() => ctrl.abort(), 800);
   try {
     const res = await fetch('/status.json', { signal: ctrl.signal });
+    if (!res.ok) throw new Error(res.status);
     const data = await res.json();
     // Number.isFinite, not `typeof === 'number'` -- the latter accepts NaN
     // and Infinity, which quant() then renders as the literal string "LNaN".
     const isNum = v => Number.isFinite(v);
     const valid = Array.isArray(data) && data.length >= 1 && data.length <= 3 &&
-      data.every(s => typeof s.name === 'string' &&
+      data.every(s => typeof s.name === 'string' && s.name.length <= 8 &&
         isNum(s.load) && isNum(s.cpu) && isNum(s.mem) && isNum(s.swap) && isNum(s.disk));
     if (valid) SERVICES = data;
   } catch { /* offline, timeout, bad JSON, wrong shape — keep fallback */ }

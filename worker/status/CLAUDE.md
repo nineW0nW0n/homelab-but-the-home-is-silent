@@ -12,9 +12,8 @@ Dokploy/VPS; the design spec says why
 ## Layout
 
 - `src/page.html`: the designed front-end, a straight committed copy of
-  `nineW0nW0n/maybeitwork-site`'s `index.html` (own repo, own README; that
-  repo's "Deploy: GitHub → Dokploy" line is stale, this Worker is the real
-  deploy path). Self-contained, fonts inlined as `data:` URIs, no CDN, and it
+  `nineW0nW0n/maybeitwork-site`'s `index.html` (own repo, own README; since
+  2026-08-21 its docs name this Worker as the deploy path). Self-contained, fonts inlined as `data:` URIs, no CDN, and it
   pulls its own data: one `GET /status.json` on load, 800ms abort, no
   auto-refresh; its DATA CONTRACT comment has the shape. Served byte-for-byte
   through a Wrangler `Text` module rule (`import page from './page.html'`),
