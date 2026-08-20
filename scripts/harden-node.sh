@@ -196,7 +196,15 @@ backend = systemd
 F2B
 systemctl enable --now fail2ban
 systemctl restart fail2ban
-fail2ban-client status sshd || true
+# fail2ban-client races the daemon's socket for a second or two after a
+# restart, printing an ERROR that means nothing. Retry briefly, then report.
+i=0
+while [ \$i -lt 10 ]; do
+  fail2ban-client status sshd 2>/dev/null && break
+  i=\$((i + 1))
+  sleep 1
+done
+[ \$i -lt 10 ] || echo "WARNING: fail2ban sshd jail not reporting after 10s" >&2
 
 # Last on purpose: a failed assertion here must never skip the rail 1
 # enforcement above. 'sshd -t' only parses; it cannot say which drop-in won.
