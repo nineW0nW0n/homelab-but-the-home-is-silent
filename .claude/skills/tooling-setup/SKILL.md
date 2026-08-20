@@ -1,6 +1,6 @@
 ---
 name: tooling-setup
-description: Install and configure Biome, yamllint, superpowers, rtk, or caveman for this repo. Pinned install commands, hard-railed config values, and the superpowers skill-to-situation mapping. Use when a tool check fails or returns not-found, when biome.json / .yamllint / rtk config.toml is missing or needs changing, when setting up tooling is the task, or when choosing which superpowers skill fits the situation at hand.
+description: Install and configure Biome, yamllint, superpowers, rtk, or caveman for this repo. Pinned install commands, hard-railed config values, the skill-to-situation mapping, and what each Cloudflare MCP server can and cannot verify. Use when a tool check fails or returns not-found, when biome.json / .yamllint / rtk config.toml is missing or needs changing, when setting up tooling is the task, when choosing which skill fits the situation at hand, or before reaching for a Cloudflare MCP server.
 ---
 
 # Tooling setup
@@ -194,11 +194,129 @@ Never register a second marketplace for a plugin you already have.
 | Any structural or hard-rail change | `using-git-worktrees`, `finishing-a-development-branch` | isolate risky infra changes from `main` |
 | Opening or responding to a PR touching a hard rail | `requesting-code-review`, `receiving-code-review` | before merge |
 | You keep repeating the same ad hoc instructions | `writing-skills` | propose a new skill instead of repeating yourself |
+| PR touches a hard rail or a `docs/superpowers/specs/` item | `code-review` | before merge; it reviews Standards and Spec, and this repo has both as literal artifacts — 12 rails, per-directory `CLAUDE.md`, the specs dir |
+| PR touches `harden-node.sh`, a token/secret path, or an Access policy | `security-review` | before merge; rails 1, 2, 6, 11 |
+| Editing any `CLAUDE.md` or any skill | `writing-for-agents` | before the edit — and root's propagation protocol wins on any conflict with it |
+| A step only Ex can do in a dashboard: Access app, tunnel public hostname, GitHub repo secret, Dokploy env tab, R2 lock rule | `wizard` | instead of writing those steps as prose in a handoff; Ex is not an engineer and wants direct links |
+| Narrowing an Access policy, adding a public hostname, or telling a 530 (tunnel never connected) from a 403 (Access) | `cloudflare:cloudflare-one` | before changing Access or Tunnel config |
+| You are about to run `wrangler secret put`, `r2 bucket lock add`, `kv`, or `dev` | `cloudflare:wrangler` | before the command; wrangler is pinned at 4.123.0 in `worker/status/package.json` |
 
 `test-driven-development` doesn't apply directly: there's no application
 code here to unit test. Its spirit still applies: confirm `pre-commit` /
 `shellcheck` actually fails for the right reason before you fix it, don't
 assume.
+
+**Deliberately not used here, so don't re-litigate it:**
+`cloudflare:cloudflare` (a superset of `wrangler` + `cloudflare-one` +
+docs, at more context than the three of them); `durable-objects`,
+`agents-sdk`, `turnstile`, `email-service`, `sandbox-*` (none of that
+exists in this repo); the design skills `theme-factory`,
+`ui-ux-pro-max`, `frontend-design`, `design`, `banner-design`, `dataviz`
+(`page.html` is a verbatim copy from `nineW0nW0n/maybeitwork-site` —
+designing here forks the design repo); and `diagnosing-bugs`, which
+duplicates `superpowers:systematic-debugging`, already mapped above.
+Two debugging skills means neither one is the rail.
+
+## Cloudflare MCP servers
+
+The connected servers are not equally useful here. Everything below was
+measured against this account, not read off a doc page.
+
+- **`cloudflare-api`** (`search` + `execute`) — the workhorse. Access
+  apps, policies and service-token *names*; `cfd_tunnel` list plus
+  per-tunnel ingress; DNS records; WAF custom rules; rulesets; Worker
+  deployment history and settings. `accountId` is pre-set inside
+  `execute` — use it directly, don't go looking for the account id.
+- **`cloudflare-bindings`** — `workers_list`, `kv_namespaces_list`,
+  `r2_buckets_list`, `workers_get_worker_code`. Keep it for
+  `workers_get_worker_code` (see the proof below); the rest is covered
+  by `cloudflare-api`.
+- **`cloudflare-docs`** (`search_cloudflare_documentation`) — use it for
+  exact config *spellings* pinned to current syntax. This repo's
+  recurring failure is a config key pinned to the wrong major version —
+  `biome.json`'s `preset: "none"` — and that is exactly what this kills.
+  It is not a substitute for the real doc page when precision matters:
+  it returns duplicated changelog chunks with no per-chunk version
+  metadata.
+- **`cloudflare-observability`** — returns nothing today. Not "no
+  traffic": `observability_values` for `$metadata.service` over 7d
+  returned zero values, and `GET
+  /accounts/{id}/workers/scripts/maybeit-status/settings` has no
+  `observability` key at all. The fix is a two-line `[observability]` /
+  `enabled = true` block in `worker/status/wrangler.toml` plus a
+  redeploy, giving 7-day retention. Until that ships, don't reach for
+  this server.
+- **`cloudflare-builds`** — dead weight here. Workers Builds is
+  Cloudflare-side git-connected CI; this repo deploys through
+  `deploy-worker.yml` and `wrangler-action`. Measured `total_count: 0`,
+  and all 10 deployments report `source: "wrangler"`. Its only working
+  tools are duplicated in the other servers.
+
+**Never call `GET /cfd_tunnel/{id}/token`.** It returns secret material,
+which is rail 11. Worker settings is the rail-11-safe alternative: it
+lists secret bindings by name and type only — `CF_ACCESS_CLIENT_ID`,
+`CF_ACCESS_CLIENT_SECRET`, `DEBUG_KEY`, all `secret_text` — never values,
+so you can assert the expected secrets exist without printing one.
+
+**`execute` is write-capable**: arbitrary method, DELETE included,
+against an account that holds the only off-site backup bucket and the
+live tunnels. Root's "ask before changing tunnel/token/SSH/auth setup"
+applies to it in full. Read with GET; anything that mutates gets asked
+first.
+
+### Now verifiable from Cloudflare, no dashboard needed
+
+Access apps, policies and service-token names; per-tunnel ingress
+(hostname → `localhost:PORT`) and catch-all; tunnel health, connector
+count and identity, `cloudflared` version; DNS records with proxied
+flags; WAF custom rules; the absence of a rate-limit ruleset; Worker
+deploy history, settings, and secret-binding names; R2 buckets; KV
+namespaces.
+
+### What stays off-Cloudflare
+
+**Rail 1 cannot be checked from Cloudflare at all** — agents get this
+wrong. Cloudflare sees only egress-initiated tunnel connections and has
+zero view of what listens on a VPS. The one Cloudflare-side signal is
+negative: no DNS record routes to a node IP, which proves there is no
+public DNS path, *not* that a port is closed. The off-node
+`nc -z -G 3 -w 3 <ip> <port>` sweep stays the only real check. Same
+shape as the old `README.md` claim that UFW enforced zero inbound while
+three ports answered.
+
+Also off-Cloudflare: whether the tunnel token *files* on each node
+actually differ (only live connector identity is visible); Worker **JS**
+byte-equality, since it ships esbuild-bundled with comments stripped —
+that needs a local `wrangler deploy --dry-run --outdir` and a diff; and
+anything behind the tunnel — Netdata internals, Dokploy state, container
+memory limits, so rail 4 too.
+
+Untested this session, so don't claim these work: R2 object listing and
+bucket lock rules, Logpush job config, GraphQL analytics.
+
+### Proving the deployed Worker is a named git ref
+
+Wrangler's `[[rules]] type = "Text"` ships `page.html` as its own module
+part in `workers_get_worker_code`'s multipart body, named by the plain
+SHA-1 of its content:
+
+```
+Content-Disposition: form-data; name="./26b5b1e4904044ab055a9a7c7316a13d2af05a65-page.html"
+```
+
+So `git cat-file blob <ref>:worker/status/src/page.html | shasum -a 1`
+matching that hash is cryptographic proof that a named git ref is what is
+deployed. Verified: `26b5b1e4…`, 162769 bytes, matching commit
+`08ba0c90`, deployment stamped `2026-08-20T05:19:41Z`.
+
+Two things to keep doing:
+
+- The response is ~170KB and **blows the tool token limit**. Diff it with
+  shell tooling; never read it into context.
+- **Pin to an explicit ref** (`git cat-file blob <ref>:<path>`), never
+  hash the working tree. Live agent worktrees under `.claude/worktrees/`
+  and a concurrently-moving HEAD produced two disagreeing measurements in
+  one session.
 
 ## RTK: token budget on shell output (`rtk-ai/rtk`)
 

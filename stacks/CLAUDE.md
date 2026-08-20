@@ -15,7 +15,11 @@ which.
 `cloudflared` runs in **token mode** (`tunnel run` + `TUNNEL_TOKEN` env).
 Public-hostname routing is owned by the Cloudflare Zero Trust dashboard
 (Networks → Tunnels → *tunnel* → Public Hostnames), not by any file here. Add
-or change routes there.
+or change routes there. Every tunnel reports `source: "cloudflare"`, so the
+live ingress map is remote state with no version history and no diff against
+this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
+rather than trusting the routes below, and treat any mismatch as the
+dashboard having drifted from the docs, not the reverse.
 
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
@@ -128,6 +132,15 @@ Cloudflare load-balances a hostname's requests across *every* connector
 registered to its tunnel: a route isn't pinned to a specific node.
 Sharing one token across nodes with different origins means Cloudflare
 sends some requests to a node with nothing listening on that origin port.
+
+Half of this is checkable without touching a node: each tunnel's connector
+list must show exactly **one** distinct `client_id` (verified 2026-08-20 —
+three tunnels, one connector each, 4 edge connections, `cloudflared
+2024.12.2`). A shared token surfaces as two connectors on one tunnel. It
+proves nothing about the token *files* on disk, and only holds while both
+nodes are running, so it supplements the per-node check, never replaces it.
+Never fetch `/cfd_tunnel/{id}/token` to compare tokens — that returns
+secret material (rail 11).
 
 ## ezBookkeeping backups (vps01)
 

@@ -61,6 +61,13 @@ to `page.html` without revisiting both numbers.
 fetches `/status.json` itself, which polls live unless a snapshot inside the
 30s TTL already sits in KV.
 
+This Worker emits **no logs**: `wrangler.toml` has no `[observability]`
+block and the deployed settings carry no `observability` key, so the
+`cloudflare-observability` MCP returns an empty set for it — absence of
+config, not absence of traffic. Debug via `/debug` and `curl`. Turning it
+on is two lines plus a redeploy, and buys 7-day retention; it is a
+deployed-Worker change, so ask first.
+
 ## Secrets and deploy
 
 `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`: the Cloudflare Access
@@ -117,12 +124,26 @@ Incident histories behind these rules: `failure-log` skill
 - **`dokploy.maybeit.work` and each `*-metrics` host are separate Access
   applications,** not one shared app — so a token opening both is a policy
   to narrow, not a fact of life.
-- **Access work is dashboard-only** — the `wrangler login` token can't
-  read Access config, and the Zero Trust API returns `success: true` with
-  an empty result set rather than a 403. Never read that as "no Access
-  apps configured"; curl the hostname and look for the `302`.
+- **An empty Zero Trust result set is a credential-scope symptom, not a
+  platform limit.** This entry read "Access work is dashboard-only" until
+  2026-08-20. Still true: the `wrangler login` token can't read Access
+  config, and the API answers an under-scoped token with `success: true`
+  and an empty result set rather than a 403 — which is exactly what made
+  it look like a platform limit. Now disproven: the `cloudflare-api` MCP's
+  credential reads the same endpoints fine (5 apps, their policies, and
+  the one `status-worker` service token), and independently confirms the
+  detachment claimed above. Never read an empty list as "no Access apps
+  configured" — suspect the token's scopes first; curling the hostname for
+  the `302` stays a valid cross-check. Try a second credential before
+  writing down "the platform can't do this".
 - **Verify a named check exists before citing it, and re-read every
   comment about `page.html` when you re-copy it** — `index.js` claimed the
   page never used `innerHTML` and that `scripts/check-rails.sh` enforced
   it; both were false for months. The grep is real now and wired into
-  `.pre-commit-config.yaml`.
+  `.pre-commit-config.yaml`. After deploying a re-copy, prove it landed
+  rather than trusting the green run: the deployed page ships as its own
+  module part named by its plain SHA-1, so
+  `git cat-file blob <ref>:worker/status/src/page.html | shasum -a 1` must
+  equal it. Pin an explicit ref; hashing the working tree measures shared
+  mutable state and has already produced two disagreeing answers in one
+  session. Mechanism in `tooling-setup`.
