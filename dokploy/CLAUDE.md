@@ -69,6 +69,23 @@ tighter alternative, scoping to GitHub's published IP ranges, was rejected on
 purpose: those ranges rotate, nothing here tracks them, and the failure mode
 would be another silent `403`.
 
+**A rate limit is the companion to that trade-off** (2026-08-20): the zone's
+one free rule, 5 requests per 10s per IP+colo on this path, action Block,
+10s mitigation. Legitimate traffic is one POST per push, so the ceiling costs
+nothing and bounds brute-forcing the secret. It is the only rate-limit rule
+the plan allows — spending it here rather than on the apex is deliberate:
+everything else is geo-blocked to PH, and the apex is served entirely by the
+Worker at Cloudflare's edge, so a flood there costs Worker requests, not node
+resources. This path reaches the control plane on vps00.
+
+**Do not test a rate limit with a concurrent burst.** 12 and then 20
+simultaneous requests all returned `404` — Cloudflare's counter is eventually
+consistent, so a simultaneous burst arrives before anything increments, and
+that reads exactly like a rule that does not work. Sustained traffic is what
+exercises it: 30 requests at ~2.5/s tripped at the 11th and held `429` for
+the rest, recovering to `404` after the 10s window (verified 2026-08-20 from
+vps01). The false negative is the trap, not the rule.
+
 **Both failures presented as silence** — GitHub sees a non-2xx and nothing
 here raises anything. So verify against Dokploy's own tables, never by
 curling from a PH client, where everything looks fine either way:

@@ -116,8 +116,11 @@ Actions runners and the nodes themselves, gets a `403` that looks exactly
 like an outage and is not one. One path is exempted, ordered above the
 block: `dokploy.maybeit.work/api/deploy`, because GitHub's webhook servers
 are not in PH either and the geo rule silently killed Dokploy's autodeploy
-for two days before anyone noticed. Both rules live only in the Cloudflare
-dashboard, so nothing in this repo can restore them.
+for two days before anyone noticed. That exemption is bounded by the
+zone's one free rate-limit rule: 5 requests per 10 seconds per IP on that
+path, which is far above one POST per push and far below anything useful
+for guessing the webhook secret. All three rules live only in the
+Cloudflare dashboard, so nothing in this repo can restore them.
 
 All three Netdata agents are also **claimed into Netdata Cloud**, an
 outbound HTTPS connection to a third party from every node. It opens no
