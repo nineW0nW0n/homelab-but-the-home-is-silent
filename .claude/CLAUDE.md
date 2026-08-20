@@ -246,8 +246,11 @@ files carry local rails, vocabulary, and failure logs.
 wasn't written down:**
 
 1. One line, imperative, in that directory's failure log: "Do not run X; it
-   causes Y. Do Z instead." Repo-wide lesson → root's log instead; say so
-   in your summary.
+   causes Y. Do Z instead." **Keep the reason** — a rule without one gets
+   deleted by a future agent who thinks it is redundant. Repo-wide lesson →
+   root's log instead; say so in your summary. The incident story goes in
+   the `failure-log` skill, not inline: the rule is what must be seen while
+   skimming, the story is what is needed once you are already there.
 2. Log it in the same commit/turn as the fix. Never batch for later.
 3. Never delete a superseded line. Replace it in place; or, only when its
    situation can no longer occur, move the **full original text** to
@@ -256,10 +259,32 @@ wasn't written down:**
    inline. Compression is not supersession: a lesson that still applies
    gets shorter, not moved.
 
-**Keeping this current:** a directory file past ~500 lines signals
-splitting the directory, not trimming the file; ask before restructuring.
-Anything long and reusable → a skill, referenced by one line, never
-inlined. Never create a directory's `CLAUDE.md` speculatively.
+**A lesson becomes a hard rail only when it gains a check.** This is the
+graduation criterion, and it exists because the most-repeated failure in
+this repo is a rail that reads well and enforces nothing — rail 5, rail 9,
+`pre-commit` itself, the budget check, the sshd drop-in, and a code comment
+citing a `check-rails.sh` that did not exist for months. Promoting lessons
+to rails without checks makes that worse, not better. Sort every lesson
+three ways:
+
+- **Checkable** → make it a rail, one line, and add the check to
+  `scripts/check-rails.sh` or `.pre-commit-config.yaml` in the same commit.
+  Watch the check fail on a deliberately broken copy before trusting it; a
+  check nobody saw fail is the bug it was meant to prevent.
+- **Judgement, not mechanizable** ("measure, don't infer") → a one-line
+  heuristic in the directory file that needs it. Not a rail; rails inflate
+  and stop being read.
+- **Fixed one-off that cannot recur** → archive it.
+
+Rails stay few and enforced. Twelve get followed; thirty get skimmed.
+
+**Keeping this current:** a directory file past ~250 lines is worth
+splitting by sub-topic (`stacks/` → `stacks/vps01/`, 2026-08-20) or moving
+narrative to a skill; past ~500 signals splitting the directory itself, and
+that needs asking first. Measure cost in words, not lines — rewrapping a
+file to a narrower column changes the line count and nothing else. Anything
+long and reusable → a skill, referenced by one line, never inlined. Never
+create a directory's `CLAUDE.md` speculatively.
 
 ## Self-audit: on demand
 
