@@ -85,85 +85,44 @@ the workflow reference.
 
 ## Failure log
 
-- Verify Netdata chart ids against the live node; two of `poll.js`'s were
-  wrong guesses at first deploy, caught against vps00's `/api/v1/charts`
-  (2026-08-16). `system.cpu` has no `idle` dimension in this deployment, so
-  `queryCpuBusyPercent` sums the busy-state dimensions, falling back to
-  `100 - idle` where a config does report one. The root filesystem chart id
-  keeps the literal `/` (`disk_space./`), not `_` as guessed.
-  `system.ram`/`used` was right.
-- `system.load`'s dimensions (load1/load5/load15) are each an absolute load
-  average and don't sum to a whole, unlike `system.ram`/`mem.swap`, so
-  `options=percentage` is meaningless there — hence `queryRaw` vs
-  `queryPercent`, confirmed against a live node before wiring. load1 becomes
-  a 0-100 score by dividing by `NODE_VCPUS` (2, this homelab's fixed spec)
-  and clamping.
-- Cloudflare Cron Triggers can't reliably poll this account's own
-  Access-protected Netdata apps. With a confirmed-working
-  `CF_ACCESS_CLIENT_ID`/`SECRET`, `scheduled()` calling `pollAll` got a 403
-  from Access on every Netdata call, every tick, while the identical call
-  from a real HTTP-triggered `fetch()` worked every time. Making
-  `scheduled()` self-fetch `/__poll`, so the poll ran inside a nested
-  `fetch()`, **didn't work either**: still 403 next tick, though plain curl
-  to `/__poll` from outside Cloudflare always worked. So it isn't handler
-  type — anything in a request chain rooted at a Cron Trigger gets hit,
-  however many hops deep. Root cause unconfirmed (Cloudflare-side, nothing
-  in this repo to dig with). Fix: no Cron Trigger, no `[triggers]` in
-  `wrangler.toml`, no `scheduled()`. Trade-off accepted: the first
-  `/status.json` after the TTL expires waits on live Netdata calls. The KV
-  write has two jobs now, backing the `POLL_TTL_MS` freshness cache and
-  carrying `lastSeen` forward so a node that's down right now still shows
-  when it was last up. (Pre-TTL wording "polls fresh on every page load"
-  archived 2026-08-20 in `docs/superpowers/failure-log-archive.md`; false
-  once the TTL landed.)
-- vps02's tunnel showed `Inactive` / 0 replicas: cloudflared there had never
-  once connected, and Netdata calls returned 530 — Cloudflare-level, not an
-  Access 403, and the status code is what tells you which layer failed.
-  Fixed by rotating the token (dashboard → Tunnels → vps02-metrics → Rotate
-  token), updating `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`, re-running
-  `deploy.yml`; healthy at 1 replica after. The bad token is unexplained,
-  likely a bad paste when a human first set it.
-- Grep for order-sensitive output from a concurrently-filled object whenever
-  one shows up. `page.html` matches status dots to nodes by **array index**,
-  not name (`SERVICES.forEach((s, i) => ...d${i}/v${i}...)`), and the first
-  `toStatusJson` built its array from `Object.entries(snapshot.nodes)` —
-  fine locally, but `pollAll` fills that object from concurrent per-node
-  promises, so a slow vps00 poll landing after a fast vps01 one would have
-  silently mislabeled a node's stats under real network jitter. Fixed by
-  building from `NODE_HOSTS.split(',')`.
-- Weigh a credential's blast radius against what the call buys, not against
-  whether the call is correct. `pollDokploy` was correct by the end (service
-  token, `redirect: 'manual'`, explicit 2xx test) and still wrong to keep: a
-  public internet Worker holding a credential to the **deploy control plane**
-  for an up/down boolean `toStatusJson`'s allowlist kept off the public page
-  entirely, surfacing only in `/debug`, which only Ex can open. Leaking the
-  Worker's secrets meant full infra access, not a CPU graph. Removed
-  2026-08-20 with `DOKPLOY_HOST`, token dropped from the Dokploy Access
-  policy, and `test/poll.test.js` guards it: `pollAll` must request no host
-  outside `NODE_HOSTS`, with `DOKPLOY_HOST` still set in that test's env so a
-  stale var can't revive it. Its earlier shape's lesson is worth keeping for
-  any future poller: it did an unauthenticated `GET` with
-  `up = res.status < 500`, and the runtime follows the Access `302` to a
-  `200` login page, so the tile would have stayed green forever. When a
-  polled origin gains an auth gate, re-check what the poller proves — "up"
-  must mean the origin answered, not its login page. (Narrative archived 2026-08-20 in
+Incident histories behind these rules: `failure-log` skill
+(`worker/status/`).
+
+- **Verify Netdata chart ids and dimensions against a live node's
+  `/api/v1/charts` before wiring them** — two of `poll.js`'s were wrong
+  guesses. `system.cpu` has no `idle` dimension here, the root filesystem
+  chart keeps the literal `/`, and `system.load`'s dimensions are
+  absolute, so `options=percentage` is meaningless on it.
+- **No Cron Trigger in this Worker** — no `[triggers]`, no `scheduled()`.
+  Anything in a request chain rooted at a Cron Trigger gets 403'd by
+  Access however many hops deep, with credentials that work fine from a
+  real `fetch()`. Cost: the first `/status.json` after the TTL expires
+  waits on live Netdata calls.
+- **The status code tells you which layer failed** — vps02's 530s were
+  Cloudflare-level (a tunnel that had never connected), not an Access
+  403; fixed by rotating the tunnel token and re-running `deploy.yml`.
+- **Grep for order-sensitive output from a concurrently-filled object** —
+  `page.html` matches status dots to nodes by array index, so building
+  that array from `Object.entries(snapshot.nodes)` would have mislabeled
+  nodes under network jitter. Build from `NODE_HOSTS.split(',')`.
+- **This public Worker holds no credential to the deploy control plane** —
+  `pollDokploy` was correct code and still wrong to keep, for a boolean
+  the public page never showed; `test/poll.test.js` guards that `pollAll`
+  requests no host outside `NODE_HOSTS`. Weigh a credential's blast radius
+  against what the call buys, not against whether the call is correct.
+  And when a polled origin gains an auth gate, re-check what the poller
+  proves: an unauthenticated `GET` follows Access's 302 to a 200 login
+  page and stays green forever. (Narrative archived in
   `docs/superpowers/failure-log-archive.md`.)
-- `dokploy.maybeit.work` and each `*-metrics` host are **separate** Access
-  applications, not one shared app: confirmed 2026-08-20 by their distinct
-  `aud`/`kid` in the login redirect. A `poll.js` comment claimed they shared
-  one, which is why a single token opening both read as unavoidable rather
-  than as a policy that needed narrowing.
-- The `wrangler login` OAuth token can't read or write Access config, and the
-  Zero Trust API returns `success: true` with an **empty result set** rather
-  than a 403. Never read that as "no Access apps configured" — curl the
-  hostname and look for the `302` to `<team>.cloudflareaccess.com`. Access
-  work is dashboard-only.
-- A comment asserting a security invariant is worthless unless something
-  checks it: `index.js`'s `PAGE_HEADERS` comment claimed `page.html` "writes
-  data with textContent, never innerHTML" while the vendored page did use
-  `innerHTML` for the metric readout. It then said `scripts/check-rails.sh`
-  greps for markup sinks — that script did not exist until 2026-08-20, so
-  the fix and its stated enforcement were both fiction for months. The grep
-  is real now (`check-rails.sh`, fire-tested). When you re-copy `page.html`,
-  re-read every comment claiming something about its contents, and verify a
-  named check exists before citing it.
+- **`dokploy.maybeit.work` and each `*-metrics` host are separate Access
+  applications,** not one shared app — so a token opening both is a policy
+  to narrow, not a fact of life.
+- **Access work is dashboard-only** — the `wrangler login` token can't
+  read Access config, and the Zero Trust API returns `success: true` with
+  an empty result set rather than a 403. Never read that as "no Access
+  apps configured"; curl the hostname and look for the `302`.
+- **Verify a named check exists before citing it, and re-read every
+  comment about `page.html` when you re-copy it** — `index.js` claimed the
+  page never used `innerHTML` and that `scripts/check-rails.sh` enforced
+  it; both were false for months. The grep is real now and wired into
+  `.pre-commit-config.yaml`.

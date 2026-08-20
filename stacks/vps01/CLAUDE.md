@@ -210,76 +210,37 @@ throwaway container first, never straight into production.
 
 ## Failure log
 
-- A restore drill runs a *second* database on a node already running the first:
-  the capped 512m `mysql:8.0` drill container on 2026-08-19 took vps01 from 4M
-  to 61M of swap while production stayed up. Always cap a drill container
-  explicitly, and never drill during the 03:00/04:00 backup window; on a 2GB
-  node the drill is itself a workload, not an inspection.
+Incident histories behind these rules: `failure-log` skill
+(`stacks/vps01/`).
 
-- macOS `zcat` is not Debian's: it appends `.Z` and fails on a `.gz`, so a
-  dump-integrity check written as `zcat` verified fine on the node and rejected
-  a *good* archive when dry-run on a laptop. Use `gzip -cd`; same meaning on
-  both.
-
-- `ezbookkeeping_backup_age` executed no notification from 2026-08-18 07:31:50Z
-  until the 2026-08-19 drill. **Root cause:** netdata's
-  `health_alarm_execute()` suppresses a notification when the most recent entry
-  for the same `alarm_id` carrying `EXEC_RUN` has the **same status** as the new
-  transition ("don't send the same notification twice"). That alarm last
-  executed 07:31:50Z as CRITICAL, so every CRITICAL after was dropped as a
-  duplicate. The escape hatch is a CLEAR that executes and resets the chain, and
-  the then-current `delay: down 1h multiplier 1.5 max 4h` in
-  `health.d/backup.conf` blocked exactly that: every CLEAR held an hour, the
-  alarm re-fired first, the CLEAR was superseded (`UPDATED`) before its delay
-  expired (`delay: 3600` on every CLEAR in the records). The two interlock; a
-  long `down` delay is fine for a dashboard, useless for notification. **Not**
-  recipient-specific: a throwaway `to: sysadmin` alarm on vps02 fired with
-  `EXEC_RUN` and `exec_code=0`, and replaying netdata's real-mode arguments by
-  hand delivers as both `netdata` and `root` — script, config and token were
-  never at fault. Lesson: **an alarm can look armed on the dashboard while being
-  permanently silent for one status.** Verify with a real transition, never an
-  interactive `alarm-notify.sh test`, and never make a Netdata alarm the only
-  delivery path for something that matters. (Two earlier wrong write-ups and a
-  superseded clause about restart persistence are archived; the correction is
-  the next entry.)
-
-- Netdata's dedup state resets when an alarm's `config_hash_id` changes, not
-  merely on restart (measured 2026-08-19: `046da83b…` → `4686c70f…` at the
-  04:46:03Z restart, no transition recorded, wedge gone by the 10:01:03Z drill).
-  So when an alarm is stuck silent, edit its `.conf` and redeploy; do not just
-  restart netdata. Re-run the stale/recover/stale drill after any change to
-  `health.d/backup.conf`, to prove CRITICAL → CLEAR → CRITICAL all execute.
-
-- rclone's S3 backend calls `CreateBucket` before uploading, to create the
-  bucket if missing. An R2 token scoped to Object Read & Write cannot, so every
-  upload died with `403 AccessDenied: CreateBucket` while the credentials were
-  fine. Fix is `RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true`, not a wider token. Read
-  the API call named in a 403 before assuming the key is wrong.
-
-- vps01's system clock is **UTC-4**, not UTC (backup log stamped `-04:00` while
-  rclone logged UTC). A cron entry written as plain UTC fires four hours off, so
-  do not assume these nodes are UTC: schedule hourly and gate on
-  `TZ=<zone> date +%H` inside the script. (Superseded `CRON_TZ` advice archived;
-  next entry says why.)
-
-- Debian 12's cron **ignores `CRON_TZ`** (verified on vps01 2026-08-18: a
-  `CRON_TZ=Asia/Manila` entry set to fire 3 minutes out in Manila time never
-  ran). The backup was therefore running 03:00 *node-local*, not Manila, and
-  `deploy.yml`'s comment claimed otherwise. Fixed by running the scripts hourly
-  and gating on `TZ=Asia/Manila date +%H` inside them. Never trust a
-  timezone-aware cron entry here without testing it with a near-term throwaway.
-
-- `deploy.yml`'s "Install backup cron" step pipes into `crontab -`, which
-  **replaces the deploy user's entire crontab**, it does not append. All four
-  vps01 entries (`backup-ezbookkeeping.sh` `:00`, `check-backup-age.sh` `:30`,
-  `backup-booking.sh` `:10`, `check-backup-age.sh booking …` `:40`) therefore
-  live in one heredoc in that step. Add any new scheduled job to that heredoc;
-  installing one by hand or in a second step silently deletes the rest.
-
-- `deploy.yml`'s `rsync -az --delete stacks/vps01/` **deleted
-  `/opt/stacks/vps01/backup/`** on every deploy: the run log, the local archive,
-  and the `.last-success` stamp the Netdata age alarm reads. The alarm did its
-  job and sat CRIT ~13.7h unnoticed. Fixed with `--exclude 'backup/'`, now
-  alongside `--exclude 'backup-booking/'`, `--exclude '.r2.env'`,
-  `--exclude '.telegram.env'`. Any node-side state under a directory an rsync
-  `--delete` targets needs an exclude, added in the same commit as the state.
+- **Cap a drill container explicitly, and never drill during the
+  03:00/04:00 backup window** — on a 2GB node a second database is a
+  workload, not an inspection; the last drill pushed vps01 into swap.
+- **Use `gzip -cd`, never `zcat`, in dump-integrity checks** — macOS
+  `zcat` appends `.Z` and rejects a *good* `.gz` when dry-run on a laptop.
+- **A Netdata alarm can look armed and be permanently silent for one
+  status** — a notification whose status matches the last executed one is
+  dropped as a duplicate, and a long `delay: down` blocks the CLEAR that
+  would reset the chain. Verify with a real transition, never an
+  interactive `alarm-notify.sh test`, and never make an alarm the only
+  delivery path for something that matters. (Two earlier wrong write-ups
+  and a superseded restart-persistence clause are archived.)
+- **To unstick a silent alarm, edit its `.conf` and redeploy** — dedup
+  state resets on a `config_hash_id` change, not on a netdata restart.
+  Re-run the stale/recover/stale drill after any change to
+  `health.d/backup.conf`.
+- **Read the API call named in a 403 before assuming the key is wrong** —
+  rclone's S3 backend calls `CreateBucket` first, which an Object Read &
+  Write R2 token cannot. Fix is `RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true`,
+  not a wider token.
+- **These nodes are not UTC, and Debian 12's cron ignores `CRON_TZ`** —
+  so schedule hourly and gate on `TZ=Asia/Manila date +%H` inside the
+  script. Never trust a timezone-aware cron entry here without testing it
+  with a near-term throwaway. (Superseded `CRON_TZ` advice archived.)
+- **Every vps01 cron entry lives in one heredoc** in `deploy.yml`'s
+  "Install backup cron" step, which pipes into `crontab -` and so
+  *replaces* the crontab. Adding a job anywhere else deletes the rest.
+- **Node-side state under an rsync `--delete` target needs an
+  `--exclude`, added in the same commit as the state** — `backup/` (run
+  log, local archive, `.last-success` stamp) was deleted on every deploy
+  and the age alarm sat CRIT unnoticed for half a day.

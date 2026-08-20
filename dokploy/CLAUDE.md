@@ -105,17 +105,16 @@ Ex, then remove it or record the reason here.
 
 ## Failure log
 
-- ezBookkeeping writes transaction pictures to `/ezbookkeeping/storage`, a
-  path the first version of its compose file never mounted, so any receipt
-  photo would have lived in the container layer and vanished on redeploy. When
-  adding a container that accepts uploads, check where it writes them
-  (`du -sh /<appdir>/*` in the running container) rather than assuming the
-  database volume covers user data.
-- Cloudflare caches ezBookkeeping's `/server_settings.js` (origin sends
-  `cache-control: max-age=14400`), so after flipping an env-driven feature
-  flag the login page can keep showing the old state for up to 4 hours. Do not
-  conclude the env change failed: check the container (`env | grep EBK_`) and
-  `curl` the origin file, then purge by hostname in Caching → Configuration →
-  Custom Purge. Verified 2026-08-18 turning `EBK_USER_ENABLE_REGISTER` off:
-  the container read `false` and `_['r']=0` while the browser still offered
-  "Create an account".
+Incident histories behind these rules: `failure-log` skill (`dokploy/`).
+
+- **When adding a container that accepts uploads, check where it writes
+  them** (`du -sh /<appdir>/*` in the running container) rather than
+  assuming the database volume covers user data. ezBookkeeping writes to
+  `/ezbookkeeping/storage`, unmounted at first, so any receipt photo would
+  have lived in the container layer and vanished on redeploy.
+- **Cloudflare caches ezBookkeeping's `/server_settings.js`** (origin
+  sends `max-age=14400`), so after flipping an env-driven feature flag the
+  login page can show the old state for up to 4 hours. Don't conclude the
+  env change failed: check `env | grep EBK_` in the container, `curl` the
+  origin file, then purge by hostname in Caching → Configuration → Custom
+  Purge.

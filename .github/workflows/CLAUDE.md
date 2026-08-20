@@ -129,45 +129,42 @@ rules guard human error, not CI.
 
 ## Failure log
 
-- A stack with `services: {}` makes plain `docker compose pull` error out
-  with nothing to pull. The pull/up step is guarded (`if [ -n "$(docker
-  compose config --services)" ]`). Keep the guard; don't cut it as dead
-  code without checking every node's stack first.
-- deploy-vps02's `.env` step used to write vps00's shared
-  `CLOUDFLARE_TUNNEL_TOKEN`. vps02 now has its own
-  `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`, same pattern as vps01. Never
-  wire in vps00's token (rail 2). Full original entry in
+Incident histories behind these rules: `failure-log` skill
+(`.github/workflows/`).
+
+- **Keep the `docker compose config --services` guard on the pull/up
+  step.** A stack with `services: {}` makes plain `docker compose pull`
+  error out with nothing to pull; don't cut the guard as dead code without
+  checking every node's stack first.
+- **Never wire vps00's token into another node** (rail 2). deploy-vps02's
+  `.env` step once wrote the shared `CLOUDFLARE_TUNNEL_TOKEN`; vps02 now
+  has its own `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`, same pattern as
+  vps01. Full original entry in
   `docs/superpowers/failure-log-archive.md`.
-- `rsync --delete` wiped vps01's `backup/` on every deploy until
-  2026-08-18: the run logs and the `.last-success` stamps the staleness
-  check reads are **node** state, not repo state. `.r2.env` /
+- **`rsync --delete` needs an exclude for every piece of node state.**
+  It wiped vps01's `backup/` — run logs and the `.last-success` stamps the
+  staleness check reads — on every deploy until 2026-08-18. `.r2.env` /
   `.telegram.env` are excluded for a subtler reason: `--delete` removes
   them and later steps write them back, so a deploy overlapping the `:30`
-  staleness check made it exit 1 on "`.telegram.env` missing" and skip that
-  hour silently. `.env` is deliberately not excluded; nothing reads it
-  between the rsync and its rewrite.
-- `deploy.yml`'s `paths:` listed `infra/` until 2026-08-19 although nothing
-  under it is ever rsynced. A docs-only edit to `infra/CLAUDE.md` queued a
-  full three-node production deploy that sat 13h at the approval gate and,
-  once approved, shipped a by-then stale `deploy.yml` that wiped vps01's
-  backup state. Trigger deploys only on paths that reach a node.
-- A post-deploy check probing the **public hostnames from the runner**
-  failed every probe with `403` while every service was healthy. The first
-  diagnosis (bot protection rejecting datacenter IPs) was **wrong**: it is
-  a zone-wide Cloudflare custom rule, `Block non-local traffic`, matching
-  `ip.src.country ne "PH"`, so every GitHub runner and both US-hosted nodes
-  are blocked. Amended 2026-08-19 after reading Security → Events instead
-  of inferring from response codes. `maybeit.work` is exempt now, the other
-  hostnames are not, so CI still cannot probe them. Read the matched rule
-  in Security Events before theorising about a 403.
-- The rewritten node-side check then failed on its first real run with
-  `FAIL netdata: 503` on all three healthy nodes: the Deploy step ends with
-  `docker compose restart netdata` and Netdata answers 503 for ~5s while it
-  initialises, so one immediate request races the restart it just caused.
-  Fixed by polling (30 tries, 2s apart); it had passed by hand only because
-  the agents had been up for hours. A post-deploy check runs at the worst
-  possible moment by definition: give every probe a retry budget, and test
-  it right after a restart rather than on a warm node.
-- The `gitleaks` hook scans staged changes only, so it contributes nothing
-  under `pre-commit run --all-files` in `validate.yml`. Kept once, in
-  root's failure log; don't duplicate it here.
+  staleness check made it exit 1 and skip that hour silently. `.env` is
+  deliberately not excluded; nothing reads it between rsync and rewrite.
+- **Trigger deploys only on paths that reach a node.** `deploy.yml`'s
+  `paths:` listed `infra/`, which nothing rsyncs, so a docs-only edit to
+  `infra/CLAUDE.md` queued a full three-node production deploy that sat
+  13h at the approval gate and then shipped a by-then stale `deploy.yml`
+  that wiped vps01's backup state.
+- **Read the matched rule in Security → Events before theorising about a
+  403.** Post-deploy probes of the public hostnames from the runner fail
+  on a zone-wide Cloudflare custom rule, `Block non-local traffic`
+  (`ip.src.country ne "PH"`), not on bot protection rejecting datacenter
+  IPs — that first diagnosis was wrong, amended 2026-08-19. `maybeit.work`
+  is exempt; the other hostnames are not, so CI still cannot probe them.
+- **Give every post-deploy probe a retry budget, and test it right after a
+  restart.** The rewritten node-side check ran immediately after the
+  Deploy step's `docker compose restart netdata`, which answers 503 for
+  ~5s, and so failed on all three healthy nodes; it polls now, 30 tries 2s
+  apart. A post-deploy check runs at the worst possible moment by
+  definition.
+- **The `gitleaks` hook scans staged changes only,** so it contributes
+  nothing under `pre-commit run --all-files` in `validate.yml`. Kept once,
+  in root's failure log; don't duplicate it here.

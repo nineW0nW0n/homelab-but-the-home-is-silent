@@ -149,7 +149,9 @@ context until needed. Never inline it here or in a directory file.
 
 ## Failure log (cross-cutting only)
 
-Directory-specific mistakes go in that directory's `CLAUDE.md`.
+Directory-specific mistakes go in that directory's `CLAUDE.md`. The
+incident history behind every one-line rule in every failure log here:
+`.claude/skills/failure-log/SKILL.md`.
 
 - **Assert effective values, never the strings you wrote.** A config you
   authored is no proof the tool read it, honored it, or won against another
@@ -176,34 +178,29 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
   it with coverage it lacks.
 - **Budget check: `git ls-files '*CLAUDE.md' | xargs wc -l`, nothing else.**
   A `wc -l */CLAUDE.md` glob skips dot-directories (`.claude/`,
-  `.github/`). Under rtk, `find … -exec` exits 1 ("rtk find does not
-  support compound predicates or actions"), and the bare `find . -name
-  CLAUDE.md` rtk accepts walks untracked dirs — with three agent worktrees
-  it reported 28 files, the 7 real plus 21 under `.claude/worktrees/`, exit
-  0, looking correct (2026-08-19); silently wrong does more damage than
-  loudly broken. `git ls-files` runs under rtk, covers dot-directories,
-  skips `node_modules/` free. **When a rule mandates a tool that rewrites
-  commands, run the rule's own commands under that tool first.** Superseded
-  `find` history archived in `docs/superpowers/failure-log-archive.md`.
+  `.github/`); under rtk a `find` either errors out or walks untracked
+  worktrees and reports a wrong count with exit 0, looking correct.
+  Silently wrong does more damage than loudly broken. **When a rule
+  mandates a tool that rewrites commands, run the rule's own commands under
+  that tool first.** Superseded `find` history archived in
+  `docs/superpowers/failure-log-archive.md`.
 - **Never size a dataset with `du` on its volume.** `du -sh` on
   `booking-ptpwn8_mysql-data` said 203M; that became "~200MB of real
-  appointments" and reached `README.md`, `stacks/CLAUDE.md`,
-  `dokploy/CLAUDE.md`, the booking compose header and a commit message
-  before anyone dumped the database. Real: 14 tables, ~126 rows, 0.4 MB —
-  the rest is MySQL 8.0's ibdata1, redo/undo tablespaces, binlogs. Query
+  appointments" and reached five documents before anyone dumped the
+  database. Real: 14 tables, ~126 rows, 0.4 MB — the rest is MySQL 8.0's
+  ibdata1, redo/undo tablespaces, binlogs. Query
   `information_schema.tables`, or dump and size the dump. **An inferred
   number is said once, hedged, until measured — never copied into a second
   document.**
-- **Biome 2.x's schema moved fast**: `files.ignore` → `files.includes` with
-  `!` negation, top-level `organizeImports` → `assist.actions.source`,
-  `linter.rules.recommended: true` → `linter.rules.preset: "recommended"` —
-  *not* `"none"`, which `biome migrate --write` produced, silently
-  disabling every rule. Verify the migrated `linter` block by hand; pin
-  `biome.json`'s `$schema` and syntax to the exact version installed, never
-  to an older doc or skill. `tooling-setup` carried the 1.x spellings the
-  whole time this entry called them wrong (fixed 2026-08-16): **when a log
-  entry says a config shape is wrong, grep the skills for it the same
-  turn.** Original entry in `docs/superpowers/failure-log-archive.md`.
+- **Pin `biome.json`'s `$schema` and syntax to the exact version
+  installed**, never to an older doc or skill: Biome 2.x's schema moved
+  fast, and `biome migrate --write` produced `linter.rules.preset: "none"`,
+  silently disabling every rule — verify the migrated `linter` block by
+  hand. The current spellings live in `tooling-setup`, which carried the
+  1.x ones the whole time this entry called them wrong (fixed 2026-08-16):
+  **when a log entry says a config shape is wrong, grep the skills for it
+  the same turn.** Original entry in
+  `docs/superpowers/failure-log-archive.md`.
 - **Never hand-create a config at a path a doc asserts; make the tool say
   where it reads from.** `tooling-setup` called `~/.config/rtk/config.toml`
   rtk's path; macOS rtk reads `~/Library/Application Support/rtk/` instead,
@@ -215,9 +212,7 @@ Directory-specific mistakes go in that directory's `CLAUDE.md`.
 - **A `git filter-repo` rewrite invalidates every commit SHA already
   written down** — handoffs, plans, specs, and the rewrite's own commit
   message. Grep `docs/` for short SHAs before force-pushing one; cite
-  commits by *message* in documents meant to outlive a rewrite. The
-  security handoff cited `2e8e44d` for its own scrub commit, which the
-  rewrite had already turned into `87ff87b`.
+  commits by *message* in documents meant to outlive a rewrite.
 - **Pin exact versions/commits** for Biome, rtk, caveman, yamllint. Never
   `latest`.
 - **yamllint's `truthy` rule flags `on:`** in Actions workflows as a

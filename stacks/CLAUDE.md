@@ -137,37 +137,29 @@ name with `docker ps` / `docker volume ls` first.
 
 ## Failure log
 
-- Netdata notifications were dead on **all three nodes** from setup until
-  2026-08-18 and nothing surfaced it: `deploy.yml` wrote
-  `health_alarm_notify.conf` with `umask 077`, giving `600 deploy:deploy` (uid
-  1000), unreadable by the container's netdata user (uid 201). Every alarm since
-  failed to deliver, including the tightened 80/90 RAM and disk alarms, and the
-  config looked present and correct on the host — which is why it went unnoticed
-  so long. Fixed by writing the file into the netdataconfig volume as uid 201
-  (Alert delivery above). When a container reads a secret file, check the
-  *in-container* uid and test as that user, not root.
+Incident histories behind these rules: `failure-log` skill (`stacks/`).
 
-- `alarm-notify.sh` enables **email by default**, so with Telegram configured
-  and no MTA every alert also ran sendmail and logged `account default not
-  found` (error 78) — three errors per transition and a non-zero exit. Telegram
-  still delivered, so nothing was lost, but that steady error stream hid the
-  broken config above. `SEND_EMAIL="NO"` in the templates. The templates' claim
-  that every unlisted method "stays at its built-in default (disabled)" was
-  simply wrong about email; check a notifier's default before writing that.
-
-- `sed -i` does **not** propagate into a bind-mounted single file: it writes a
-  new inode and the container keeps reading the old one. Use `cat new > file`
-  for in-place edits of mounted configs (`netdata.conf`, `health.d/*.conf`).
-
-- Dokploy v0.29.14 has **no 2FA and no login/audit log** (absent or
-  license-gated). Verified empirically, not from docs: 30 days of `docker
-  service logs dokploy` is 38 lines with zero auth events. Don't plan a security
-  control around either existing. Authentication and the access log live in
-  Cloudflare Access instead (Zero Trust → Logs → Access), the better placement
-  anyway: it records attempts that never reach the origin.
-
-- vps00 and vps01 once shared one `CLOUDFLARE_TUNNEL_TOKEN`. Cloudflare
-  load-balanced `dokploy.maybeit.work` across both connectors; vps01 had nothing
-  on that origin port, so ~2/3 of requests 502'd. Fixed by giving vps01 its own
-  tunnel + token (rail 2). Never reuse another node's token when adding a
-  service here.
+- **When a container reads a secret file, check the *in-container* uid and
+  test as that user, not root.** `deploy.yml` wrote
+  `health_alarm_notify.conf` with `umask 077` — `600 deploy:deploy` (uid
+  1000), unreadable by the container's netdata user (uid 201) — so every
+  alarm on all three nodes failed to deliver from setup until 2026-08-18
+  while the config looked present and correct on the host. Write it into
+  the netdataconfig volume as uid 201 (Alert delivery above).
+- **Set `SEND_EMAIL="NO"` in the notify templates.** `alarm-notify.sh`
+  enables email **by default**, so with no MTA every alert also ran
+  sendmail (`account default not found`, error 78) — a steady error stream
+  that hid the broken config above. Check a notifier's real default before
+  writing that an unlisted method is disabled.
+- **Never `sed -i` a bind-mounted single file:** it writes a new inode and
+  the container keeps reading the old one. Use `cat new > file` for
+  `netdata.conf` and `health.d/*.conf`.
+- **Dokploy v0.29.14 has no 2FA and no login/audit log** (verified
+  empirically, not from docs). Don't plan a security control around
+  either; authentication and the access log live in Cloudflare Access
+  (Zero Trust → Logs → Access), which also records attempts that never
+  reach the origin.
+- **Never reuse another node's tunnel token** (rail 2). vps00 and vps01
+  once shared one, so Cloudflare load-balanced `dokploy.maybeit.work`
+  across both connectors and ~2/3 of requests 502'd on the node with
+  nothing on that origin port.

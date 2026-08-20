@@ -71,16 +71,15 @@ preference:
 
 ## Failure log
 
-- Never state a node's sshd setting from Debian's documented default: these
-  are provider images. `PermitRootLogin yes` sat uncommented at line 33 of
-  `/etc/ssh/sshd_config` on all three while this file, `README.md` and a
-  security audit asserted `prohibit-password` because stock Debian ships that.
-  Not exploitable (`PasswordAuthentication no` plus
-  `KbdInteractiveAuthentication no` left keys as the only method) but false
-  for months, and only `sshd -T` on the box revealed it — `sshd -t` checks
-  syntax, not effective values. Measured 2026-08-20 while chasing an unrelated
-  sshd finding, which is the only reason anyone looked.
-- Name the user in an SSH finding, and test both. "Key X is rejected by all
-  three nodes" was recorded 2026-08-18 after testing `~/.ssh/id_ed25519_vps`
-  as `deploy@` only; it is the root key and works as `root@` everywhere. A key
-  is rejected *for a user*, never in general.
+Incident histories behind these rules: `failure-log` skill (`infra/`).
+
+- **Never state a node's sshd setting from Debian's documented default;
+  these are provider images.** `PermitRootLogin yes` sat uncommented on
+  all three while this file, `README.md` and a security audit asserted
+  `prohibit-password` — false for months, not exploitable, and revealed
+  only by `sshd -T` on the box, because `sshd -t` checks syntax, not
+  effective values.
+- **Name the user in an SSH finding, and test both.** A key is rejected
+  *for a user*, never in general: "key X is rejected by all three nodes"
+  came from testing `~/.ssh/id_ed25519_vps` as `deploy@` only; it is the
+  root key and works as `root@` everywhere.
