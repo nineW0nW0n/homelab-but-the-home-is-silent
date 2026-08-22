@@ -25,7 +25,7 @@ inbound ports, GitHub Actions as the only path to production.
 |-------|-----------|-----------------------------------------------------------|
 | vps00 | primary   | Dokploy control plane + own `cloudflared`                  |
 | vps01 | secondary | Dokploy Remote Server, hosts both apps + own `cloudflared` |
-| vps02 | secondary | Dokploy Remote Server, metrics only so far + own `cloudflared` |
+| vps02 | secondary | Dokploy Remote Server, Netdata + OpenObserve logs + own `cloudflared` |
 
 All three also run Netdata (bound to loopback) and a Dokploy-installed
 Traefik. Each node runs its **own single-node Swarm**: three independent
@@ -141,7 +141,8 @@ worth naming next to a zero-inbound-ports posture.
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
 stacks/
-  vps0N/docker-compose.yml           per-node cloudflared connector + Netdata
+  vps0N/docker-compose.yml           per-node cloudflared connector + Netdata + Vector
+  vps0N/vector.yaml                  journal shipper config, byte-identical on all three nodes
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
   vps01/backup-booking.sh            nightly MySQL dump to Cloudflare R2
@@ -157,7 +158,8 @@ scripts/
   harden-node.sh                     UFW, key-only sshd, Fail2Ban, DOCKER-USER drops
   add-swap.sh                        swap file (these nodes ship with none)
   cap-dokploy-resources.sh           memory-cap Dokploy's own control plane
-  setup-maintenance.sh               cap container logs and journald, weekly docker prune, unattended security upgrades
+  setup-maintenance.sh               journald log driver for containers, journald cap, weekly docker prune, unattended security upgrades
+  install-aide.sh                    AIDE file-integrity baseline + daily check into the journal
 ```
 
 Two deploy paths, one repo: `deploy.yml` rsyncs `stacks/` to the nodes and

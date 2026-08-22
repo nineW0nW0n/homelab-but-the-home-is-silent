@@ -122,6 +122,12 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
   never sees those packets — DNAT'd in PREROUTING, routed via FORWARD. Check
   `systemctl is-active docker-wan-drop` before trusting a sweep taken from
   inside the node.
+- **Rewrite `daemon.json` whole when changing the log driver, never
+  merge a driver change into the existing opts** — journald rejects
+  `json-file`'s `max-size`/`max-file`, and dockerd refuses to start on
+  unknown log-opts, so a merge takes Docker down on the next restart.
+  `setup-maintenance.sh` matches the whole file and writes the whole
+  file for exactly that reason.
 - **Two scripts write `daemon.json`** — `setup-maintenance.sh` recognises
   harden's by an exact match on `{"ip":"127.0.0.1"}`; change what either
   writes, fix the other's match in the same commit.

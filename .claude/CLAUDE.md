@@ -21,7 +21,8 @@ in `.claude/skills/`.
   one cluster, so nothing needs 2377/7946 open between them (verified
   2026-08-16). All three run `cloudflared`, Netdata, `dokploy-traefik`.
 - **When**: work in progress. Provisioning/hardening done and
-  CI-deployable; two workloads live. A GitHub ruleset protects `main`
+  CI-deployable; three workloads live (Netdata, booking/ezBookkeeping,
+  OpenObserve logs). A GitHub ruleset protects `main`
   against deletion and force-pushes (verified by attempting a rewind and
   being rejected), so a rewrite is deliberate: disable the ruleset,
   rewrite, re-enable. Don't assume you can force-push.
@@ -71,7 +72,7 @@ Never silently pick one.
    see `scripts/CLAUDE.md`. Partially checked by `scripts/check-rails.sh`
    (source-level only); proving the nodes are closed still needs a sweep
    from off-node after any provisioning run — `nc -z -w 3 <ip> <port>` over
-   22/80/443/2377/3000/19999 must answer on 22 and nothing else. **No
+   22/80/443/2377/3000/5080/19999 must answer on 22 and nothing else. **No
    `-G 3`**: that is BSD/macOS source-routing, and Debian's
    netcat-traditional exits 1 with "invalid hop pointer" without opening a
    socket — sweep from a node and every port reads closed (verified

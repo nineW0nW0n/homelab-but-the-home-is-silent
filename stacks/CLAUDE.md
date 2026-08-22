@@ -17,7 +17,9 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Six hostnames are live (verified 2026-08-20), across three tunnels:
+Eight hostnames are live (six verified 2026-08-20; `siem` and
+`siem-ingest` are created by plan Task 10 and unverified until then),
+across three tunnels:
 
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
@@ -49,8 +51,26 @@ Six hostnames are live (verified 2026-08-20), across three tunnels:
 - `vps02-metrics.maybeit.work` → `http://localhost:19999` on vps02, token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, behind
   Access, and vps02's first workload *from this repo*.
+- `siem.maybeit.work` → `http://localhost:5080` on vps02, same tunnel:
+  the OpenObserve UI. Access application `siem`, one policy,
+  `owner email allow`, PH-only like `budget` and `dokploy`.
+  OpenObserve's own login sits behind that.
+- `siem-ingest.maybeit.work` → the same origin on vps02, same tunnel:
+  the ingest endpoint vps00/vps01's Vector posts to. Access application
+  `siem-ingest`, one policy: service auth for the `siem-ingest` token.
+  **Exempt from the zone geo rule** (`and http.host ne
+  "siem-ingest.maybeit.work"`) because the nodes are US-hosted and would
+  403 otherwise; only the country check is lifted, so it is still 403
+  without the token, and OpenObserve's basic auth is a second lock
+  behind it.
 
 Every tunnel's catch-all is `http_status:404`.
+
+**Two service tokens, never crossed.** `status-worker` opens the three
+`*-metrics` apps and nothing else; `siem-ingest` opens `siem-ingest` and
+nothing else. Adding either token's policy to the other's app hands one
+credential a scope it was minted to not have — the same mistake as the
+`dokploy` app's detached policy above.
 
 **One token per node (rail 2):** Cloudflare load-balances a hostname across
 *every* connector on its tunnel — a route is not pinned to a node — so one
@@ -152,6 +172,42 @@ a notification, so they sit in the "no prior `EXEC_RUN`" branch and will
 fire on their first real transition. The backup alarm's silence was specific
 to its own dedup state (`vps01/CLAUDE.md` failure log — that entry moved
 there with the backup sections), not a property of the recipient.
+
+## Logs (OpenObserve + Vector)
+
+Design: `docs/superpowers/specs/2026-08-22-siem-openobserve-design.md`.
+Netdata is metrics; this is logs, deliberately a separate tool.
+
+- vps02 runs `openobserve` (store + UI, `127.0.0.1:5080`, Parquet on the
+  `openobserve-data` volume) and `vector`; vps00/vps01 run `vector`
+  only. vps02's Vector posts to `http://127.0.0.1:5080`, the other two
+  to `https://siem-ingest.maybeit.work` — outbound HTTPS, rail 1
+  untouched.
+- **No `docker.sock`** (same reason as Netdata above). Container stdout
+  reaches Vector because `scripts/setup-maintenance.sh` sets Docker's
+  log driver to `journald`; the journal is Vector's only source, so
+  `sshd`, `sudo`, Fail2Ban, cron and every container land in one stream.
+  Containers keep the old driver until they are recreated.
+- `vector.yaml` is **byte-identical on all three nodes** and
+  `check-rails.sh` fails if the copies drift; per-node differences are
+  environment only (`NODE_NAME`, `OPENOBSERVE_INGEST_URL`, and on
+  vps00/vps01 the `CF_ACCESS_SIEM_*` pair). Edit all three together.
+- The `CF-Access-*` headers are sent **empty** on vps02: it posts to
+  localhost and never crosses the edge, and OpenObserve ignores them.
+  That is why they default to empty in `vector.yaml` rather than being
+  required.
+- Credentials: `OPENOBSERVE_ROOT_EMAIL`/`_PASSWORD` are the **UI** login.
+  Ingest uses `OPENOBSERVE_INGEST_USER`/`_PASSWORD`, which are a
+  dedicated OpenObserve user created in the UI — until plan Task 12
+  rotates them, the root credentials are used for ingest too. Rotate,
+  don't leave it.
+- `mem_limit`s (rail 4) are **hedged, not measured**: openobserve
+  384m/192m, vector 128m/64m, plus `ZO_MEMORY_CACHE_MAX_SIZE=64` because
+  OpenObserve sizes its cache from host RAM, not the cgroup limit.
+  Measure after a week and replace these numbers.
+- Retention is `ZO_COMPACT_DATA_RETENTION_DAYS=30`, and the volume is
+  **not backed up**: logs are evidence, not a dataset, and losing 30
+  days of them on a rebuild is accepted.
 
 Backups, R2 retention and locks, restore/alarm drills and the backup
 staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
