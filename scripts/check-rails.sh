@@ -124,7 +124,7 @@ else
   err "$h rail 1: missing -- rail 1 has no enforcement at all"
 fi
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
-echo "        are closed: nc -z -w 3 <ip> 22 80 443 2377 3000 19999"
+echo "        are closed: nc -z -w 3 <ip> 22 80 443 2377 3000 5080 19999"
 echo "        (no -G: BSD-only, Debian nc exits 1 without connecting)"
 
 # --- markup sinks in the public status page ----------------------------
@@ -143,6 +143,22 @@ if [ -f "$pg" ]; then
   fi
 else
   err "$pg: missing -- the markup-sink check scanned nothing"
+fi
+
+# --- vector.yaml: three copies, one file ------------------------------
+# The shipper config is deployed per node (deploy.yml rsyncs one
+# directory each) so it exists three times. Two copies do not stay equal
+# (root CLAUDE.md failure log, the 2026-08-20 directory split), so this
+# asserts they are byte-identical. Per-node differences belong in the
+# compose environment, never in this file.
+v0=stacks/vps00/vector.yaml
+v1=stacks/vps01/vector.yaml
+v2=stacks/vps02/vector.yaml
+if [ -f "$v0" ] && [ -f "$v1" ] && [ -f "$v2" ]; then
+  cmp -s "$v0" "$v2" || err "$v0 differs from $v2 -- vector.yaml must be identical on all nodes"
+  cmp -s "$v1" "$v2" || err "$v1 differs from $v2 -- vector.yaml must be identical on all nodes"
+else
+  err "vector.yaml missing on a node -- expected $v0 $v1 $v2"
 fi
 
 [ "$fail" -eq 0 ] || { echo "check-rails: FAILED" >&2; exit 1; }
