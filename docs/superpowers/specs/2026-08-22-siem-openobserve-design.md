@@ -119,7 +119,8 @@ the way tunnel tokens are. Never committed, never printed in full
 |---|---|---|
 | `OPENOBSERVE_ROOT_EMAIL` | vps02 | `ZO_ROOT_USER_EMAIL`, UI login |
 | `OPENOBSERVE_ROOT_PASSWORD` | vps02 | `ZO_ROOT_USER_PASSWORD` |
-| `OPENOBSERVE_INGEST_AUTH` | all | basic-auth value Vector sends (`base64(email:password)` of a dedicated ingest user created in the UI after first boot; root creds until then) |
+| `OPENOBSERVE_INGEST_USER` | all | basic-auth user Vector sends: a dedicated ingest user created in the UI after first boot; root creds until then |
+| `OPENOBSERVE_INGEST_PASSWORD` | all | its password (Vector's `auth.strategy: basic` takes user and password separately) |
 | `CF_ACCESS_SIEM_CLIENT_ID` | vps00, vps01 | service token header |
 | `CF_ACCESS_SIEM_CLIENT_SECRET` | vps00, vps01 | service token header |
 
@@ -145,7 +146,7 @@ dataset; losing 30 days of them on a rebuild is acceptable.
 1. Repo changes, one PR: compose + `vector.yaml` on three stacks,
    `deploy.yml` secret plumbing, `setup-maintenance.sh` (log driver,
    journald cap), `scripts/install-aide.sh`, docs and rails updates.
-2. GitHub secrets set by Ex (five above).
+2. GitHub secrets set by Ex (six above).
 3. Cloudflare, in this order, dashboard-driven with Claude leading the
    browser and stopping where Ex must act: service token `siem-ingest`;
    Access app `siem-ingest` (service auth policy); Access app `siem`
@@ -161,7 +162,7 @@ dataset; losing 30 days of them on a rebuild is acceptable.
    UI (Redeploy) so they switch too: seconds of downtime on vps01, stated
    in advance.
 6. Create the dedicated ingest user in the OpenObserve UI, rotate
-   `OPENOBSERVE_INGEST_AUTH` from root creds to it, redeploy.
+   `OPENOBSERVE_INGEST_USER`/`_PASSWORD` from root creds to it, redeploy.
 
 ## Verification (definition of done)
 
