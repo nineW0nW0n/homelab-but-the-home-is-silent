@@ -43,8 +43,11 @@ Symptom when you forget: `Permission denied (publickey)`.
 - `setup-maintenance.sh <host>`: switches Docker's log driver to
   `journald` in `daemon.json` (container stdout lands in the systemd
   journal, which `stacks/<node>/vector.yaml` reads -- no `docker.sock`
-  needed), caps journald (`SystemMaxUse=1G`, restarted immediately -- 1G,
-  not 200M, now that container logs land there too), drops a weekly
+  needed), makes the journal persistent (`Storage=persistent` +
+  `mkdir -p /var/log/journal`) and caps it (`SystemMaxUse=1G`, restarted
+  immediately -- 1G, not 200M, now that container logs land there too;
+  `SystemMaxUse` only governs `/var/log/journal`, so the cap is only real
+  once storage is persistent), drops a weekly
   `/etc/cron.d/docker-prune` (Sunday 03:00, `docker system prune -af
   --filter until=168h`, never volumes), enables `unattended-upgrades`
   (Debian's shipped security-only origins, never overridden). No

@@ -17,9 +17,9 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Eight hostnames are live (six verified 2026-08-20; `siem` and
-`siem-ingest` are created by plan Task 10 and unverified until then),
-across three tunnels:
+Eight routes documented; six live (verified 2026-08-20), two (`siem`,
+`siem-ingest`) pending until their Cloudflare objects exist. Across three
+tunnels:
 
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
@@ -211,6 +211,15 @@ Netdata is metrics; this is logs, deliberately a separate tool.
 - Retention is `ZO_COMPACT_DATA_RETENTION_DAYS=30`, and the volume is
   **not backed up**: logs are evidence, not a dataset, and losing 30
   days of them on a rebuild is accepted.
+- **`deploy.yml`'s verify step proves liveness, not ingestion** — only
+  that the `vector` container is running. Prove ingestion by hand, once
+  per node: `logger -t siem-test "hello from $(hostname)"`, then find
+  that line in the `journal` stream with the right `node` value.
+- **First-deploy named check, on vps02:** `docker logs vector 2>&1 |
+  grep -i 'error\|400'` must be empty *and* the stream must show rows.
+  Vector's `json` codec batch framing against `/_json` (a JSON array vs
+  NDJSON) is unverified until that run. If it 400s, set the sink's
+  `framing.method` explicitly rather than switching sinks.
 
 Backups, R2 retention and locks, restore/alarm drills and the backup
 staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
@@ -246,6 +255,11 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   either; authentication and the access log live in Cloudflare Access
   (Zero Trust → Logs → Access), which also records attempts that never
   reach the origin.
+- **Never pin a journald source to `/var/log/journal`** — a node with
+  volatile journal storage has nothing there, so Vector ships nothing and
+  still reports healthy; assert `Storage=persistent`
+  (`setup-maintenance.sh`) and let Vector follow `journalctl`'s own
+  resolution.
 - **Never reuse another node's tunnel token** (rail 2). vps00 and vps01
   once shared one, so Cloudflare load-balanced `dokploy.maybeit.work`
   across both connectors and ~2/3 of requests 502'd on the node with

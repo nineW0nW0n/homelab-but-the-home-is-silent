@@ -34,11 +34,15 @@ else
 fi
 
 # Debian's own daily check mails root; nothing here delivers mail.
-if systemctl is-enabled dailyaidecheck.timer >/dev/null 2>&1; then
+# Test the printed state, not the exit status: is-enabled exits 0 for
+# static/indirect units too, and `disable` on a static unit exits non-zero
+# -- under set -eu that aborted this heredoc before the runner and cron.d
+# below were written, while the local "Done." still printed.
+if [ "$(systemctl is-enabled dailyaidecheck.timer 2>/dev/null || true)" = enabled ]; then
   systemctl disable --now dailyaidecheck.timer >/dev/null 2>&1
   echo "disabled dailyaidecheck.timer (mails root, no mail here)"
 else
-  echo "dailyaidecheck.timer already disabled, leaving it alone"
+  echo "dailyaidecheck.timer not enabled (disabled, static or absent), leaving it alone"
 fi
 
 if [ -f /var/lib/aide/aide.db ]; then

@@ -97,6 +97,10 @@ services:
     restart: unless-stopped
     # Host netns so 127.0.0.1:5080 is the OpenObserve port above.
     network_mode: host
+    # Start order only (no healthcheck): on a cold boot Vector would
+    # otherwise post to a port nothing listens on yet, and every refused
+    # batch logs an error that the journald log driver feeds back in.
+    depends_on: [openobserve]
     environment:
       NODE_NAME: vps02
       OPENOBSERVE_INGEST_URL: http://127.0.0.1:5080

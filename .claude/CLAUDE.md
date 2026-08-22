@@ -22,7 +22,8 @@ in `.claude/skills/`.
   2026-08-16). All three run `cloudflared`, Netdata, `dokploy-traefik`.
 - **When**: work in progress. Provisioning/hardening done and
   CI-deployable; two workloads live; a third (OpenObserve logs on vps02)
-  ships with the next deploy. A GitHub ruleset protects `main`
+  ships once its secrets and Cloudflare objects exist. A GitHub ruleset
+  protects `main`
   against deletion and force-pushes (verified by attempting a rewind and
   being rejected), so a rewrite is deliberate: disable the ruleset,
   rewrite, re-enable. Don't assume you can force-push.

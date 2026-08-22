@@ -13,10 +13,18 @@ data_dir: /var/lib/vector
 sources:
   journal:
     type: journald
-    journal_directory: /var/log/journal
+    # No journal_directory on purpose: let journalctl resolve it. A node
+    # with Storage=auto and no /var/log/journal keeps its journal in
+    # /run/log/journal, and a pinned directory would read an empty dir,
+    # ship nothing, and report healthy. Both paths are mounted in compose.
     # Ship history on first start, not just this boot; the checkpoint in
     # data_dir stops re-sends after that.
     current_boot_only: false
+    # Vector's own stderr lands in the journal too (Docker's journald log
+    # driver), so a failing sink logs an error that becomes an event that
+    # fails again: a self-feeding loop. Drop our own container's logs.
+    exclude_matches:
+      CONTAINER_NAME: ["vector"]
 
 transforms:
   tag_node:
@@ -24,6 +32,10 @@ transforms:
     inputs: [journal]
     source: |
       .node = "${NODE_NAME:?NODE_NAME must be set}"
+      # OpenObserve's /_json takes event time from _timestamp and otherwise
+      # stamps ingest time, which would flatten the first-start backfill
+      # (current_boot_only: false) onto one clock reading.
+      ._timestamp = to_unix_timestamp(timestamp!(.timestamp), unit: "microseconds")
 
 sinks:
   openobserve:

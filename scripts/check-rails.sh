@@ -124,13 +124,20 @@ else
   err "$h rail 1: missing -- rail 1 has no enforcement at all"
 fi
 
-# vector.yaml (all nodes) reads container stdout from the journal, which
-# is only true while setup-maintenance.sh sets the journald log driver.
-m=scripts/setup-maintenance.sh
-grep -qF '"log-driver": "journald"' "$m" || err "$m: journald log driver is gone -- Vector would ship no container logs"
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
 echo "        are closed: nc -z -w 3 <ip> 22 80 443 2377 3000 5080 19999"
 echo "        (no -G: BSD-only, Debian nc exits 1 without connecting)"
+
+# --- Docker's journald log driver still set --------------------------------
+# Not part of rail 1 above: vector.yaml (all nodes) reads container stdout
+# from the journal, which is only true while setup-maintenance.sh sets the
+# driver. Guarded like harden-node.sh: a missing file is a missing check.
+m=scripts/setup-maintenance.sh
+if [ -f "$m" ]; then
+  grep -qF '"log-driver": "journald"' "$m" || err "$m: journald log driver is gone -- Vector would ship no container logs"
+else
+  err "$m: missing -- nothing sets Docker's journald log driver"
+fi
 
 # --- markup sinks in the public status page ----------------------------
 # page.html is served to anonymous visitors and is a vendored copy of a

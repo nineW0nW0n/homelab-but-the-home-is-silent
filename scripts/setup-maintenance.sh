@@ -1,6 +1,7 @@
 #!/bin/sh
-# Idempotent. Caps journald disk use (1G), switches Docker's log driver to
-# journald, drops a weekly docker-prune cron.d entry, and enables
+# Idempotent. Makes the journal persistent and caps its disk use (1G),
+# switches Docker's log driver to journald, drops a weekly docker-prune
+# cron.d entry, and enables
 # unattended security upgrades. Run once per node; safe to re-run.
 #
 # This script never restarts Docker. The daemon.json rewrite below takes
@@ -52,18 +53,34 @@ else
   echo "docker not installed, skipping log driver"
 fi
 
-# --- journald: cap disk use, restart to apply (safe, no container impact) ---
-# 1G, not 200M: container stdout lands here now (log driver above).
-if grep -q '^SystemMaxUse=1G$' /etc/systemd/journald.conf 2>/dev/null; then
-  echo "journald.conf already caps SystemMaxUse at 1G, leaving it alone"
+# --- journald: persistent storage + disk cap, restart to apply -----------
+# (safe, no container impact)
+# Storage=persistent is load-bearing twice over. SystemMaxUse only governs
+# /var/log/journal; under volatile storage RuntimeMaxUse (a tmpfs share)
+# applies instead, so the 1G cap below is only real once storage is
+# persistent -- and Vector reads the journal, so a volatile journal also
+# loses everything on reboot. 1G, not 200M: container stdout lands here
+# now (log driver above).
+jc=/etc/systemd/journald.conf
+if grep -q '^Storage=persistent$' "$jc" 2>/dev/null &&
+  grep -q '^SystemMaxUse=1G$' "$jc" 2>/dev/null &&
+  [ -d /var/log/journal ]; then
+  echo "journald.conf already persistent and capped at 1G, leaving it alone"
 else
-  if grep -q '^#\?SystemMaxUse=' /etc/systemd/journald.conf; then
-    sed -i 's/^#\?SystemMaxUse=.*/SystemMaxUse=1G/' /etc/systemd/journald.conf
+  if grep -q '^#\?Storage=' "$jc"; then
+    sed -i 's/^#\?Storage=.*/Storage=persistent/' "$jc"
   else
-    echo 'SystemMaxUse=1G' >> /etc/systemd/journald.conf
+    echo 'Storage=persistent' >> "$jc"
   fi
+  if grep -q '^#\?SystemMaxUse=' "$jc"; then
+    sed -i 's/^#\?SystemMaxUse=.*/SystemMaxUse=1G/' "$jc"
+  else
+    echo 'SystemMaxUse=1G' >> "$jc"
+  fi
+  # journald only writes here when the directory exists, whatever Storage says.
+  mkdir -p /var/log/journal
   systemctl restart systemd-journald
-  echo "capped journald at 1G and restarted it"
+  echo "set journald Storage=persistent, capped it at 1G, and restarted it"
 fi
 
 # --- weekly docker prune: dangling images/containers/build cache, never volumes ---
