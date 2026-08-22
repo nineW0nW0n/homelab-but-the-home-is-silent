@@ -61,7 +61,59 @@ services:
     mem_limit: 200m
     mem_reservation: 100m
 
+  openobserve:
+    # Log store + UI. Single binary, local Parquet under /data. Reached
+    # only via vps02's tunnel: siem.maybeit.work (UI, Access email
+    # policy) and siem-ingest.maybeit.work (Vector on vps00/vps01,
+    # Access service token). Spec:
+    # docs/superpowers/specs/2026-08-22-siem-openobserve-design.md
+    image: openobserve/openobserve:v0.92.2
+    container_name: openobserve
+    restart: unless-stopped
+    ports:
+      # Loopback explicitly (rail 1), on top of daemon.json's default
+      # bind. Belt and braces: a daemon.json regression must not open it.
+      - "127.0.0.1:5080:5080"
+    environment:
+      ZO_ROOT_USER_EMAIL: ${OPENOBSERVE_ROOT_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_ROOT_PASSWORD}
+      ZO_DATA_DIR: /data
+      ZO_COMPACT_DATA_RETENTION_DAYS: "30"
+      ZO_TELEMETRY: "false"
+      # MB. Default sizes the cache from host RAM, not the cgroup limit;
+      # hedged, raise if queries feel slow and the container stays well
+      # under mem_limit.
+      ZO_MEMORY_CACHE_MAX_SIZE: "64"
+    volumes:
+      - openobserve-data:/data
+    # Rail 4. Hedged until measured; revisit after a week of real logs.
+    mem_limit: 384m
+    mem_reservation: 192m
+
+  vector:
+    # Ships this node's journal to OpenObserve. See vector.yaml.
+    image: timberio/vector:0.57.0-debian
+    container_name: vector
+    restart: unless-stopped
+    # Host netns so 127.0.0.1:5080 is the OpenObserve port above.
+    network_mode: host
+    environment:
+      NODE_NAME: vps02
+      OPENOBSERVE_INGEST_URL: http://127.0.0.1:5080
+      OPENOBSERVE_INGEST_USER: ${OPENOBSERVE_INGEST_USER}
+      OPENOBSERVE_INGEST_PASSWORD: ${OPENOBSERVE_INGEST_PASSWORD}
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+      - vector-data:/var/lib/vector
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    mem_limit: 128m
+    mem_reservation: 64m
+
 volumes:
   netdataconfig:
   netdatalib:
   netdatacache:
+  openobserve-data:
+  vector-data:
