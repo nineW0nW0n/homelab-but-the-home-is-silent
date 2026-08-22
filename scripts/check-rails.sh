@@ -123,6 +123,11 @@ if [ -f "$h" ]; then
 else
   err "$h rail 1: missing -- rail 1 has no enforcement at all"
 fi
+
+# vector.yaml (all nodes) reads container stdout from the journal, which
+# is only true while setup-maintenance.sh sets the journald log driver.
+m=scripts/setup-maintenance.sh
+grep -qF '"log-driver": "journald"' "$m" || err "$m: journald log driver is gone -- Vector would ship no container logs"
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
 echo "        are closed: nc -z -w 3 <ip> 22 80 443 2377 3000 5080 19999"
 echo "        (no -G: BSD-only, Debian nc exits 1 without connecting)"

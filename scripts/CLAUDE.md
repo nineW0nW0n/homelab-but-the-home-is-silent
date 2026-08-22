@@ -40,13 +40,16 @@ Symptom when you forget: `Permission denied (publickey)`.
   plane, not app workloads (those get `mem_limit` in their compose, rail
   4). `dokploy` 1024M/512M, `dokploy-postgres` 320M/128M,
   `dokploy-traefik` 128m with 256m memory+swap.
-- `setup-maintenance.sh <host>`: caps container logs (`daemon.json`
-  log-opts, 10m x 3 files each), caps journald (`SystemMaxUse=200M`,
-  restarted immediately), drops a weekly `/etc/cron.d/docker-prune`
-  (Sunday 03:00, `docker system prune -af --filter until=168h`, never
-  volumes), enables `unattended-upgrades` (Debian's shipped security-only
-  origins, never overridden). No RAM-freeing cron: dropping page cache
-  frees nothing real, and swap plus the Dokploy caps cover memory pressure.
+- `setup-maintenance.sh <host>`: switches Docker's log driver to
+  `journald` in `daemon.json` (container stdout lands in the systemd
+  journal, which `stacks/<node>/vector.yaml` reads -- no `docker.sock`
+  needed), caps journald (`SystemMaxUse=1G`, restarted immediately -- 1G,
+  not 200M, now that container logs land there too), drops a weekly
+  `/etc/cron.d/docker-prune` (Sunday 03:00, `docker system prune -af
+  --filter until=168h`, never volumes), enables `unattended-upgrades`
+  (Debian's shipped security-only origins, never overridden). No
+  RAM-freeing cron: dropping page cache frees nothing real, and swap plus
+  the Dokploy caps cover memory pressure.
 - `check-rails.sh`: **not a provisioning script** — no node, no ssh, no
   arguments; a repo-wide check that runs on every commit via
   `.pre-commit-config.yaml` and again under `pre-commit run --all-files` in

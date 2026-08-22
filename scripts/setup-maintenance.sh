@@ -1,7 +1,7 @@
 #!/bin/sh
-# Idempotent. Caps docker container log growth, caps journald disk use,
-# drops a weekly docker-prune cron.d entry, and enables unattended
-# security upgrades. Run once per node; safe to re-run.
+# Idempotent. Caps journald disk use (1G), switches Docker's log driver to
+# journald, drops a weekly docker-prune cron.d entry, and enables
+# unattended security upgrades. Run once per node; safe to re-run.
 #
 # This script never restarts Docker. The log-opts it merges into
 # /etc/docker/daemon.json take effect at the next Docker restart or
@@ -25,35 +25,45 @@ echo "Setting up maintenance on ${ssh_user}@${host}:${ssh_port} ..."
 ssh -p "$ssh_port" "${ssh_user}@${host}" 'sh -s' <<'EOF'
 set -eu
 
-# --- docker log-opts: cap per-container json-file log size ---
+# --- docker log driver: journald ---
+# Container stdout goes to the systemd journal so Vector
+# (stacks/<node>/vector.yaml) reads one source and needs no docker.sock.
+# journald rejects json-file's max-size/max-file log-opts and dockerd
+# refuses to start with unknown opts, so the whole block is rewritten,
+# never merged. Three known shapes are handled; anything else is left
+# alone with a warning, same as harden-node.sh's "ip" check.
 if command -v docker >/dev/null 2>&1; then
-  if [ ! -e /etc/docker/daemon.json ]; then
-    printf '{\n  "ip": "127.0.0.1",\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}\n' > /etc/docker/daemon.json
-    echo "wrote /etc/docker/daemon.json -- takes effect at next Docker restart"
-  elif grep -q '"log-opts"' /etc/docker/daemon.json; then
-    echo "daemon.json already sets log-opts, leaving it alone"
-  elif [ "$(tr -d '[:space:]' < /etc/docker/daemon.json)" = '{"ip":"127.0.0.1"}' ]; then
-    printf '{\n  "ip": "127.0.0.1",\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}\n' > /etc/docker/daemon.json
-    echo "added log-opts to daemon.json -- takes effect at next Docker restart"
-  else
-    echo "WARNING: /etc/docker/daemon.json has unexpected content --" >&2
-    echo "merge log-opts by hand, not clobbering it." >&2
-  fi
+  want='{
+  "ip": "127.0.0.1",
+  "log-driver": "journald"
+}'
+  have=$(tr -d '[:space:]' < /etc/docker/daemon.json 2>/dev/null || true)
+  case "$have" in
+    '{"ip":"127.0.0.1","log-driver":"journald"}')
+      echo "daemon.json already uses the journald log driver, leaving it alone" ;;
+    ''|'{"ip":"127.0.0.1"}'|'{"ip":"127.0.0.1","log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}')
+      printf '%s\n' "$want" > /etc/docker/daemon.json
+      echo "set log-driver journald in daemon.json -- takes effect for containers created after the next Docker restart" ;;
+    *)
+      echo "WARNING: /etc/docker/daemon.json has unexpected content --" >&2
+      echo "set \"log-driver\": \"journald\" by hand and drop json-file log-opts." >&2 ;;
+  esac
 else
-  echo "docker not installed, skipping log-opts"
+  echo "docker not installed, skipping log driver"
 fi
 
 # --- journald: cap disk use, restart to apply (safe, no container impact) ---
-if grep -q '^SystemMaxUse=200M$' /etc/systemd/journald.conf 2>/dev/null; then
-  echo "journald.conf already caps SystemMaxUse, leaving it alone"
+# 1G, not 200M: container stdout lands here now (log driver above).
+if grep -q '^SystemMaxUse=1G$' /etc/systemd/journald.conf 2>/dev/null; then
+  echo "journald.conf already caps SystemMaxUse at 1G, leaving it alone"
 else
   if grep -q '^#\?SystemMaxUse=' /etc/systemd/journald.conf; then
-    sed -i 's/^#\?SystemMaxUse=.*/SystemMaxUse=200M/' /etc/systemd/journald.conf
+    sed -i 's/^#\?SystemMaxUse=.*/SystemMaxUse=1G/' /etc/systemd/journald.conf
   else
-    echo 'SystemMaxUse=200M' >> /etc/systemd/journald.conf
+    echo 'SystemMaxUse=1G' >> /etc/systemd/journald.conf
   fi
   systemctl restart systemd-journald
-  echo "capped journald at 200M and restarted it"
+  echo "capped journald at 1G and restarted it"
 fi
 
 # --- weekly docker prune: dangling images/containers/build cache, never volumes ---
