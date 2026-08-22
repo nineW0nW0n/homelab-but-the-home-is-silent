@@ -33,8 +33,7 @@ across three tunnels:
   client** — the zone's geo rule 403s everything else before Access is
   reached, and `/api/deploy` is a separate bypass app that answers `401`.
 - `vps00-metrics.maybeit.work` → `http://localhost:19999` on vps00, same
-  tunnel. Behind its own Access app; the `status-worker` service token opens
-  the three `*-metrics` apps and nothing else.
+  tunnel. Behind its own Access app.
 - `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
   Traefik, forwarding to whichever container the Domain in Dokploy's UI points
   at), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
@@ -185,9 +184,13 @@ Netdata is metrics; this is logs, deliberately a separate tool.
   untouched.
 - **No `docker.sock`** (same reason as Netdata above). Container stdout
   reaches Vector because `scripts/setup-maintenance.sh` sets Docker's
-  log driver to `journald`; the journal is Vector's only source, so
-  `sshd`, `sudo`, Fail2Ban, cron and every container land in one stream.
-  Containers keep the old driver until they are recreated.
+  log driver to `journald` — once that script has been run by hand on the
+  nodes (plan Task 9); it is not part of `deploy.yml`. The journal is
+  Vector's only source, so `sshd`, `sudo`, Fail2Ban, cron and every
+  container land in one stream. Containers keep the **old** driver until
+  dockerd is restarted *and* they are recreated: `setup-maintenance.sh`
+  deliberately never restarts Docker, so recreating a container on its
+  own changes nothing.
 - `vector.yaml` is **byte-identical on all three nodes** and
   `check-rails.sh` fails if the copies drift; per-node differences are
   environment only (`NODE_NAME`, `OPENOBSERVE_INGEST_URL`, and on
