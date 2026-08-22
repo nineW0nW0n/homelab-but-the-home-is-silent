@@ -50,6 +50,12 @@ Symptom when you forget: `Permission denied (publickey)`.
   (Debian's shipped security-only origins, never overridden). No
   RAM-freeing cron: dropping page cache frees nothing real, and swap plus
   the Dokploy caps cover memory pressure.
+- `install-aide.sh <host>`: installs AIDE, builds the file-integrity
+  baseline once (`aideinit`, a few minutes of CPU), and disables Debian's
+  `dailyaidecheck.timer` (mails root, no mail here). A daily cron.d entry
+  runs `/usr/sbin/aide.wrapper --update`, pipes the report into the
+  journal as `SYSLOG_IDENTIFIER=aide`, then adopts the new database as
+  tomorrow's baseline -- a change log, not a tamper lock.
 - `check-rails.sh`: **not a provisioning script** — no node, no ssh, no
   arguments; a repo-wide check that runs on every commit via
   `.pre-commit-config.yaml` and again under `pre-commit run --all-files` in

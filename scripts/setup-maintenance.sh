@@ -3,11 +3,11 @@
 # journald, drops a weekly docker-prune cron.d entry, and enables
 # unattended security upgrades. Run once per node; safe to re-run.
 #
-# This script never restarts Docker. The log-opts it merges into
-# /etc/docker/daemon.json take effect at the next Docker restart or
-# reboot, which the operator schedules -- restarting Docker on vps00
-# restarts the Swarm control plane and every container on it. journald
-# is restarted immediately; that only rotates logs, no container impact.
+# This script never restarts Docker. The daemon.json rewrite below takes
+# effect at the next Docker restart or reboot, which the operator
+# schedules -- restarting Docker on vps00 restarts the Swarm control
+# plane and every container on it. journald is restarted immediately;
+# that only rotates logs, no container impact.
 #
 # Usage: scripts/setup-maintenance.sh <host>
 #   scripts/setup-maintenance.sh 203.0.113.10

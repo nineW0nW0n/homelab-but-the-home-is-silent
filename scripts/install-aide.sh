@@ -1,10 +1,11 @@
 #!/bin/sh
 # Idempotent. Installs AIDE, builds the baseline once, and replaces
 # Debian's daily timer (which emails root on a box with no mail) with a
-# cron job that runs `aide --update`, pipes the report into the journal
-# under SYSLOG_IDENTIFIER=aide, then adopts the new database. Every
-# change is therefore reported exactly once, in OpenObserve, and becomes
-# tomorrow's baseline: this is a change log, not a tamper lock.
+# cron job that runs `/usr/sbin/aide.wrapper --update`, pipes the report
+# into the journal under SYSLOG_IDENTIFIER=aide, then adopts the new
+# database. Every change is therefore reported exactly once, in
+# OpenObserve, and becomes tomorrow's baseline: this is a change log, not
+# a tamper lock.
 #
 # Usage: scripts/install-aide.sh <host>
 #   scripts/install-aide.sh 203.0.113.10
@@ -51,7 +52,7 @@ fi
 runner='#!/bin/sh
 # Written by scripts/install-aide.sh. Check, log, adopt.
 set -u
-nice -n 19 aide.wrapper --update 2>&1 | logger -t aide
+nice -n 19 /usr/sbin/aide.wrapper --update 2>&1 | logger -t aide
 if [ -f /var/lib/aide/aide.db.new ]; then
   mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
 fi'
