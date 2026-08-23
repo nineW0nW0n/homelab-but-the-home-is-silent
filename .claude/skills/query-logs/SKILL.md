@@ -8,12 +8,12 @@ description: Query the OpenObserve log stack from the CLI — read container or 
 Parent: ../../CLAUDE.md. Design context: `stacks/CLAUDE.md` (Logs section).
 All facts below verified 2026-08-23/24.
 
-Logs, not metrics. Metrics are Netdata (`http://127.0.0.1:19999` on each
+Logs, not metrics. Metrics are Netdata (`http://127.0.0.1:8N50` on each
 node, per-container cgroup charts labelled by container ID).
 
 ## Access pattern
 
-OpenObserve listens only on `127.0.0.1:5080` on vps02, so query from the
+OpenObserve listens only on `127.0.0.1:8251` on vps02, so query from the
 node. Credentials live in the node's `.env` and stay there — never print
 them (rail 11).
 
@@ -23,7 +23,7 @@ ssh vps02-root
 set -a; . /opt/stacks/vps02/.env; set +a
 curl -s -u "$OPENOBSERVE_INGEST_USER:$OPENOBSERVE_INGEST_PASSWORD" \
   -H "Content-Type: application/json" \
-  http://127.0.0.1:5080/api/default/_search \
+  http://127.0.0.1:8251/api/default/_search \
   -d '<payload>'
 ```
 

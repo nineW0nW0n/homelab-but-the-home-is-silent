@@ -74,7 +74,7 @@ Never silently pick one.
    see `scripts/CLAUDE.md`. Partially checked by `scripts/check-rails.sh`
    (source-level only); proving the nodes are closed still needs a sweep
    from off-node after any provisioning run — `nc -z -w 3 <ip> <port>` over
-   22/80/443/5080/8050/8101/8102/8150/8250 must answer on 22 and nothing
+   22/80/443/8050/8101/8102/8150/8250/8251 must answer on 22 and nothing
    else (2377/3000/19999 retired with Dokploy and the port-scheme moves). **No
    `-G 3`**: that is BSD/macOS source-routing, and Debian's
    netcat-traditional exits 1 with "invalid hop pointer" without opening a
