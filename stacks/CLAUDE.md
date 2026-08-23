@@ -6,8 +6,8 @@ One `docker-compose.yml` per node, deployed by `deploy.yml` to
 `/opt/stacks/<node>/`. Each runs that node's `cloudflared` connector (rails 2,
 3) plus every workload on that node. No reverse proxy: each app publishes
 one loopback port on the `8NXX` scheme (`N` = node, `01-49` apps, `50-99`
-tools; Netdata moved `19999`→`8N50` on 2026-08-24, `5080` still predates
-it) and `cloudflared` dials it directly.
+tools; Netdata moved `19999`→`8N50` and OpenObserve `5080`→`8251` on
+2026-08-24) and `cloudflared` dials it directly.
 
 ## Tunnel mode and routes
 
@@ -44,7 +44,7 @@ its WAF bypass were deleted that day). Across three tunnels:
 - `vps02-metrics.maybeit.work` → `http://localhost:8250` on vps02, token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, behind
   Access, and vps02's first workload *from this repo*.
-- `siem.maybeit.work` → `http://localhost:5080` on vps02, same tunnel:
+- `siem.maybeit.work` → `http://localhost:8251` on vps02, same tunnel:
   the OpenObserve UI. Access application `siem`, one policy,
   `owner email allow`, PH-only like `budget`.
   OpenObserve's own login sits behind that.
@@ -198,9 +198,9 @@ there with the backup sections), not a property of the recipient.
 Design: `docs/superpowers/specs/2026-08-22-siem-openobserve-design.md`.
 Netdata is metrics; this is logs, deliberately a separate tool.
 
-- vps02 runs `openobserve` (store + UI, `127.0.0.1:5080`, Parquet on the
+- vps02 runs `openobserve` (store + UI, `127.0.0.1:8251`, Parquet on the
   `openobserve-data` volume) and `vector`; vps00/vps01 run `vector`
-  only. vps02's Vector posts to `http://127.0.0.1:5080`, the other two
+  only. vps02's Vector posts to `http://127.0.0.1:8251`, the other two
   to `https://siem-ingest.maybeit.work` — outbound HTTPS, rail 1
   untouched.
 - **No `docker.sock`** (same reason as Netdata above). Container stdout

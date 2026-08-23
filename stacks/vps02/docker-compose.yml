@@ -73,7 +73,7 @@ services:
     ports:
       # Loopback explicitly (rail 1), on top of daemon.json's default
       # bind. Belt and braces: a daemon.json regression must not open it.
-      - "127.0.0.1:5080:5080"
+      - "127.0.0.1:8251:5080"
     environment:
       ZO_ROOT_USER_EMAIL: ${OPENOBSERVE_ROOT_EMAIL}
       ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_ROOT_PASSWORD}
@@ -99,7 +99,7 @@ services:
     image: timberio/vector:0.57.0-debian
     container_name: vector
     restart: unless-stopped
-    # Host netns so 127.0.0.1:5080 is the OpenObserve port above.
+    # Host netns so 127.0.0.1:8251 is the OpenObserve port above.
     network_mode: host
     # Start order only (no healthcheck): on a cold boot Vector would
     # otherwise post to a port nothing listens on yet, and every refused
@@ -115,7 +115,7 @@ services:
       # that is a bigger change than this rollout wants today.
       VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       NODE_NAME: vps02
-      OPENOBSERVE_INGEST_URL: http://127.0.0.1:5080
+      OPENOBSERVE_INGEST_URL: http://127.0.0.1:8251
       OPENOBSERVE_INGEST_USER: ${OPENOBSERVE_INGEST_USER}
       OPENOBSERVE_INGEST_PASSWORD: ${OPENOBSERVE_INGEST_PASSWORD}
     volumes:

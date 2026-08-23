@@ -738,7 +738,7 @@ jobs:
             up cloudflared-vps02 "$was_cloudflared"
             # Both, not either: /healthz proves it answers, the restart
             # counter proves it is not answering from inside a loop.
-            probe openobserve http://127.0.0.1:5080/healthz
+            probe openobserve http://127.0.0.1:8251/healthz
             up openobserve "$was_openobserve"
             up vector "$was_vector"
           '
