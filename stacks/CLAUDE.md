@@ -17,9 +17,8 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Eight routes documented; six live (verified 2026-08-20), two (`siem`,
-`siem-ingest`) pending until their Cloudflare objects exist. Across three
-tunnels:
+Eight routes, all live -- six verified 2026-08-20, `siem` and
+`siem-ingest` created and verified 2026-08-23. Across three tunnels:
 
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
@@ -289,6 +288,15 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   those. `ZO_ROOT_USER_*` applies only at first boot, so changing the
   secret afterwards does nothing until the `openobserve-data` volume is
   wiped -- which is safe here, the volume is explicitly not backed up.
+- **A newly created hostname stays unresolvable for up to 30 minutes.**
+  The zone's SOA minimum is 1800s, so a resolver that was asked for
+  `siem-ingest.maybeit.work` *before* the record existed caches the
+  NXDOMAIN for that long. The nodes list Google's public resolver first in
+  `/etc/resolv.conf` and run no local caching daemon, so there is nothing
+  to flush -- and Google's anycast pool
+  expires it unevenly, which looks like a hostname that resolves on one
+  query and not the next. Wait it out; Vector retries on its own. Create
+  the DNS record before pointing anything at it if you want to skip this.
 - **Vector 0.57.0 disabled config env-var interpolation by default**, so
   every `${...}` in `vector.yaml` is a literal string unless the container
   sets `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true`. It surfaced

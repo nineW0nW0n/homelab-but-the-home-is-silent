@@ -9,12 +9,13 @@ inbound ports, GitHub Actions as the only path to production.
 
 > [!NOTE]
 > **Status: work in progress.** Nodes are provisioned, hardened, and
-> deployable via CI. Dokploy, Cloudflare Tunnel and two workloads are
+> deployable via CI. Dokploy, Cloudflare Tunnel and three workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
 > `budget.maybeit.work` (ezBookkeeping), both on vps01. A third,
-> centralised logging (OpenObserve on vps02), ships once its GitHub
-> secrets and Cloudflare hostnames exist (a rollout in progress).
-> ezBookkeeping is
+> centralised logging (OpenObserve on vps02, `siem.maybeit.work`), has
+> been ingesting the systemd journal from all three nodes since
+> 2026-08-23; the two vps01 apps still log to `json-file` until Dokploy
+> recreates them. ezBookkeeping is
 > backed up nightly off-site to Cloudflare R2; the booking database is
 > scheduled the same way, with its first unattended run due 2026-08-21 —
 > until one lands, only a forced end-to-end run has been proven.

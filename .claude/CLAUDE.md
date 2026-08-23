@@ -21,9 +21,9 @@ in `.claude/skills/`.
   one cluster, so nothing needs 2377/7946 open between them (verified
   2026-08-16). All three run `cloudflared`, Netdata, `dokploy-traefik`.
 - **When**: work in progress. Provisioning/hardening done and
-  CI-deployable; two workloads live; a third (OpenObserve logs on vps02)
-  ships once its secrets and Cloudflare objects exist. A GitHub ruleset
-  protects `main`
+  CI-deployable; three workloads live, the third being centralised logging
+  (OpenObserve on vps02, ingesting from all three nodes since 2026-08-23).
+  A GitHub ruleset protects `main`
   against deletion and force-pushes (verified by attempting a rewind and
   being rejected), so a rewrite is deliberate: disable the ruleset,
   rewrite, re-enable. Don't assume you can force-push.
