@@ -3,19 +3,20 @@
 [![validate](https://github.com/nineW0nW0n/homelab-but-the-home-is-silent/actions/workflows/validate.yml/badge.svg)](https://github.com/nineW0nW0n/homelab-but-the-home-is-silent/actions/workflows/validate.yml)
 [![license: AGPLv3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](./LICENSE)
 
-GitOps infrastructure for a 3-node Debian 12 VPS homelab: [Dokploy](https://dokploy.com)
-as the deployment platform, Cloudflare Tunnel for public access with zero
-inbound ports, GitHub Actions as the only path to production.
+GitOps infrastructure for a 3-node Debian 12 VPS homelab: plain Docker
+Compose on each node, Cloudflare Tunnel for public access with zero
+inbound ports, GitHub Actions as the only path to production. There is no
+web control plane: Dokploy ran here until 2026-08-23, and removing it
+freed ~800 MB on the primary node.
 
 > [!NOTE]
 > **Status: work in progress.** Nodes are provisioned, hardened, and
-> deployable via CI. Dokploy, Cloudflare Tunnel and three workloads are
+> deployable via CI. Cloudflare Tunnel and three workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
 > `budget.maybeit.work` (ezBookkeeping), both on vps01. A third,
 > centralised logging (OpenObserve on vps02, `siem.maybeit.work`), has
-> been ingesting the systemd journal from all three nodes since
-> 2026-08-23; the two vps01 apps still log to `json-file` until Dokploy
-> recreates them. ezBookkeeping is
+> been ingesting the systemd journal and every container's output from
+> all three nodes since 2026-08-23. ezBookkeeping is
 > backed up nightly off-site to Cloudflare R2; the booking database is
 > scheduled the same way, with its first unattended run due 2026-08-21 —
 > until one lands, only a forced end-to-end run has been proven.
@@ -27,13 +28,13 @@ inbound ports, GitHub Actions as the only path to production.
 
 | Node  | Role      | Notes                                                     |
 |-------|-----------|-----------------------------------------------------------|
-| vps00 | primary   | Dokploy control plane + own `cloudflared`                  |
-| vps01 | secondary | Dokploy Remote Server, hosts both apps + own `cloudflared` |
-| vps02 | secondary | Dokploy Remote Server, Netdata + OpenObserve logs + own `cloudflared` |
+| vps00 | primary   | own `cloudflared`; the tunnel for the status page and its metrics |
+| vps01 | secondary | both apps + own `cloudflared`                              |
+| vps02 | secondary | OpenObserve logs + own `cloudflared`                       |
 
-All three also run Netdata (bound to loopback) and a Dokploy-installed
-Traefik. Each node runs its **own single-node Swarm**: three independent
-swarms, not one cluster.
+All three also run Netdata (bound to loopback) and Vector (ships logs to
+vps02). Plain Docker Engine, no Swarm, no reverse proxy: each app publishes
+one loopback port and `cloudflared` dials it directly.
 
 2 vCPU / 2GB RAM each. Real IPs are never committed.
 `infra/inventory.example.yaml` is the redacted template, usage examples in
@@ -46,16 +47,15 @@ Note the `vps0N.maybeit.work` names are
 inventory labels with no DNS records; they are not substitutes for an
 address.
 
-vps01/vps02 are managed as Dokploy **Remote Servers**, not Swarm workers:
-each node stays independent and hosts its own apps rather than pooling
+Each node stays independent and hosts its own apps rather than pooling
 resources, which fits three boxes this small a lot better than clustering
 them.
 
 ```mermaid
 flowchart LR
     internet(("Public traffic")) --> tunnel["Cloudflare Tunnel\n(outbound-only)"]
-    tunnel --> vps00["vps00, primary\nDokploy control plane"]
-    tunnel --> vps01["vps01, secondary\nDokploy apps"]
+    tunnel --> vps00["vps00, primary\nmetrics"]
+    tunnel --> vps01["vps01, secondary\napps"]
     tunnel --> vps02["vps02, secondary\nmetrics"]
 
     subgraph ci["GitHub Actions"]
@@ -71,7 +71,7 @@ flowchart LR
 
 > [!IMPORTANT]
 > No node has an open inbound port except SSH (22). All public traffic
-> (the Dokploy dashboard, deployed apps) arrives through Cloudflare
+> (the apps, the log UI, the metrics) arrives through Cloudflare
 > Tunnel, which is outbound-only from each node's side.
 
 **UFW alone does not deliver that**, and for a while this README claimed
@@ -88,12 +88,12 @@ what `ufw status` says. Two layers close it, both applied by
   ports do not land on `0.0.0.0` by default.
 
 Neither layer covers ingress-mode Swarm publishes, which traverse a
-different chain (`DOCKER-INGRESS`); nothing here publishes that way today.
-That is precisely why the check that matters is a port sweep from off-node,
+different chain (`DOCKER-INGRESS`); Swarm is inactive on every node since
+2026-08-23, so that chain no longer exists. That is precisely why the check that matters is a port sweep from off-node,
 not `ufw status`.
 
 Public hostnames that should not be public are behind **Cloudflare
-Access**: the Dokploy dashboard, all three Netdata endpoints, and
+Access**: all three Netdata endpoints, the OpenObserve UI, and
 `budget.maybeit.work` require authentication at the edge, before the
 tunnel. `booking.maybeit.work` is deliberately **not** — it is the public
 booking page clients use, and locking it behind Access would defeat its
@@ -117,14 +117,8 @@ across every hostname, with one exemption for the `maybeit.work` apex so
 the status page is publicly readable. `booking` and `budget` are therefore
 unreachable outside PH by design. Any non-PH client, including GitHub
 Actions runners and the nodes themselves, gets a `403` that looks exactly
-like an outage and is not one. One path is exempted, ordered above the
-block: `dokploy.maybeit.work/api/deploy`, because GitHub's webhook servers
-are not in PH either and the geo rule silently killed Dokploy's autodeploy
-for two days before anyone noticed. That exemption is bounded by the
-zone's one free rate-limit rule: 5 requests per 10 seconds per IP on that
-path, which is far above one POST per push and far below anything useful
-for guessing the webhook secret. All three rules live only in the
-Cloudflare dashboard, so nothing in this repo can restore them.
+like an outage and is not one. The rule lives only in the Cloudflare
+dashboard, so nothing in this repo can restore it.
 
 All three Netdata agents are also **claimed into Netdata Cloud**, an
 outbound HTTPS connection to a third party from every node. It opens no
@@ -151,24 +145,19 @@ stacks/
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
   vps01/backup-booking.sh            nightly MySQL dump to Cloudflare R2
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
-dokploy/
-  ezbookkeeping/, booking/           compose apps Dokploy clones from this repo itself
 worker/status/                       Cloudflare Worker: maybeit.work status page + health poller
 docs/superpowers/                    handoffs, plans and specs from past sessions
 scripts/
-  bootstrap-dokploy.sh               install Dokploy control plane (vps00 only)
   provision-deploy-user.sh           create the CI deploy user, key-only, rsync installed
-  install-docker.sh                  Docker Engine from Docker's apt repo (no Dokploy)
+  install-docker.sh                  Docker Engine from Docker's apt repo
   harden-node.sh                     UFW, key-only sshd, Fail2Ban, DOCKER-USER drops
   add-swap.sh                        swap file (these nodes ship with none)
-  cap-dokploy-resources.sh           memory-cap Dokploy's own control plane
   setup-maintenance.sh               journald log driver for containers, journald cap, weekly docker prune, unattended security upgrades
   install-aide.sh                    AIDE file-integrity baseline + daily check into the journal
 ```
 
-Two deploy paths, one repo: `deploy.yml` rsyncs `stacks/` to the nodes and
-never touches `dokploy/`, while Dokploy clones `dokploy/` itself from GitHub
-and redeploys through a per-app webhook.
+One deploy path: `deploy.yml` rsyncs `stacks/` to the nodes and runs
+`docker compose up` there. Nothing else puts a container on a node.
 
 All scripts are idempotent, POSIX `sh`, shellcheck-clean, and safe to
 re-run; most matter again if a node ever gets rebuilt from scratch.
@@ -228,19 +217,15 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 - Fail2Ban: aggressive sshd jail, `backend = systemd` (these images ship
   without rsyslog, so the default file-based jail backend has nothing to
   tail).
-- Cloudflare Access in front of the Dokploy dashboard, every Netdata
-  endpoint, and `budget`. The status Worker holds a service token that
-  opens the three Netdata endpoints **and nothing else**: that token was
-  detached from the Dokploy application on 2026-08-20, so a public Worker
-  no longer carries a credential to the deploy control plane. `booking`
-  stays open on purpose — it is the public booking page.
+- Cloudflare Access in front of every Netdata endpoint, the OpenObserve
+  UI, and `budget`. The status Worker holds a service token that opens
+  the three Netdata endpoints **and nothing else**. `booking` stays open
+  on purpose — it is the public booking page.
 - One CI key **per node**, so a leaked Actions secret reaches one node
   rather than three, and deploys require a human approval.
 - Netdata does not get the Docker socket. A `:ro` bind on a socket
   restricts nothing: anything that can reach the Docker API can start a
   container with the host filesystem mounted.
-- Dokploy manages the other nodes over its own separate, dedicated SSH
-  credential, scoped to that purpose only.
 - A zone-wide Cloudflare rule blocks all non-Philippines traffic, and all
   three Netdata agents stream outbound to Netdata Cloud (see
   [Network model](#-network-model)). Both live outside this repo: the geo
@@ -305,14 +290,13 @@ container can take the whole node down, not just itself.
 - `add-swap.sh` provisions a 2GB swapfile (`vm.swappiness=10`) on every
   node, so a transient memory spike during app startup or a DB migration
   degrades instead of triggering a hard OOM-kill.
-- Every app service (in this repo's `stacks/` or deployed through
-  Dokploy) gets an explicit `mem_limit`/`mem_reservation`. Deliberately
-  the classic Compose key, not `deploy.resources`, which is Swarm-oriented
-  and isn't reliably honored by plain `docker compose up`, the command
-  both `deploy.yml` and Dokploy actually run.
-- Dokploy's own control plane was uncapped by default, consuming a
-  disproportionate share of a small node's memory on its own before
-  `cap-dokploy-resources.sh` bounded it.
+- Every app service in `stacks/` gets an explicit
+  `mem_limit`/`mem_reservation`. Deliberately the classic Compose key, not
+  `deploy.resources`, which is Swarm-oriented and isn't reliably honored
+  by plain `docker compose up`, the command `deploy.yml` actually runs.
+- Dokploy's own control plane was uncapped by default and took ~750 MiB
+  of a 2 GB node on its own; it was capped, then removed outright on
+  2026-08-23, taking vps00 from ~1400 MB used to ~590 MB.
 
 ## License
 

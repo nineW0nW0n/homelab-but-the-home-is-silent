@@ -13,7 +13,7 @@ OS/firewall/resource/dokploy config) was deleted, not wired up — nothing in
 `scripts/` or `.github/workflows/` ever parsed it, so it only drifted from
 what the scripts do. Enforcement lives in `scripts/harden-node.sh` (UFW, sshd,
 Fail2Ban, the `DOCKER-USER` drops and `daemon.json` loopback bind that make
-rail 1 true), `scripts/cap-dokploy-resources.sh` (resource caps), and GitHub
+rail 1 true), rail 4's `mem_limit` in every compose file, and GitHub
 Secrets/Variables (host/port/user, resolved at deploy time, see
 `.github/workflows/CLAUDE.md`). Change the script; there is no yaml to edit
 first. Making node config data-driven again is a real design decision -- three
@@ -51,7 +51,7 @@ the `docker` group, that was a second root-equivalent path onto vps01 that
 nothing in the repo mentioned. **Removed 2026-08-20**, after confirming from
 Dokploy's own database that it connects as `root` on port 22 — so the `deploy`
 copy bought nothing. Backup kept on the node as
-`authorized_keys.bak.20260820`; root's copy untouched, so Dokploy is unaffected.
+`authorized_keys.bak.20260820`; root's copy untouched at the time.
 
 | Node  | `deploy` authorized_keys | `root` authorized_keys   |
 |-------|--------------------------|--------------------------|
@@ -59,9 +59,17 @@ copy bought nothing. Backup kept on the node as
 | vps01 | `ci-deploy`              | `vps-maybeit`, `dokploy` |
 | vps02 | `ci-deploy`              | `vps-maybeit`, `dokploy` |
 
-**Check Dokploy's own record before reasoning about how it reaches a node**:
-`SELECT name, username, port FROM server;` in `dokploy-postgres` on vps00. It
-is the only authoritative answer, and it is what settled this.
+**The `dokploy` root key on vps01/vps02 is orphaned since 2026-08-23**: the
+control plane that held its private half was removed, so the public key in
+`/root/.ssh/authorized_keys` authorises nothing that exists -- unless the
+private key survives in Dokploy's leftover volumes on vps00, which is the
+reason to delete those volumes and this key in the same follow-on (ask
+first: it is a change to root's SSH auth). Until then the table above is
+what the nodes hold, not what should be there.
+
+**Check the tool's own record before reasoning about how it reaches a
+node** -- Dokploy's `server` table on vps00 was the only authoritative
+answer to how it connected, and it is what settled the `deploy`-key question.
 
 `~/.ssh/id_ed25519_vps` (comment `vps-maybeit`) is the **root** key, not a
 dead one: `root@` accepts it on all three nodes (verified 2026-08-18), and it
@@ -80,16 +88,15 @@ preference:
    how the vps01 backup scripts read volumes without root.
 2. **`root@`** via the `vps0N-root` alias and `~/.ssh/id_ed25519_vps`, for the
    provisioning scripts; `scripts/*.sh` connect as root — via `SSH_USER`,
-   hardcoded `root@` in `provision-deploy-user.sh`, or `VPS00_SSH_USER` in
-   `bootstrap-dokploy.sh` — and root is the right user for them. Root is
+   hardcoded `root@` in `provision-deploy-user.sh` — and root is the right
+   user for them. Root is
    key-only because `harden-node.sh` writes
    `PermitRootLogin prohibit-password` in its drop-in and asserts it with
    `sshd -T` — not because of any Debian default (superseded 2026-08-20; see
    the failure log and the archive).
-3. **Dokploy**, which connects as root with its own keypair generated during
-   Remote Server setup, held on vps00 and on no laptop. It is the second key
-   in `/root/.ssh/authorized_keys` on vps01 and vps02; vps00 has only the
-   `vps-maybeit` key.
+3. **Nothing else, since 2026-08-23.** Dokploy used to connect as root
+   with its own keypair; the orphaned public half is still the second key
+   in `/root/.ssh/authorized_keys` on vps01 and vps02 (see above).
 
 ## Failure log
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Nightly backup of the ezBookkeeping Dokploy app on vps01 to Cloudflare R2.
+# Nightly backup of ezBookkeeping (stacks/vps01) on vps01 to Cloudflare R2.
 #
 # Deployed to /opt/stacks/vps01/ by .github/workflows/deploy.yml (rsync of
 # stacks/vps01/), run from the deploy user's crontab at 03:00 Asia/Manila.

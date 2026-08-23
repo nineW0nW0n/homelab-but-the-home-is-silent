@@ -4,7 +4,9 @@ Parent: ../.claude/CLAUDE.md
 
 One `docker-compose.yml` per node, deployed by `deploy.yml` to
 `/opt/stacks/<node>/`. Each runs that node's `cloudflared` connector (rails 2,
-3) plus any node-specific workload not deployed through Dokploy directly.
+3) plus every workload on that node. No reverse proxy: each app publishes
+one loopback port on the `8NXX` scheme (`N` = node, `01-49` apps, `50-99`
+tools; `19999` and `5080` predate it) and `cloudflared` dials it directly.
 
 ## Tunnel mode and routes
 
@@ -17,26 +19,17 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Eight routes, all live -- six verified 2026-08-20, `siem` and
-`siem-ingest` created and verified 2026-08-23. Across three tunnels:
+Seven routes, all live -- read back from the API 2026-08-23 after the
+Dokploy removal (`dokploy.maybeit.work`, its Access apps, its CNAME and
+its WAF bypass were deleted that day). Across three tunnels:
 
-- `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
-  `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
-  (`dokploy`, 24h session) since 2026-08-16, carrying **one** policy:
-  `owner email allow`. It does **not** carry a service-token policy — that
-  was detached 2026-08-20 so this public Worker's credential could not reach
-  the deploy control plane, and re-adding one to "match the `*-metrics` apps"
-  re-opens exactly what was closed. Unauthenticated must `302` to
-  `old-firefly-996b.cloudflareaccess.com`; a `200` means the policy detached
-  and the control plane is open again. Probe `/` only, and **from a PH
-  client** — the zone's geo rule 403s everything else before Access is
-  reached, and `/api/deploy` is a separate bypass app that answers `401`.
-- `vps00-metrics.maybeit.work` → `http://localhost:19999` on vps00, same
-  tunnel. Behind its own Access app.
-- `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
-  Traefik, forwarding to whichever container the Domain in Dokploy's UI points
-  at), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
-- `budget.maybeit.work` → `http://localhost:80` on vps01, same tunnel:
+- `vps00-metrics.maybeit.work` → `http://localhost:19999` on vps00, token
+  `CLOUDFLARE_TUNNEL_TOKEN`. Behind its own Access app. The only route on
+  that tunnel now.
+- `booking.maybeit.work` → `http://localhost:8101` on vps01
+  (EasyAppointments, its own published loopback port), token
+  `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
+- `budget.maybeit.work` → `http://localhost:8102` on vps01, same tunnel:
   ezBookkeeping, the SQLite dataset `vps01/CLAUDE.md` backs up. Behind its
   own Access application (`budget`, 24h session) since 2026-08-20, **two**
   policies: `owner email allow` and `partner email allow` (read back from
@@ -52,7 +45,7 @@ Eight routes, all live -- six verified 2026-08-20, `siem` and
   Access, and vps02's first workload *from this repo*.
 - `siem.maybeit.work` → `http://localhost:5080` on vps02, same tunnel:
   the OpenObserve UI. Access application `siem`, one policy,
-  `owner email allow`, PH-only like `budget` and `dokploy`.
+  `owner email allow`, PH-only like `budget`.
   OpenObserve's own login sits behind that.
 - `siem-ingest.maybeit.work` → the same origin on vps02, same tunnel:
   the ingest endpoint vps00/vps01's Vector posts to. Access application
@@ -71,15 +64,16 @@ login.** One `partner email allow` policy per app, added alongside
 Access log names who did what. Today that is `budget` alone — the
 household's books are hers too. Adding her to another app is one more
 policy on that app, not a wider policy on this one, and not a second
-account sharing the owner's address. Ops surfaces (`dokploy`, `siem`, the
-three `*-metrics` apps) stay owner-only: nothing there is hers to use, and
+account sharing the owner's address. Ops surfaces (`siem`, the three
+`*-metrics` apps) stay owner-only: nothing there is hers to use, and
 a policy that exists is a policy that can be widened by accident.
 
 **Two service tokens, never crossed.** `status-worker` opens the three
 `*-metrics` apps and nothing else; `siem-ingest` opens `siem-ingest` and
 nothing else. Adding either token's policy to the other's app hands one
-credential a scope it was minted to not have — the same mistake as the
-`dokploy` app's detached policy above.
+credential a scope it was minted to not have — the mistake the status
+Worker's token once made against the Dokploy control plane (detached
+2026-08-20, app deleted 2026-08-23).
 
 **One token per node (rail 2):** Cloudflare load-balances a hostname across
 *every* connector on its tunnel — a route is not pinned to a node — so one
@@ -97,9 +91,10 @@ returns secret material (rail 11).
 netns, so `http://localhost:PORT` in a route resolves to the container, not the
 VPS: origin unreachable, 502.
 
-vps02 is not the empty node it reads as: Dokploy installed `dokploy-traefik`
-there too, publishing 80/443, same as vps00 and vps01. Nothing in `stacks/`
-declares it. `docker ps` on a node is the truth, not this directory.
+`docker ps` on a node is the truth, not this directory. Until 2026-08-23
+every node ran a `dokploy-traefik` nothing in `stacks/` declared; since
+then every container on every node comes from its compose file, and a
+container that does not is drift to investigate.
 
 ## Netdata
 
@@ -281,11 +276,11 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
 - **Never `sed -i` a bind-mounted single file:** it writes a new inode and
   the container keeps reading the old one. Use `cat new > file` for
   `netdata.conf` and `health.d/*.conf`.
-- **Dokploy v0.29.14 has no 2FA and no login/audit log** (verified
-  empirically, not from docs). Don't plan a security control around
-  either; authentication and the access log live in Cloudflare Access
-  (Zero Trust → Logs → Access), which also records attempts that never
-  reach the origin.
+- **A web control plane with no 2FA and no audit log is only as safe as
+  the Access app in front of it** (Dokploy v0.29.14 had neither, verified
+  empirically; removed 2026-08-23). Authentication and the access log for
+  every ops surface live in Cloudflare Access (Zero Trust → Logs →
+  Access), which also records attempts that never reach the origin.
 - **Count Access policies by reading them back, never from what the last
   session added.** This file said `budget` carried one policy for three
   days while the app carried two: `partner email allow` was added in the
@@ -331,6 +326,13 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   (`setup-maintenance.sh`) and let Vector follow `journalctl`'s own
   resolution.
 - **Never reuse another node's tunnel token** (rail 2). vps00 and vps01
-  once shared one, so Cloudflare load-balanced `dokploy.maybeit.work`
+  once shared one, so Cloudflare load-balanced the control-plane hostname
   across both connectors and ~2/3 of requests 502'd on the node with
   nothing on that origin port.
+- **Removing Dokploy freed ~810 MB on vps00** (measured 2026-08-23:
+  1400 MB used before, 593 MB of 1966 MB after; vps01 1100 MB, vps02
+  969 MB after). The control plane alone was 749.7 MiB of a 1966 MB node.
+  Its Traefik on vps00 and vps02 routed nothing -- cloudflared went
+  straight to `localhost:3000`, `:19999` and `:5080` -- so two of the
+  three were pure overhead. A control plane is a workload: measure it
+  and cap it like one, or do not run it.

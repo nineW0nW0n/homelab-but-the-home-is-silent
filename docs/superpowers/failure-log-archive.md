@@ -804,3 +804,20 @@ Original text, Backups section opening:
 > rows, 0.4 MB, dumping to a 6KB gzip; the volume's 203MB on disk is MySQL's
 > own tablespaces and binlogs, not appointments. Real customer bookings all the
 > same.
+
+## 7. `scripts/CLAUDE.md` — three Dokploy-only entries (archived 2026-08-23, Dokploy removed)
+
+Moved in full when `bootstrap-dokploy.sh` and `cap-dokploy-resources.sh` were
+deleted. The situations cannot recur; each left a one-line generalised pointer.
+
+- **Reapply Dokploy's memory caps after any reinstall or upgrade** — none
+  of it is declarative — and by the right mechanism: Swarm services take
+  `docker service update --limit-memory` (plain `docker update` is
+  silently reconciled away), `dokploy-traefik` takes `docker update
+  --memory`.
+- **A script targeting "every node" must skip a missing target, not die**
+  — `cap-dokploy-resources.sh` opened with a vps00-only service under
+  `set -eu`, so traefik went uncapped on both secondaries.
+- **`bootstrap-dokploy.sh`'s printed sha256 is a record, not a
+  verification** — Dokploy publishes no checksum to compare against, so
+  don't upgrade the claim.

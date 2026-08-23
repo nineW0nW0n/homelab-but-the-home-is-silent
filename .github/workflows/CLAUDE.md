@@ -92,10 +92,11 @@ Cloudflare Access service token, `deploy-worker.yml`), `DEBUG_KEY` (gates
 `maybeit.work/debug`; unset, the route 404s for everyone — it fails
 closed).
 
-Present as repo secrets but **consumed by no workflow**:
-`DOKPLOY_API_TOKEN` and `CLOUDFLARE_TUNNEL_ID`, for manual dashboard/CLI
-work. Don't delete them assuming they are load-bearing, and don't reference
-them in a workflow assuming they are maintained.
+Present as a repo secret but **consumed by no workflow**:
+`CLOUDFLARE_TUNNEL_ID`, for manual dashboard/CLI work. Don't delete it
+assuming it is load-bearing, and don't reference it in a workflow assuming
+it is maintained. (`DOKPLOY_API_TOKEN` was the other; deleted 2026-08-23
+with Dokploy.)
 
 Variables (optional, default in workflow): `VPS0N_SSH_USER`,
 `VPS0N_SSH_PORT`.

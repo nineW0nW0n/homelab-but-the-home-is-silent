@@ -293,7 +293,7 @@ jobs:
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
-            # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
+            # see the frozen-name entry in the stacks/vps01/CLAUDE.md failure log.
             #
             # Running alone is not aliveness. Under restart:
             # unless-stopped a container that crashes on startup is
@@ -524,7 +524,7 @@ jobs:
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
-            # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
+            # see the frozen-name entry in the stacks/vps01/CLAUDE.md failure log.
             #
             # Running alone is not aliveness. Under restart:
             # unless-stopped a container that crashes on startup is
@@ -701,7 +701,7 @@ jobs:
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
-            # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
+            # see the frozen-name entry in the stacks/vps01/CLAUDE.md failure log.
             #
             # Running alone is not aliveness. Under restart:
             # unless-stopped a container that crashes on startup is

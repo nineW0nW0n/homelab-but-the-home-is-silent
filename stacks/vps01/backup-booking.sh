@@ -64,9 +64,9 @@ docker exec "$DB_CONTAINER" sh -c \
 #
 # The trailer alone is not enough: an empty-but-existing database dumps as a
 # complete, valid, trailer-carrying file with zero tables. That is exactly what
-# renaming the Dokploy app produces (the volume name is derived from it, so
-# MYSQL_DATABASE recreates `easyappointments` empty and MySQL starts happily,
-# see dokploy/booking/docker-compose.yml), and it would upload green while R2
+# a wrong volume name produces (MYSQL_DATABASE recreates `easyappointments`
+# empty and MySQL starts happily; the volume is external: true in
+# stacks/vps01/docker-compose.yml for that reason), and it would upload green while R2
 # lifecycle rules aged out the last real copy. So the check also floors the
 # table count: the real database has 14 tables (measured 2026-08-19), and 10
 # leaves room for schema churn without false alarms.

@@ -13,13 +13,14 @@ in `.claude/skills/`.
 ## What / where / when / why / how
 
 - **What**: `homelab-but-the-home-is-silent`, GitOps infra for a 3-node
-  Debian 12 VPS homelab. Dokploy deploys, Cloudflare Tunnel is the only
-  public ingress, GitHub Actions is the only path to production.
-- **Where**: `vps00` (primary, Dokploy control plane), `vps01`, `vps02`
-  (Dokploy Remote Servers). 2 vCPU / 2GB RAM each, no swap by default. Each
-  node runs its **own independent single-node Swarm** — three swarms, not
-  one cluster, so nothing needs 2377/7946 open between them (verified
-  2026-08-16). All three run `cloudflared`, Netdata, `dokploy-traefik`.
+  Debian 12 VPS homelab. Cloudflare Tunnel is the only public ingress,
+  GitHub Actions is the only path to production, and there is no web
+  control plane (Dokploy was removed 2026-08-23).
+- **Where**: `vps00`, `vps01`, `vps02`. 2 vCPU / 2GB RAM each, no swap by
+  default. Plain Docker Engine, Swarm inactive on all three (it existed
+  only for Dokploy; left 2026-08-23), so nothing needs 2377/7946 open
+  between them. All three run `cloudflared`, Netdata and Vector; vps01
+  carries the two apps, vps02 OpenObserve.
 - **When**: work in progress. Provisioning/hardening done and
   CI-deployable; three workloads live, the third being centralised logging
   (OpenObserve on vps02, ingesting from all three nodes since 2026-08-23).
@@ -31,7 +32,8 @@ in `.claude/skills/`.
   The constraints are the point, not accidents to design around.
 - **How**: infra under `infra/`, workloads under `stacks/`, push to `main`,
   `validate.yml` gates `deploy.yml`, one approval gates production and all
-  three nodes then deploy in parallel.
+  three nodes then deploy in parallel. Without exception: every container
+  on every node comes from a `stacks/<node>/docker-compose.yml`.
 
 ## Directory map
 
@@ -39,10 +41,9 @@ in `.claude/skills/`.
 |---|---|---|
 | `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml`: cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
-| `stacks/vps01/` | Backups (booking + ezBookkeeping), R2 retention, drills, staleness alerting | exists → `stacks/vps01/CLAUDE.md` |
+| `stacks/vps01/` | The two apps (booking, ezBookkeeping) and their backups, R2 retention, drills, staleness alerting | exists → `stacks/vps01/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
-| `dokploy/` | Compose apps Dokploy pulls from git (not `deploy.yml`) | exists → `dokploy/CLAUDE.md` |
 | `worker/status/` | Cloudflare Worker: status page + health poller | exists → `worker/status/CLAUDE.md` |
 | `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`), plus the failure-log archive the propagation protocol writes to; nothing deploys from here | none: no rails of its own |
 
@@ -90,8 +91,8 @@ Never silently pick one.
    block.
 5. **Real IPs are never committed.** Use the inventory key/hostname;
    `infra/inventory.example.yaml` stays redacted.
-6. **CI deploy user: key-only, no sudo, no password login.** Dokploy uses
-   its own separate credential.
+6. **CI deploy user: key-only, no sudo, no password login.** Provisioning
+   scripts use root over SSH, a separate credential.
 7. **One approval gates production, in every workflow that reaches it** —
    `deploy.yml` via a single `approve` job the three parallel node deploys
    hang off, `deploy-worker.yml` via `environment: production` on its lone
@@ -260,7 +261,8 @@ incident history behind every one-line rule in every failure log here:
   boolean. Fix `.yamllint` (`check-keys: false`), never the workflow file.
 - **New control-plane-style services get an explicit memory cap from the
   start.** Dokploy's was uncapped and ate a disproportionate share of a 2GB
-  node; fix is `cap-dokploy-resources.sh`, detail in `scripts/CLAUDE.md`.
+  node; a cap script bounded it until Dokploy itself was removed
+  (2026-08-23, freed ~800 MB on vps00). Rail 4 now covers every container.
 - Fail2Ban and `docker compose pull`-on-empty-stack live in
   `scripts/CLAUDE.md` and `.github/workflows/CLAUDE.md`: one script, one
   workflow, not cross-cutting.

@@ -7,11 +7,11 @@
 # token = one interchangeable connector pool; sharing across nodes with
 # different origins causes non-deterministic 502s (hit this once already).
 #
-# network_mode: host so http://localhost:80 in the tunnel's Public
-# Hostname route resolves to this VPS's own Traefik (booking.maybeit.work
-# -> Dokploy's Traefik on :80 -> whatever app container Dokploy's UI has
-# the Domain pointed at, see stacks/CLAUDE.md), not the container's own
-# network namespace.
+# network_mode: host so the tunnel's Public Hostname routes
+# (booking.maybeit.work -> http://localhost:8101, budget.maybeit.work ->
+# http://localhost:8102, see stacks/CLAUDE.md) resolve to this VPS's own
+# loopback, not the container's own network namespace. No reverse proxy:
+# each app publishes its own loopback port.
 services:
   cloudflared:
     image: cloudflare/cloudflared:2024.12.2
@@ -202,7 +202,7 @@ volumes:
   vector-data:
   # Adopted, not created. The names are Dokploy's and are deliberately
   # frozen: backup-booking.sh and backup-ezbookkeeping.sh hardcode them,
-  # and a rename starts MySQL on an empty database (see dokploy/CLAUDE.md).
+  # and a rename starts MySQL on an empty database (stacks/vps01/CLAUDE.md).
   # external: true makes Compose refuse to run rather than silently create
   # an empty volume if the name is ever wrong.
   booking-mysql-data:
