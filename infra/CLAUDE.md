@@ -53,19 +53,19 @@ Dokploy's own database that it connects as `root` on port 22 — so the `deploy`
 copy bought nothing. Backup kept on the node as
 `authorized_keys.bak.20260820`; root's copy untouched at the time.
 
-| Node  | `deploy` authorized_keys | `root` authorized_keys   |
-|-------|--------------------------|--------------------------|
-| vps00 | `ci-deploy`              | `vps-maybeit`            |
-| vps01 | `ci-deploy`              | `vps-maybeit`, `dokploy` |
-| vps02 | `ci-deploy`              | `vps-maybeit`, `dokploy` |
+| Node  | `deploy` authorized_keys | `root` authorized_keys |
+|-------|--------------------------|------------------------|
+| vps00 | `ci-deploy`              | `vps-maybeit`          |
+| vps01 | `ci-deploy`              | `vps-maybeit`          |
+| vps02 | `ci-deploy`              | `vps-maybeit`          |
 
-**The `dokploy` root key on vps01/vps02 is orphaned since 2026-08-23**: the
-control plane that held its private half was removed, so the public key in
-`/root/.ssh/authorized_keys` authorises nothing that exists -- unless the
-private key survives in Dokploy's leftover volumes on vps00, which is the
-reason to delete those volumes and this key in the same follow-on (ask
-first: it is a change to root's SSH auth). Until then the table above is
-what the nodes hold, not what should be there.
+One key per user per node, read back 2026-08-23. The `dokploy` root key
+that sat on vps01/vps02 was removed that day together with its private
+half (Dokploy's `/etc/dokploy/ssh` and both `dokploy*` volumes on vps00),
+in that order -- an orphaned public key is only harmless once the private
+key is provably gone. Pre-removal copy:
+`/root/.ssh/authorized_keys.bak.20260823` on each, root-only, public
+material only.
 
 **Check the tool's own record before reasoning about how it reaches a
 node** -- Dokploy's `server` table on vps00 was the only authoritative
@@ -95,8 +95,7 @@ preference:
    `sshd -T` — not because of any Debian default (superseded 2026-08-20; see
    the failure log and the archive).
 3. **Nothing else, since 2026-08-23.** Dokploy used to connect as root
-   with its own keypair; the orphaned public half is still the second key
-   in `/root/.ssh/authorized_keys` on vps01 and vps02 (see above).
+   with its own keypair; both halves are deleted (see above).
 
 ## Failure log
 
