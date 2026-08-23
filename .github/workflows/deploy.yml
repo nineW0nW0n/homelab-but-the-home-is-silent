@@ -111,11 +111,40 @@ jobs:
                 ;;
             esac
           done
+          # OpenObserve enforces its own policy on the root password and
+          # panics at startup if it is not met, which surfaces as a
+          # crashloop rather than anything naming the password. Its
+          # "special character" set is wider than this, but ! @ % - _ are
+          # measured-accepted (v0.92.2) and are exactly the specials the
+          # dotenv rule above leaves intact -- so this asks for one of
+          # those rather than for any symbol.
+          for name in OPENOBSERVE_ROOT_PASSWORD OPENOBSERVE_INGEST_PASSWORD; do
+            value=$(printenv "$name" || true)
+            if [ -z "$value" ]; then
+              continue
+            fi
+            len=${#value}
+            if [ "$len" -lt 8 ] || [ "$len" -gt 128 ]; then
+              echo "FAIL $name: OpenObserve wants 8-128 characters, this is $len"
+              bad=1
+            fi
+            printf '%s' "$value" | grep -q '[a-z]' ||
+              { echo "FAIL $name: needs a lowercase letter"; bad=1; }
+            printf '%s' "$value" | grep -q '[A-Z]' ||
+              { echo "FAIL $name: needs an uppercase letter"; bad=1; }
+            printf '%s' "$value" | grep -q '[0-9]' ||
+              { echo "FAIL $name: needs a digit"; bad=1; }
+            printf '%s' "$value" | grep -q '[!@%_-]' ||
+              { echo "FAIL $name: needs one of  ! @ % - _  (OpenObserve wants a"
+                echo "     special character; those five are the ones a dotenv"
+                echo "     parser also leaves alone)"; bad=1; }
+          done
           if [ "$bad" != 0 ]; then
             echo "Refusing to deploy. Nothing has been written to any node."
             exit 1
           fi
           echo "ok: every secret that lands in a dotenv file is parser-safe"
+          echo "ok: the OpenObserve passwords meet its startup policy"
 
   deploy-vps00:
     needs: approve

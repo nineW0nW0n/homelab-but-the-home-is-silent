@@ -272,6 +272,15 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   dashboard and nothing here noticed. Ask
   `/accounts/{id}/access/apps/{app}/policies` before writing a count — an
   undocumented policy is an access grant nobody is reviewing.
+- **OpenObserve panics at startup on a root password it considers weak**
+  -- 8-128 characters with a lowercase, an uppercase, a digit and a
+  special character -- so the symptom is a crashloop, not a message about
+  credentials. This collides with the dotenv rule (`#` and `$` truncate or
+  interpolate), and the overlap is narrow: `!`, `@`, `%`, `-` and `_` are
+  measured-accepted by v0.92.2 as special *and* survive the parser. Use
+  those. `ZO_ROOT_USER_*` applies only at first boot, so changing the
+  secret afterwards does nothing until the `openobserve-data` volume is
+  wiped -- which is safe here, the volume is explicitly not backed up.
 - **Vector 0.57.0 disabled config env-var interpolation by default**, so
   every `${...}` in `vector.yaml` is a literal string unless the container
   sets `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true`. It surfaced
