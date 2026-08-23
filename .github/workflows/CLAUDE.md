@@ -19,7 +19,13 @@ then `wrangler deploy`, entirely separate from the node deploy path; see
    callable via `workflow_call`; both deploy workflows call it first (rail
    8).
 2. `deploy.yml` runs on push to `main` (paths: `stacks/**`, itself) or
-   manual dispatch. `concurrency: deploy-production`, `cancel-in-progress:
+   manual dispatch. The `approve` job carries one step beyond the gate:
+   **Reject secrets a dotenv parser would mangle**, which reads every
+   secret that lands in a `.env`, `.r2.env` or `.telegram.env` and fails
+   the run before any node is touched if one contains `#`, `$`, a quote,
+   a backslash, a backtick, or edge whitespace. It prints names, never
+   values. It lives here because all three deploys `needs:` this job, so
+   one copy covers the run. `concurrency: deploy-production`, `cancel-in-progress:
    false`: a second push queues, doesn't abort a deploy in flight. A single
    `approve` job holds the `production` environment and the three deploy
    jobs `needs:` it, so one approval covers the run and all three nodes
@@ -192,6 +198,18 @@ Incident histories behind these rules: `failure-log` skill
   container. A polling HTTP probe has the identical hole: it can catch a
   looping container in its up window, which is why vps02 checks openobserve
   both ways.
+- **A secret containing `#` is silently truncated on its way into a
+  container.** Compose's `.env` parser treats an unquoted `#` as a comment
+  start, so a 32-character `OPENOBSERVE_ROOT_PASSWORD` arrived as 21
+  characters, created the OpenObserve root user with the truncation, and
+  reported nothing. Every later authentication failed, and the mismatch
+  read like wrong credentials rather than a parser. `$`, quotes,
+  backslashes, backticks and edge whitespace are the same class. The
+  `approve` job now refuses to deploy on any of them -- watched failing on
+  the exact password that caused this before being trusted. **Never
+  diagnose a 401 by assuming the value the container holds is the value
+  you set; compare lengths first** -- lengths are safe to print, values
+  are not.
 - **The `gitleaks` hook scans staged changes only,** so it contributes
   nothing under `pre-commit run --all-files` in `validate.yml`. Kept once,
   in root's failure log; don't duplicate it here.

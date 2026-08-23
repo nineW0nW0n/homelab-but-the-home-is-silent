@@ -44,6 +44,79 @@ jobs:
       - name: Gate
         run: echo "approved - deploying vps00, vps01 and vps02 in parallel"
 
+      # Runs once, before any node deploys, because all three hang off
+      # this job. Values are read from the environment and only NAMES are
+      # ever printed.
+      - name: Reject secrets a dotenv parser would mangle
+        env:
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING }}
+          CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS }}
+          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
+          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
+          OPENOBSERVE_ROOT_EMAIL: ${{ secrets.OPENOBSERVE_ROOT_EMAIL }}
+          OPENOBSERVE_ROOT_PASSWORD: ${{ secrets.OPENOBSERVE_ROOT_PASSWORD }}
+          OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
+          OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
+          CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CF_ACCESS_SIEM_CLIENT_ID }}
+          CF_ACCESS_SIEM_CLIENT_SECRET: ${{ secrets.CF_ACCESS_SIEM_CLIENT_SECRET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          # Compose truncates an unquoted .env value at '#' and
+          # interpolates '$'; the shell scripts that source .r2.env and
+          # .telegram.env mangle the same characters. A 32-character
+          # OpenObserve password containing '#' reached the container as
+          # 21 characters, created the root user with the truncation, and
+          # nothing anywhere reported it -- the whole log stack failed
+          # authentication instead. See stacks/CLAUDE.md.
+          bad=0
+          for name in \
+            CLOUDFLARE_TUNNEL_TOKEN \
+            CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING \
+            CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS \
+            NETDATA_CLAIM_TOKEN \
+            NETDATA_CLAIM_ROOMS \
+            OPENOBSERVE_ROOT_EMAIL \
+            OPENOBSERVE_ROOT_PASSWORD \
+            OPENOBSERVE_INGEST_USER \
+            OPENOBSERVE_INGEST_PASSWORD \
+            CF_ACCESS_SIEM_CLIENT_ID \
+            CF_ACCESS_SIEM_CLIENT_SECRET \
+            R2_ACCESS_KEY_ID \
+            R2_SECRET_ACCESS_KEY \
+            TELEGRAM_BOT_TOKEN \
+            TELEGRAM_CHAT_ID \
+            ; do
+            value=$(printenv "$name" || true)
+            if [ -z "$value" ]; then
+              echo "skip $name: not set"
+              continue
+            fi
+            case "$value" in
+              *'#'*|*'$'*|*'"'*|*"'"*|*\\*|*'`'*)
+                echo "FAIL $name: contains a character a dotenv parser"
+                echo "     mangles -- hash, dollar, double quote, apostrophe,"
+                echo "     backslash or backtick. It would be silently truncated"
+                echo "     or rewritten. Rotate it to a value without them."
+                bad=1
+                ;;
+            esac
+            case "$value" in
+              ' '*|*' ')
+                echo "FAIL $name: has leading or trailing whitespace"
+                bad=1
+                ;;
+            esac
+          done
+          if [ "$bad" != 0 ]; then
+            echo "Refusing to deploy. Nothing has been written to any node."
+            exit 1
+          fi
+          echo "ok: every secret that lands in a dotenv file is parser-safe"
+
   deploy-vps00:
     needs: approve
     runs-on: ubuntu-latest
