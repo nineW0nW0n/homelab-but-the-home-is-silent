@@ -1,5 +1,7 @@
 ---
 name: Deploy Worker
+# Unnumbered, same reason as deploy.yml: GitHub supplies the run number.
+run-name: deploy worker ${{ github.ref_name }}
 
 on:
   push:
