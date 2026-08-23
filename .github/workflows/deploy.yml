@@ -1,5 +1,10 @@
 ---
 name: deploy
+# No number here on purpose: GitHub numbers the run itself (#53, #54 ...).
+# The default title is the merge commit subject, which carries the PR number
+# GitHub appends on squash -- so run #52 displayed as "(#51)" and read like
+# two different numbers for the same thing.
+run-name: deploy ${{ github.ref_name }}
 
 on:
   push:
