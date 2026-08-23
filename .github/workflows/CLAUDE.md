@@ -5,7 +5,13 @@ Parent: ../../.claude/CLAUDE.md
 `validate.yml` (lint gate), `deploy.yml` (parallel deploy to the three
 nodes), `deploy-worker.yml` (the `maybeit.work` status Worker: `npm test`
 then `wrangler deploy`, entirely separate from the node deploy path; see
-`worker/status/CLAUDE.md`).
+`worker/status/CLAUDE.md`), `port-sweep.yml` (daily off-node sweep of the
+`VPS0N_HOST` addresses -- rail 1's enforcement point; prints only
+`port N: OPEN/closed`, never an address, and fails on any open port but
+22 or on 22 closed. No approval gate: it deploys nothing, and
+check-rails' rail 7 check keys on ssh/rsync/wrangler, which it uses none
+of. A red run means an open port or an unreachable node -- investigate,
+never re-run until green).
 
 ## Flow
 
