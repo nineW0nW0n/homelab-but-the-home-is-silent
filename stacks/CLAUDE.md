@@ -97,6 +97,21 @@ every node ran a `dokploy-traefik` nothing in `stacks/` declared; since
 then every container on every node comes from its compose file, and a
 container that does not is drift to investigate.
 
+## Listener baseline (recorded 2026-08-24)
+
+`ss -lntH` on each node, post port-scheme migration. Anything beyond this
+set is drift to investigate; the scheduled off-node sweep
+(`.github/workflows/port-sweep.yml`, daily) enforces the public half of
+rail 1, but only `ss` on the node sees loopback listeners and UDP.
+
+- all three: `0.0.0.0:22` + `[::]:22` (sshd), `127.0.0.1:20241`
+  (cloudflared's built-in metrics endpoint -- it has no off switch, and
+  loopback-only is the accepted state; the design spec's "disable it"
+  item closes as not-doable, 2026-08-24)
+- vps00: `127.0.0.1:8050` (Netdata)
+- vps01: `127.0.0.1:8101` (booking), `:8102` (budget), `:8150` (Netdata)
+- vps02: `127.0.0.1:8250` (Netdata), `:8251` (OpenObserve)
+
 ## Netdata
 
 All 3 nodes, `network_mode: host`, bound to `127.0.0.1:8N50` per node --

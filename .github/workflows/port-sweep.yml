@@ -1,0 +1,53 @@
+---
+# Rail 1's enforcement point: the off-node port sweep, scheduled.
+# check-rails.sh is source-level only; this actually probes the nodes
+# from outside. Prints only "vps0N port N: OPEN/closed" — never an
+# address (rail 5). Fails if any port but 22 answers, or if 22 does
+# not (an unreachable node makes the sweep meaningless, so fail loud).
+name: port sweep
+
+"on":
+  schedule:
+    # 19:17 UTC = 03:17 Asia/Manila daily.
+    - cron: "17 19 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS00: ${{ secrets.VPS00_HOST }}
+      VPS01: ${{ secrets.VPS01_HOST }}
+      VPS02: ${{ secrets.VPS02_HOST }}
+    steps:
+      - name: Sweep all nodes
+        run: |
+          # /dev/tcp instead of nc: present on every runner, and immune
+          # to the netcat-variant flag drift in the failure logs.
+          fail=0
+          for node in VPS00 VPS01 VPS02; do
+            host="${!node}"
+            if [ -z "$host" ]; then
+              echo "$node: host secret is EMPTY"; fail=1; continue
+            fi
+            for port in 22 80 443 2377 3000 5080 8050 8101 8102 \
+                        8150 8250 8251 19999 20241; do
+              if timeout 3 bash -c "exec 3<>/dev/tcp/$host/$port" \
+                  2>/dev/null; then
+                state=OPEN
+              else
+                state=closed
+              fi
+              echo "$node port $port: $state"
+              case "$port:$state" in
+                22:closed) echo "$node: 22 unreachable"; fail=1 ;;
+                22:OPEN) ;;
+                *:OPEN) echo "$node: unexpected open port $port"; fail=1 ;;
+              esac
+            done
+          done
+          exit "$fail"
