@@ -226,11 +226,19 @@ Netdata is metrics; this is logs, deliberately a separate tool.
   that the `vector` container is running. Prove ingestion by hand, once
   per node: `logger -t siem-test "hello from $(hostname)"`, then find
   that line in the `journal` stream with the right `node` value.
-- **First-deploy named check, on vps02:** `docker logs vector 2>&1 |
-  grep -i 'error\|400'` must be empty *and* the stream must show rows.
-  Vector's `json` codec batch framing against `/_json` (a JSON array vs
-  NDJSON) is unverified until that run. If it 400s, set the sink's
-  `framing.method` explicitly rather than switching sinks.
+- **Wire format confirmed 2026-08-23, first successful ingest:** Vector's
+  `json` codec sends a JSON array and OpenObserve's `/_json` accepts it
+  as-is. No `framing.method` needed; don't add one.
+- **OpenObserve lowercases field names on ingest.** The journal's
+  `SYSLOG_IDENTIFIER` is queried as `syslog_identifier`; querying the
+  original case returns `unknown field`, with the lowercase form as its
+  suggestion. Search with SQL over the stream, e.g.
+  `SELECT node, syslog_identifier, message FROM journal WHERE
+  syslog_identifier = 'siem-test'`.
+- **`doc_num` on `/api/default/streams` reads 0 while rows are already
+  queryable** -- it counts what has been flushed to disk, not what is in
+  the WAL. Use `_search` to decide whether ingestion works; a zero there
+  means nothing arrived, a zero on `doc_num` means nothing yet.
 
 Backups, R2 retention and locks, restore/alarm drills and the backup
 staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
