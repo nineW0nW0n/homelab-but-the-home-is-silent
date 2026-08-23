@@ -263,6 +263,12 @@ incident history behind every one-line rule in every failure log here:
   start.** Dokploy's was uncapped and ate a disproportionate share of a 2GB
   node; a cap script bounded it until Dokploy itself was removed
   (2026-08-23, freed ~800 MB on vps00). Rail 4 now covers every container.
+- **Run every check on a verification list, even the one an earlier step
+  already passed.** The Dokploy removal's final task listed a public
+  `curl` of both apps; it had passed two hours earlier, so it was skipped.
+  Swarm was torn down in between and broke container DNS, and the next
+  deploy's verify step found the 500 instead (2026-08-23). A check that
+  passed before a change says nothing about after it.
 - Fail2Ban and `docker compose pull`-on-empty-stack live in
   `scripts/CLAUDE.md` and `.github/workflows/CLAUDE.md`: one script, one
   workflow, not cross-cutting.
