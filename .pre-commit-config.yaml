@@ -79,7 +79,7 @@ repos:
         name: hard rails (1 partial, 2, 3, 4, 7)
         entry: scripts/check-rails.sh
         language: system
-        files: ^((stacks|dokploy)/.*docker-compose\.yml|\.github/workflows/|scripts/)
+        files: ^(stacks/.*docker-compose\.yml|\.github/workflows/|scripts/)
         pass_filenames: false
 
       - id: biome-ci

@@ -5,8 +5,8 @@ Parent: ../../.claude/CLAUDE.md
 Serves the status page at the `maybeit.work` apex. No Cron Trigger and no
 `scheduled()` handler, deliberately (see failure log): polling happens
 inside `fetch()`, on a `/status.json` request, and only when the KV
-snapshot is older than `POLL_TTL_MS`. Deliberately **not** deployed via
-Dokploy/VPS; the design spec says why
+snapshot is older than `POLL_TTL_MS`. Deliberately **not** deployed to a
+VPS; the design spec says why
 (`docs/superpowers/specs/2026-08-15-maybeit-work-status-dashboard-design.md`).
 
 ## Layout
@@ -35,13 +35,13 @@ Dokploy/VPS; the design spec says why
   rule, which plain Node can't resolve). `npm test` is `node --test`, no
   framework; `deploy-worker.yml` runs it before `wrangler deploy`.
 - No dokploy anywhere: `page.html` hardcodes exactly 3 status-dot slots, one
-  per VPS node, and the poll behind it is gone. Check Dokploy by loading
-  `dokploy.maybeit.work`.
+  per VPS node, and the poll behind it is gone (as is Dokploy itself,
+  2026-08-23).
 
 ## Public exposure
 
 The apex is deliberately **public**, no Cloudflare Access in front of it,
-unlike the `*-metrics` and `dokploy` hostnames. Two things bound what a
+unlike the `*-metrics` and `siem` hostnames. Two things bound what a
 visitor can cost. `POLL_TTL_MS` (30s, `poll.js`) caps upstream polling, so
 traffic volume can't become load on the nodes: a snapshot inside the TTL is
 served from KV without touching Netdata. `cache-control` caps Worker
@@ -73,8 +73,8 @@ deployed-Worker change, so ask first.
 service token from the design's dashboard step, set via `wrangler secret
 put`, never in this directory. Since 2026-08-20 it opens the `*-metrics`
 applications only — its `status-worker service auth` policy was detached
-from the `dokploy.maybeit.work` application, so leaking this Worker's
-secrets no longer reaches the deploy control plane.
+from the `dokploy.maybeit.work` application (itself deleted 2026-08-23),
+so leaking this Worker's secrets no longer reaches a deploy control plane.
 
 `DEBUG_KEY`: shared header value gating `/debug`, sent as `x-debug-key`, and
 pushed by `deploy-worker.yml` from the GitHub secret of the same name. Unset
@@ -120,8 +120,8 @@ Incident histories behind these rules: `failure-log` skill
   proves: an unauthenticated `GET` follows Access's 302 to a 200 login
   page and stays green forever. (Narrative archived in
   `docs/superpowers/failure-log-archive.md`.)
-- **`dokploy.maybeit.work` and each `*-metrics` host are separate Access
-  applications,** not one shared app — so a token opening both is a policy
+- **Each ops hostname (`siem`, each `*-metrics`; formerly `dokploy`) is
+  its own Access application,** not one shared app — so a token opening both is a policy
   to narrow, not a fact of life.
 - **An empty Zero Trust result set is a credential-scope symptom, not a
   platform limit.** This entry read "Access work is dashboard-only" until

@@ -197,7 +197,7 @@ Never register a second marketplace for a plugin you already have.
 | PR touches a hard rail or a `docs/superpowers/specs/` item | `code-review` | before merge; it reviews Standards and Spec, and this repo has both as literal artifacts — 12 rails, per-directory `CLAUDE.md`, the specs dir |
 | PR touches `harden-node.sh`, a token/secret path, or an Access policy | `security-review` | before merge; rails 1, 2, 6, 11 |
 | Editing any `CLAUDE.md` or any skill | `writing-for-agents` | before the edit — and root's propagation protocol wins on any conflict with it |
-| A step only Ex can do in a dashboard: Access app, tunnel public hostname, GitHub repo secret, Dokploy env tab, R2 lock rule | `wizard` | instead of writing those steps as prose in a handoff; Ex is not an engineer and wants direct links |
+| A step only Ex can do in a dashboard: Access app, tunnel public hostname, GitHub repo secret, R2 lock rule | `wizard` | instead of writing those steps as prose in a handoff; Ex is not an engineer and wants direct links |
 | Narrowing an Access policy, adding a public hostname, or telling a 530 (tunnel never connected) from a 403 (Access) | `cloudflare:cloudflare-one` | before changing Access or Tunnel config |
 | You are about to run `wrangler secret put`, `r2 bucket lock add`, `kv`, or `dev` | `cloudflare:wrangler` | before the command; wrangler is pinned at 4.123.0 in `worker/status/package.json` |
 
@@ -287,7 +287,7 @@ Also off-Cloudflare: whether the tunnel token *files* on each node
 actually differ (only live connector identity is visible); Worker **JS**
 byte-equality, since it ships esbuild-bundled with comments stripped —
 that needs a local `wrangler deploy --dry-run --outdir` and a diff; and
-anything behind the tunnel — Netdata internals, Dokploy state, container
+anything behind the tunnel — Netdata internals, container state, container
 memory limits, so rail 4 too.
 
 Untested this session, so don't claim these work: R2 object listing and

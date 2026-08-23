@@ -69,7 +69,7 @@ echo "-- sshd --"
 # 'PermitRootLogin yes' (measured on all three, 2026-08-20). Every doc in this
 # repo used to say Debian's 'prohibit-password' default applied -- it does not.
 # 'prohibit-password' keeps key-based root working, which both these
-# provisioning scripts and Dokploy's Remote Server connection need, and drops
+# provisioning scripts need (they run as root over SSH), and drops
 # only the password path. Include sits at line 12, ahead of line 33, so the
 # drop-in wins.
 cat > /etc/ssh/sshd_config.d/00-hardening.conf <<'SSHD'
@@ -162,8 +162,8 @@ WANUNIT
 
   # Second layer: stop Docker binding new published ports to 0.0.0.0 in the
   # first place. Weaker on its own than the drop rules above (a container
-  # that explicitly asks for 0.0.0.0:PORT:PORT still gets it, and Dokploy's
-  # UI can generate exactly that), which is why both are in place.
+  # that explicitly asks for 0.0.0.0:PORT:PORT still gets it, and a
+  # compose file can say exactly that), which is why both are in place.
   mkdir -p /etc/docker
   if [ ! -e /etc/docker/daemon.json ]; then
     printf '{\n  "ip": "127.0.0.1"\n}\n' > /etc/docker/daemon.json

@@ -13,22 +13,17 @@ apply. Six of the seven node scripts pass no `-i` either and silently
 depend on the right key already being agent-loaded: run `ssh-add
 ~/.ssh/id_ed25519_vps`, or pass the `vps0N-root` alias instead of a bare IP.
 Symptom when you forget: `Permission denied (publickey)`.
-`cap-dokploy-resources.sh` is the exception — it honours an optional
-`SSH_KEY` env var — and the other six are worth the same one-line
-treatment when someone next touches them.
+None honours an `SSH_KEY` env var yet (the one script that did was the
+Dokploy cap script, deleted 2026-08-23); worth the one-line treatment when
+someone next touches them.
 
 ## Scripts
 
 - `provision-deploy-user.sh <node> <host>`: `deploy` CI user, key-only, no
   sudo (rail 6); installs rsync; owns `/opt/stacks/<node>`.
-- `install-docker.sh <host>`: Docker Engine from Docker's apt repo, no
-  Dokploy.
-- `bootstrap-dokploy.sh`: one-time, vps00 only, installs the Dokploy
-  control plane; needs `VPS00_HOST` in `.env` or the environment.
-  vps01/vps02 instead join via the dashboard (Settings > Servers > Add
-  Server), a different flow, not this script — and that connection is as
-  **root** (Dokploy's own keypair, pasted into `authorized_keys` by hand
-  during setup), not `deploy`, which has no sudo.
+- `install-docker.sh <host>`: Docker Engine from Docker's apt repo. That
+  is the whole runtime: no control plane, Swarm inactive (Dokploy and its
+  Swarm left all three nodes 2026-08-23).
 - `harden-node.sh <host>`, in this order: UFW (deny incoming except 22);
   sshd (`PasswordAuthentication no`, `KbdInteractiveAuthentication no`,
   `PermitRootLogin prohibit-password`, `UsePAM no`, in
@@ -39,11 +34,6 @@ treatment when someone next touches them.
   assertion post-date that: re-run it.
 - `add-swap.sh <host> [size_gb]`: swapfile, 2G default, `vm.swappiness=10`.
   Nodes have no swap by default. Applied to all 3.
-- `cap-dokploy-resources.sh <host>`: memory-caps Dokploy's own control
-  plane, not app workloads (those get `mem_limit` in their compose, rail
-  4). `dokploy` 1024M/512M, `dokploy-postgres` 320M/128M,
-  `dokploy-traefik` 128m with 256m memory+swap. Takes an optional
-  `SSH_KEY`; unset, it behaves like the rest and leans on the agent.
 - `setup-maintenance.sh <host>`: switches Docker's log driver to
   `journald` in `daemon.json` (container stdout lands in the systemd
   journal, which `stacks/<node>/vector.yaml` reads -- no `docker.sock`
@@ -56,7 +46,7 @@ treatment when someone next touches them.
   --filter until=168h`, never volumes), enables `unattended-upgrades`
   (Debian's shipped security-only origins, never overridden). No
   RAM-freeing cron: dropping page cache frees nothing real, and swap plus
-  the Dokploy caps cover memory pressure.
+  rail 4's caps cover memory pressure.
 - `install-aide.sh <host>`: installs AIDE, builds the file-integrity
   baseline once (`aideinit`, a few minutes of CPU), and disables Debian's
   `dailyaidecheck.timer` (mails root, no mail here). A daily cron.d entry
@@ -82,9 +72,9 @@ treatment when someone next touches them.
   on `json-file` -- the driver is fixed at creation. Assert
   `docker inspect -f '{{.HostConfig.LogConfig.Type}}' <name>` per
   container, and run `docker compose up -d --force-recreate` on each node.
-  Containers Dokploy owns (the apps, `dokploy-traefik`) are not in these
-  stacks and need a Redeploy from its UI instead. `docker info` is the
-  daemon default, never proof about a running container.
+  Every container is in a stack since 2026-08-23, so `--force-recreate`
+  covers the fleet. `docker info` is the daemon default, never proof
+  about a running container.
 - **A long remote command can finish while the local ssh hangs forever.**
   `install-aide.sh`'s `aide --init` runs for many minutes with no output;
   on vps00 and vps01 the connection died during it, so the local log froze
@@ -122,10 +112,9 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
   rules are evaluated before ufw's chains. Filter in `DOCKER-USER`, plus
   `DOCKER-INGRESS` for ingress-mode Swarm publishes, which
   `harden-node.sh` does **not** cover. Sweep the ports from off-node. That
-  gap is latent, not live, as of 2026-08-20: vps00 runs two Swarm services
-  (`dokploy` publishes 3000 with `PublishMode: host`, `dokploy-postgres`
-  publishes nothing) and vps01/vps02 run zero, so the fleet has no
-  ingress-mode publish anywhere — the next Swarm workload is what springs
+  gap is latent, not live: Swarm is inactive on all three nodes since
+  2026-08-23 (it existed only for Dokploy), so `DOCKER-INGRESS` does not
+  exist and nothing can publish through it — re-enabling Swarm is what springs
   it. Note `iptables -S DOCKER-INGRESS` errors with "chain is incompatible,
   use 'nft' tool" on all three, so that chain is not inspectable with the
   legacy tool.
@@ -160,14 +149,14 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
 - **A `docker-ce` upgrade does not flush `DOCKER-USER`** — Docker creates
   that chain when absent and never rewrites it, so rail 1 survives and
   `unattended-upgrades` is safe here.
-- **Reapply Dokploy's memory caps after any reinstall or upgrade** — none
-  of it is declarative — and by the right mechanism: Swarm services take
-  `docker service update --limit-memory` (plain `docker update` is
-  silently reconciled away), `dokploy-traefik` takes `docker update
-  --memory`.
+- **Imperative resource caps do not survive a reinstall** — Dokploy's had
+  to be reapplied by hand after every upgrade. Archived 2026-08-23 with
+  Dokploy's removal; the lesson that stays is rail 4: caps live in the
+  compose file or they do not exist.
 - **A script targeting "every node" must skip a missing target, not die**
-  — `cap-dokploy-resources.sh` opened with a vps00-only service under
-  `set -eu`, so traefik went uncapped on both secondaries.
+  under `set -eu` — the Dokploy cap script once exited on vps00's
+  control-plane service and left both secondaries uncapped (archived
+  2026-08-23, script deleted).
 - **On a no-swap node a transient memory spike is a hard OOM kill,** not
   a slowdown, and it does not announce itself as one. `add-swap.sh`, plus
   real headroom in rail 4's limits.
@@ -176,6 +165,6 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
   `infra/inventory.yaml`; enforced by the `no-real-ips` hook.
 - **`install-docker.sh` uses Docker's apt repo, not `get.docker.com | sh`**
   — GPG-verified packages, upgrades via apt. Untested on a fresh node.
-- **`bootstrap-dokploy.sh`'s printed sha256 is a record, not a
-  verification** — Dokploy publishes no checksum to compare against, so
-  don't upgrade the claim.
+- **A printed sha256 is a record, not a verification** unless the vendor
+  publishes one to compare against (Dokploy's bootstrap did not; archived
+  2026-08-23, script deleted).

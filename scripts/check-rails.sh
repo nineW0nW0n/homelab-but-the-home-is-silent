@@ -56,12 +56,12 @@ check_compose() {
 }
 
 found=0
-for f in stacks/*/docker-compose.yml dokploy/*/docker-compose.yml; do
+for f in stacks/*/docker-compose.yml; do
   [ -f "$f" ] || continue
   found=$((found + 1))
   check_compose "$f"
 done
-[ "$found" -ge 2 ] || err "found $found compose files under stacks/ and dokploy/ -- expected both trees to exist"
+[ "$found" -ge 3 ] || err "found $found compose files under stacks/ -- expected one per node"
 
 # --- rail 2: one tunnel token per node, never shared --------------------
 # A shared token makes the two nodes one interchangeable connector pool, so

@@ -35,10 +35,11 @@ closes cleanly: a few seconds of downtime buys a provably consistent database
 file. An `EXIT` trap restarts it, so a failed tar or upload never leaves the app
 down. Volumes are read through a throwaway `alpine` container rather than
 `/var/lib/docker/volumes`, because the deploy user has Docker access but no sudo
-(rail 6). Volume names carry the Dokploy project prefix
-(`vps01booking-ezbookkeeping-rqdyxo_{data,storage}`) and change if the Dokploy
-app is recreated, so `VOLUME_PREFIX` in the script is the first thing to check
-when backups start failing after Dokploy work.
+(rail 6). Volume names carry Dokploy's old project prefix
+(`vps01booking-ezbookkeeping-rqdyxo_{data,storage}`), frozen in
+`docker-compose.yml` as `external: true` volumes since Dokploy was removed
+(2026-08-23), so `VOLUME_PREFIX` in the script and the `name:` in the compose
+file must agree -- the first thing to check when backups start failing.
 
 **The staleness alert does not go through Netdata.** `check-backup-age.sh` runs
 hourly (`30 * * * *`), reads the same `.last-success` stamp and calls the
@@ -118,8 +119,8 @@ time). Re-run once there is real data.
 
 **Restore:** pull the archive, `tar xzf`, copy `data/` and `storage/` back into
 the two volumes with the same throwaway-container trick. Restoring without
-`EBK_SECURITY_SECRET_KEY` (Dokploy env tab, also in Ex's password manager) gets
-the books back but invalidates every session.
+`EBK_SECURITY_SECRET_KEY` (GitHub secret `BUDGET_SECRET_KEY`, also in Ex's
+password manager) gets the books back but invalidates every session.
 
 ## booking MySQL backups
 
@@ -164,9 +165,9 @@ dump reaching R2.
 
 The table floor exists because the trailer alone is not enough: an
 empty-but-existing database dumps as a complete, valid, trailer-carrying file
-with zero tables — exactly what a Dokploy app rename produces (the volume name
-derives from the app, so `MYSQL_DATABASE` recreates `easyappointments` empty and
-MySQL starts happily; see the `dokploy/booking/docker-compose.yml` header).
+with zero tables — exactly what a wrong volume name produces (`MYSQL_DATABASE`
+recreates `easyappointments` empty and MySQL starts happily; that is why the
+volume is `external: true` in `docker-compose.yml`, see the failure log).
 Uncaught, it uploads green while R2 lifecycle ages out the last real copy. 14
 tables measured 2026-08-19, floor 10 so schema churn doesn't cry wolf. Known
 ceiling: it catches a *table-less* database, not an *empty* one — reinstall
@@ -251,3 +252,12 @@ Incident histories behind these rules: `failure-log` skill
   `--exclude`, added in the same commit as the state** — `backup/` (run
   log, local archive, `.last-success` stamp) was deleted on every deploy
   and the age alarm sat CRIT unnoticed for half a day.
+- **The app volumes are `external: true` and their names are frozen.**
+  `booking-ptpwn8_mysql-data`, `vps01booking-ezbookkeeping-rqdyxo_data` and
+  `..._storage` are Dokploy's old project-prefixed names, kept after Dokploy
+  was removed (2026-08-23) because `backup-booking.sh` and
+  `backup-ezbookkeeping.sh` hardcode them and because a rename starts MySQL
+  on an empty database. `external: true` is what makes a wrong name fail
+  loudly instead of silently creating an empty volume. Container names
+  (`booking-ptpwn8-mysql-1`, `ezbookkeeping`) are frozen for the same
+  scripts. They look like leftovers because they are; do not tidy them.
