@@ -86,9 +86,13 @@ services:
       ZO_MEMORY_CACHE_MAX_SIZE: "64"
     volumes:
       - openobserve-data:/data
-    # Rail 4. Hedged until measured; revisit after a week of real logs.
-    mem_limit: 384m
-    mem_reservation: 192m
+    # Rail 4. Measured 2026-08-23 after ~50 min of real ingest from three
+    # nodes: 338-343 MiB steady across three samples, which was 89% of the
+    # old 384m cap. Raised for headroom, not because it was growing -- 43
+    # MiB spare leaves nothing for a compaction or a wide query, and an
+    # OOM kill just restarts the container and loses the WAL quietly.
+    mem_limit: 512m
+    mem_reservation: 256m
 
   vector:
     # Ships this node's journal to OpenObserve. See vector.yaml.
