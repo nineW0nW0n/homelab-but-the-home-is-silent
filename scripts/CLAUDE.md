@@ -76,6 +76,25 @@ treatment when someone next touches them.
 
 ## Failure log
 
+- **A Docker log-driver change needs the containers *recreated*, not just
+  the daemon restarted.** `daemon.json` + `systemctl restart docker` makes
+  `docker info` report `journald` while every existing container is still
+  on `json-file` -- the driver is fixed at creation. Assert
+  `docker inspect -f '{{.HostConfig.LogConfig.Type}}' <name>` per
+  container, and run `docker compose up -d --force-recreate` on each node.
+  Containers Dokploy owns (the apps, `dokploy-traefik`) are not in these
+  stacks and need a Redeploy from its UI instead. `docker info` is the
+  daemon default, never proof about a running container.
+- **A long remote command can finish while the local ssh hangs forever.**
+  `install-aide.sh`'s `aide --init` runs for many minutes with no output;
+  on vps00 and vps01 the connection died during it, so the local log froze
+  on "Running aide --init..." and never printed "Done." -- while the
+  baseline, the runner and the cron entry had all been written correctly.
+  The local transcript is not evidence of remote state: check the artefacts
+  the script was supposed to leave (`/var/lib/aide/aide.db`,
+  `/usr/local/sbin/aide-daily`, `/etc/cron.d/aide-daily`) before concluding
+  anything, and re-run -- it is idempotent.
+
 Incident histories behind these rules: `failure-log` skill (`scripts/`).
 
 - **Fail2Ban needs `backend = systemd`** — no `rsyslog` here, so the
