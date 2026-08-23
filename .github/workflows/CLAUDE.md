@@ -178,7 +178,13 @@ Incident histories behind these rules: `failure-log` skill
   `paths:` listed `infra/`, which nothing rsyncs, so a docs-only edit to
   `infra/CLAUDE.md` queued a full three-node production deploy that sat
   13h at the approval gate and then shipped a by-then stale `deploy.yml`
-  that wiped vps01's backup state.
+  that wiped vps01's backup state. The same lesson recurred one directory
+  in on 2026-08-23: `stacks/**` matches `stacks/CLAUDE.md`, so editing
+  documentation deployed to production. Negated patterns now exclude both
+  `stacks/CLAUDE.md` and `stacks/**/CLAUDE.md` -- **both forms, because
+  `**` matches across slashes and does not reliably match the top-level
+  file.** `paths` and `paths-ignore` cannot both be set for one event, so
+  the exclusion has to live inside `paths`, below what it narrows.
 - **Read the matched rule in Security → Events before theorising about a
   403.** Post-deploy probes of the public hostnames from the runner fail
   on a zone-wide Cloudflare custom rule, `Block non-local traffic`
