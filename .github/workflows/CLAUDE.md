@@ -32,10 +32,15 @@ then `wrangler deploy`, entirely separate from the node deploy path; see
    that node's tunnel token and Netdata claim values into a remote `.env`
    (piped over SSH stdin under `umask 077`, never a CLI arg, never
    committed), then `docker compose pull && up -d && image prune -f &&
-   restart netdata`, guarded: no services in the stack, skip pull/up
-   instead of erroring (failure log). The trailing `restart netdata` is
-   needed because bind-mounted `netdata.conf` / `health_alarm_notify.conf`
-   edits don't force a recreate on their own.
+   restart netdata vector`, guarded: no services in the stack, skip
+   pull/up instead of erroring (failure log). The trailing `restart` is
+   needed because a bind-mounted config file -- `netdata.conf`,
+   `health_alarm_notify.conf`, `vector.yaml` -- is not part of the
+   container spec, so changing it does not force a recreate and `up -d`
+   leaves the old process running with the old file. `vector` joined that
+   list after a deploy shipped a fixed `vector.yaml` and changed nothing:
+   the only reason it took effect was that the container happened to be
+   crashlooping and picked the new file up on its next restart.
 4. vps01 only: the rsync excludes `backup/`, `backup-booking/`, `.r2.env`,
    `.telegram.env` (failure log), two extra steps write those two
    credential files, and one brace group piped to `crontab -` installs all

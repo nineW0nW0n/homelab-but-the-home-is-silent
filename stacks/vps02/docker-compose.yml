@@ -102,6 +102,14 @@ services:
     # batch logs an error that the journald log driver feeds back in.
     depends_on: [openobserve]
     environment:
+      # Vector 0.57.0 turned config env-var interpolation OFF by
+      # default; every ${...} in vector.yaml was passed through as a
+      # literal string until this was set. The sink URI became a URI
+      # containing spaces and braces -- "invalid uri character" --
+      # and the credentials were the literal text of their own
+      # placeholders. Upstream suggests the secrets backend instead;
+      # that is a bigger change than this rollout wants today.
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       NODE_NAME: vps02
       OPENOBSERVE_INGEST_URL: http://127.0.0.1:5080
       OPENOBSERVE_INGEST_USER: ${OPENOBSERVE_INGEST_USER}
