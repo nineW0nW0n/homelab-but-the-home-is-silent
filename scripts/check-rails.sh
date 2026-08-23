@@ -125,7 +125,7 @@ else
 fi
 
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
-echo "        are closed: nc -z -w 3 <ip> 22 80 443 2377 3000 5080 19999"
+echo "        are closed: nc -z -w 3 <ip> 22 80 443 8050 8101 8102 8150 8250 5080"
 echo "        (no -G: BSD-only, Debian nc exits 1 without connecting)"
 
 # --- Docker's journald log driver still set --------------------------------

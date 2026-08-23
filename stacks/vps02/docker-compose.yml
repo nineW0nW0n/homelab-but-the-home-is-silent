@@ -8,7 +8,7 @@
 # shared token load-balances requests across nodes with different
 # origins and 502s).
 #
-# network_mode: host so localhost:19999 in the tunnel's Public Hostname
+# network_mode: host so localhost:8250 in the tunnel's Public Hostname
 # route resolves to this VPS's own Netdata, not the container's netns.
 services:
   cloudflared:

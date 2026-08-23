@@ -4,7 +4,7 @@
 # services go here in addition to cloudflared.
 #
 # cloudflared runs on network_mode: host so tunnel origin URLs like
-# http://localhost:19999 resolve to the VPS itself, not the container's
+# http://localhost:8050 resolve to the VPS itself, not the container's
 # own network namespace (bridge mode caused 502s reaching the origin).
 services:
   cloudflared:

@@ -6,7 +6,8 @@ One `docker-compose.yml` per node, deployed by `deploy.yml` to
 `/opt/stacks/<node>/`. Each runs that node's `cloudflared` connector (rails 2,
 3) plus every workload on that node. No reverse proxy: each app publishes
 one loopback port on the `8NXX` scheme (`N` = node, `01-49` apps, `50-99`
-tools; `19999` and `5080` predate it) and `cloudflared` dials it directly.
+tools; Netdata moved `19999`→`8N50` on 2026-08-24, `5080` still predates
+it) and `cloudflared` dials it directly.
 
 ## Tunnel mode and routes
 
@@ -23,7 +24,7 @@ Seven routes, all live -- read back from the API 2026-08-23 after the
 Dokploy removal (`dokploy.maybeit.work`, its Access apps, its CNAME and
 its WAF bypass were deleted that day). Across three tunnels:
 
-- `vps00-metrics.maybeit.work` → `http://localhost:19999` on vps00, token
+- `vps00-metrics.maybeit.work` → `http://localhost:8050` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. Behind its own Access app. The only route on
   that tunnel now.
 - `booking.maybeit.work` → `http://localhost:8101` on vps01
@@ -38,9 +39,9 @@ its WAF bypass were deleted that day). Across three tunnels:
   policy — nothing automated polls it. **Access breaks non-browser
   ezBookkeeping clients**, which cannot complete the login flow; if a
   mobile or desktop client needs to sync, that is the trade-off to revisit.
-- `vps01-metrics.maybeit.work` → `http://localhost:19999` on vps01, same
+- `vps01-metrics.maybeit.work` → `http://localhost:8150` on vps01, same
   tunnel, behind Access.
-- `vps02-metrics.maybeit.work` → `http://localhost:19999` on vps02, token
+- `vps02-metrics.maybeit.work` → `http://localhost:8250` on vps02, token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, behind
   Access, and vps02's first workload *from this repo*.
 - `siem.maybeit.work` → `http://localhost:5080` on vps02, same tunnel:
@@ -98,8 +99,9 @@ container that does not is drift to investigate.
 
 ## Netdata
 
-All 3 nodes, `network_mode: host`, bound to `127.0.0.1:19999` (`[web] bind to`
-in `netdata.conf`); public access only via that node's `cloudflared` route.
+All 3 nodes, `network_mode: host`, bound to `127.0.0.1:8N50` per node --
+8050/8150/8250, `[web] default port` + `bind to` in `netdata.conf`; public
+access only via that node's `cloudflared` route.
 Config splits two ways: `netdata.conf` (committed, no secrets; identical on
 vps00/vps02, vps01 adds `[plugins] backup_age = yes`) and
 `health_alarm_notify.conf` (generated at deploy time, never committed —
@@ -110,7 +112,7 @@ vps00/vps02, vps01 adds `[plugins] backup_age = yes`) and
 OpenObserve's job, and the three receivers had no sender. Accepted cost:
 while OpenObserve or Vector is down there is no dashboard view of a node's
 logs; recovery reading is `ssh` + `journalctl`. The plugin keys are the
-ones the agent prints at `http://127.0.0.1:19999/netdata.conf`, not the
+ones the agent prints at `http://127.0.0.1:8N50/netdata.conf`, not the
 binary names in `ps` (`sd-jrnl.plugin` is `systemd-journal`). Effective
 values were read back from that URL on vps02 before merging: assert there,
 never from the file you wrote. Note `netflow` had been listening on
