@@ -288,7 +288,7 @@ jobs:
               echo "FAIL $label: last code $code"
               return 1
             }
-            probe netdata http://127.0.0.1:19999/api/v1/info
+            probe netdata http://127.0.0.1:8050/api/v1/info
             # 2>/dev/null || echo missing: unguarded, set -e kills the
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
@@ -519,7 +519,7 @@ jobs:
               echo "FAIL $label: last code $code"
               return 1
             }
-            probe netdata http://127.0.0.1:19999/api/v1/info
+            probe netdata http://127.0.0.1:8150/api/v1/info
             # 2>/dev/null || echo missing: unguarded, set -e kills the
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
@@ -696,7 +696,7 @@ jobs:
               echo "FAIL $label: last code $code"
               return 1
             }
-            probe netdata http://127.0.0.1:19999/api/v1/info
+            probe netdata http://127.0.0.1:8250/api/v1/info
             # 2>/dev/null || echo missing: unguarded, set -e kills the
             # script at this assignment when the container does not
             # exist, so the FAIL line below never prints and the log
