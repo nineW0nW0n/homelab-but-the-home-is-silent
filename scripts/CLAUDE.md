@@ -7,12 +7,15 @@ Idempotent POSIX `sh`, one-time-per-node unless noted — except
 the bar (pre-commit enforces it). Run twice, confirm the second run is a
 no-op, before calling a script change done.
 
-**`ssh-add` first.** No node script passes `-i`, and the usage examples take
-a bare IP, which matches no `Host` block in `~/.ssh/config`, so
-`IdentityFile`/`IdentitiesOnly` never apply either. All seven silently
+**`ssh-add` first.** The usage examples take a bare IP, which matches no
+`Host` block in `~/.ssh/config`, so `IdentityFile`/`IdentitiesOnly` never
+apply. Six of the seven node scripts pass no `-i` either and silently
 depend on the right key already being agent-loaded: run `ssh-add
 ~/.ssh/id_ed25519_vps`, or pass the `vps0N-root` alias instead of a bare IP.
 Symptom when you forget: `Permission denied (publickey)`.
+`cap-dokploy-resources.sh` is the exception — it honours an optional
+`SSH_KEY` env var — and the other six are worth the same one-line
+treatment when someone next touches them.
 
 ## Scripts
 
@@ -39,7 +42,8 @@ Symptom when you forget: `Permission denied (publickey)`.
 - `cap-dokploy-resources.sh <host>`: memory-caps Dokploy's own control
   plane, not app workloads (those get `mem_limit` in their compose, rail
   4). `dokploy` 1024M/512M, `dokploy-postgres` 320M/128M,
-  `dokploy-traefik` 128m with 256m memory+swap.
+  `dokploy-traefik` 128m with 256m memory+swap. Takes an optional
+  `SSH_KEY`; unset, it behaves like the rest and leans on the agent.
 - `setup-maintenance.sh <host>`: switches Docker's log driver to
   `journald` in `daemon.json` (container stdout lands in the systemd
   journal, which `stacks/<node>/vector.yaml` reads -- no `docker.sock`
