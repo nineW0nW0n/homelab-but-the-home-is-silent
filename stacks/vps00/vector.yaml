@@ -1,0 +1,66 @@
+---
+# Vector shipper. One source (the host systemd journal), one sink
+# (OpenObserve). This file is byte-identical on vps00, vps01 and vps02
+# on purpose -- check-rails.sh fails if the three copies drift. Per-node
+# differences are environment only (compose sets NODE_NAME and
+# OPENOBSERVE_INGEST_URL; deploy.yml writes the credentials to .env).
+#
+# No docker.sock: container stdout reaches the journal through Docker's
+# journald log driver (scripts/setup-maintenance.sh), so the journal is
+# the only thing Vector reads.
+data_dir: /var/lib/vector
+
+sources:
+  journal:
+    type: journald
+    # No journal_directory on purpose: let journalctl resolve it. A node
+    # with Storage=auto and no /var/log/journal keeps its journal in
+    # /run/log/journal, and a pinned directory would read an empty dir,
+    # ship nothing, and report healthy. Both paths are mounted in compose.
+    # Ship history on first start, not just this boot; the checkpoint in
+    # data_dir stops re-sends after that.
+    current_boot_only: false
+    # Vector's own stderr lands in the journal too (Docker's journald log
+    # driver), so a failing sink logs an error that becomes an event that
+    # fails again: a self-feeding loop. Drop our own container's logs.
+    exclude_matches:
+      CONTAINER_NAME: ["vector"]
+
+transforms:
+  tag_node:
+    type: remap
+    inputs: [journal]
+    source: |
+      .node = "${NODE_NAME:?NODE_NAME must be set}"
+      # OpenObserve's /_json takes event time from _timestamp and otherwise
+      # stamps ingest time, which would flatten the first-start backfill
+      # (current_boot_only: false) onto one clock reading.
+      ._timestamp = to_unix_timestamp(timestamp!(.timestamp), unit: "microseconds")
+
+sinks:
+  openobserve:
+    type: http
+    inputs: [tag_node]
+    uri: "${OPENOBSERVE_INGEST_URL:?OPENOBSERVE_INGEST_URL must be set}/api/default/journal/_json"
+    method: post
+    auth:
+      strategy: basic
+      user: "${OPENOBSERVE_INGEST_USER:?OPENOBSERVE_INGEST_USER must be set}"
+      password: "${OPENOBSERVE_INGEST_PASSWORD:?OPENOBSERVE_INGEST_PASSWORD must be set}"
+    compression: gzip
+    encoding:
+      codec: json
+      timestamp_format: rfc3339
+    batch:
+      max_events: 500
+      timeout_secs: 5
+    request:
+      # Cloudflare Access service token. Empty on vps02, which posts to
+      # localhost and never crosses the edge; OpenObserve ignores them.
+      headers:
+        CF-Access-Client-Id: "${CF_ACCESS_SIEM_CLIENT_ID:-}"
+        CF-Access-Client-Secret: "${CF_ACCESS_SIEM_CLIENT_SECRET:-}"
+    # Off: the healthcheck would hit the bare URI, which Access answers
+    # with a redirect, and Vector would refuse to start on vps00/vps01.
+    healthcheck:
+      enabled: false

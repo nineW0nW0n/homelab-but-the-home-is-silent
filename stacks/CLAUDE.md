@@ -17,7 +17,9 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Six hostnames are live (verified 2026-08-20), across three tunnels:
+Eight routes documented; six live (verified 2026-08-20), two (`siem`,
+`siem-ingest`) pending until their Cloudflare objects exist. Across three
+tunnels:
 
 - `dokploy.maybeit.work` → `http://localhost:3000` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. **Behind a Cloudflare Access application**
@@ -31,15 +33,15 @@ Six hostnames are live (verified 2026-08-20), across three tunnels:
   client** — the zone's geo rule 403s everything else before Access is
   reached, and `/api/deploy` is a separate bypass app that answers `401`.
 - `vps00-metrics.maybeit.work` → `http://localhost:19999` on vps00, same
-  tunnel. Behind its own Access app; the `status-worker` service token opens
-  the three `*-metrics` apps and nothing else.
+  tunnel. Behind its own Access app.
 - `booking.maybeit.work` → `http://localhost:80` on vps01 (Dokploy's own
   Traefik, forwarding to whichever container the Domain in Dokploy's UI points
   at), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
 - `budget.maybeit.work` → `http://localhost:80` on vps01, same tunnel:
   ezBookkeeping, the SQLite dataset `vps01/CLAUDE.md` backs up. Behind its
-  own Access application (`budget`, 24h session) since 2026-08-20, one
-  policy: `owner email allow`. Until then the zone geo rule was the only
+  own Access application (`budget`, 24h session) since 2026-08-20, **two**
+  policies: `owner email allow` and `partner email allow` (read back from
+  the API 2026-08-23). Until then the zone geo rule was the only
   thing in front of it, so it was open to anyone in PH. No service-token
   policy — nothing automated polls it. **Access breaks non-browser
   ezBookkeeping clients**, which cannot complete the login flow; if a
@@ -49,8 +51,36 @@ Six hostnames are live (verified 2026-08-20), across three tunnels:
 - `vps02-metrics.maybeit.work` → `http://localhost:19999` on vps02, token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, behind
   Access, and vps02's first workload *from this repo*.
+- `siem.maybeit.work` → `http://localhost:5080` on vps02, same tunnel:
+  the OpenObserve UI. Access application `siem`, one policy,
+  `owner email allow`, PH-only like `budget` and `dokploy`.
+  OpenObserve's own login sits behind that.
+- `siem-ingest.maybeit.work` → the same origin on vps02, same tunnel:
+  the ingest endpoint vps00/vps01's Vector posts to. Access application
+  `siem-ingest`, one policy: service auth for the `siem-ingest` token.
+  **Exempt from the zone geo rule** (`and http.host ne
+  "siem-ingest.maybeit.work"`) because the nodes are US-hosted and would
+  403 otherwise; only the country check is lifted, so it is still 403
+  without the token, and OpenObserve's basic auth is a second lock
+  behind it.
 
 Every tunnel's catch-all is `http_status:404`.
+
+**Ex's partner gets her own policy on the apps she uses, never a shared
+login.** One `partner email allow` policy per app, added alongside
+`owner email allow`, so access is granted and revoked per app and the
+Access log names who did what. Today that is `budget` alone — the
+household's books are hers too. Adding her to another app is one more
+policy on that app, not a wider policy on this one, and not a second
+account sharing the owner's address. Ops surfaces (`dokploy`, `siem`, the
+three `*-metrics` apps) stay owner-only: nothing there is hers to use, and
+a policy that exists is a policy that can be widened by accident.
+
+**Two service tokens, never crossed.** `status-worker` opens the three
+`*-metrics` apps and nothing else; `siem-ingest` opens `siem-ingest` and
+nothing else. Adding either token's policy to the other's app hands one
+credential a scope it was minted to not have — the same mistake as the
+`dokploy` app's detached policy above.
 
 **One token per node (rail 2):** Cloudflare load-balances a hostname across
 *every* connector on its tunnel — a route is not pinned to a node — so one
@@ -153,6 +183,55 @@ fire on their first real transition. The backup alarm's silence was specific
 to its own dedup state (`vps01/CLAUDE.md` failure log — that entry moved
 there with the backup sections), not a property of the recipient.
 
+## Logs (OpenObserve + Vector)
+
+Design: `docs/superpowers/specs/2026-08-22-siem-openobserve-design.md`.
+Netdata is metrics; this is logs, deliberately a separate tool.
+
+- vps02 runs `openobserve` (store + UI, `127.0.0.1:5080`, Parquet on the
+  `openobserve-data` volume) and `vector`; vps00/vps01 run `vector`
+  only. vps02's Vector posts to `http://127.0.0.1:5080`, the other two
+  to `https://siem-ingest.maybeit.work` — outbound HTTPS, rail 1
+  untouched.
+- **No `docker.sock`** (same reason as Netdata above). Container stdout
+  reaches Vector because `scripts/setup-maintenance.sh` sets Docker's
+  log driver to `journald` — once that script has been run by hand on the
+  nodes (plan Task 9); it is not part of `deploy.yml`. The journal is
+  Vector's only source, so `sshd`, `sudo`, Fail2Ban, cron and every
+  container land in one stream. Containers keep the **old** driver until
+  dockerd is restarted *and* they are recreated: `setup-maintenance.sh`
+  deliberately never restarts Docker, so recreating a container on its
+  own changes nothing.
+- `vector.yaml` is **byte-identical on all three nodes** and
+  `check-rails.sh` fails if the copies drift; per-node differences are
+  environment only (`NODE_NAME`, `OPENOBSERVE_INGEST_URL`, and on
+  vps00/vps01 the `CF_ACCESS_SIEM_*` pair). Edit all three together.
+- The `CF-Access-*` headers are sent **empty** on vps02: it posts to
+  localhost and never crosses the edge, and OpenObserve ignores them.
+  That is why they default to empty in `vector.yaml` rather than being
+  required.
+- Credentials: `OPENOBSERVE_ROOT_EMAIL`/`_PASSWORD` are the **UI** login.
+  Ingest uses `OPENOBSERVE_INGEST_USER`/`_PASSWORD`, which are a
+  dedicated OpenObserve user created in the UI — until plan Task 12
+  rotates them, the root credentials are used for ingest too. Rotate,
+  don't leave it.
+- `mem_limit`s (rail 4) are **hedged, not measured**: openobserve
+  384m/192m, vector 128m/64m, plus `ZO_MEMORY_CACHE_MAX_SIZE=64` because
+  OpenObserve sizes its cache from host RAM, not the cgroup limit.
+  Measure after a week and replace these numbers.
+- Retention is `ZO_COMPACT_DATA_RETENTION_DAYS=30`, and the volume is
+  **not backed up**: logs are evidence, not a dataset, and losing 30
+  days of them on a rebuild is accepted.
+- **`deploy.yml`'s verify step proves liveness, not ingestion** — only
+  that the `vector` container is running. Prove ingestion by hand, once
+  per node: `logger -t siem-test "hello from $(hostname)"`, then find
+  that line in the `journal` stream with the right `node` value.
+- **First-deploy named check, on vps02:** `docker logs vector 2>&1 |
+  grep -i 'error\|400'` must be empty *and* the stream must show rows.
+  Vector's `json` codec batch framing against `/_json` (a JSON array vs
+  NDJSON) is unverified until that run. If it 400s, set the sink's
+  `framing.method` explicitly rather than switching sinks.
+
 Backups, R2 retention and locks, restore/alarm drills and the backup
 staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
 
@@ -187,6 +266,17 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   either; authentication and the access log live in Cloudflare Access
   (Zero Trust → Logs → Access), which also records attempts that never
   reach the origin.
+- **Count Access policies by reading them back, never from what the last
+  session added.** This file said `budget` carried one policy for three
+  days while the app carried two: `partner email allow` was added in the
+  dashboard and nothing here noticed. Ask
+  `/accounts/{id}/access/apps/{app}/policies` before writing a count — an
+  undocumented policy is an access grant nobody is reviewing.
+- **Never pin a journald source to `/var/log/journal`** — a node with
+  volatile journal storage has nothing there, so Vector ships nothing and
+  still reports healthy; assert `Storage=persistent`
+  (`setup-maintenance.sh`) and let Vector follow `journalctl`'s own
+  resolution.
 - **Never reuse another node's tunnel token** (rail 2). vps00 and vps01
   once shared one, so Cloudflare load-balanced `dokploy.maybeit.work`
   across both connectors and ~2/3 of requests 502'd on the node with

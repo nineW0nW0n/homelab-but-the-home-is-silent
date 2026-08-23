@@ -57,7 +57,33 @@ services:
     mem_limit: 200m
     mem_reservation: 100m
 
+  vector:
+    # Ships this node's journal to OpenObserve on vps02 over vps02's
+    # tunnel. Outbound HTTPS only (rail 1). Two locks on the way in:
+    # the CF-Access service token headers and OpenObserve basic auth.
+    # See stacks/vps02/vector.yaml for the config, kept identical here.
+    image: timberio/vector:0.57.0-debian
+    container_name: vector
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      NODE_NAME: vps00
+      OPENOBSERVE_INGEST_URL: https://siem-ingest.maybeit.work
+      OPENOBSERVE_INGEST_USER: ${OPENOBSERVE_INGEST_USER}
+      OPENOBSERVE_INGEST_PASSWORD: ${OPENOBSERVE_INGEST_PASSWORD}
+      CF_ACCESS_SIEM_CLIENT_ID: ${CF_ACCESS_SIEM_CLIENT_ID}
+      CF_ACCESS_SIEM_CLIENT_SECRET: ${CF_ACCESS_SIEM_CLIENT_SECRET}
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+      - vector-data:/var/lib/vector
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    mem_limit: 128m
+    mem_reservation: 64m
+
 volumes:
   netdataconfig:
   netdatalib:
   netdatacache:
+  vector-data:

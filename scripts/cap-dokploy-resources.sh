@@ -22,17 +22,35 @@
 #
 # Usage: scripts/cap-dokploy-resources.sh <host>
 #   scripts/cap-dokploy-resources.sh 203.0.113.10
+#   SSH_KEY=~/.ssh/id_ed25519_vps scripts/cap-dokploy-resources.sh 203.0.113.10
 #   Real addresses live in infra/inventory.yaml (gitignored).
+#
+# SSH_KEY is optional and only passed as `-i` when set. A bare IP matches no
+# `Host` block in ~/.ssh/config, so without SSH_KEY this script still depends
+# on the right key being agent-loaded (`ssh-add`) or on being handed a
+# `vps0N-root` alias instead of an address -- see scripts/CLAUDE.md.
 
 set -eu
 
 host="${1:?usage: cap-dokploy-resources.sh <host>}"
 ssh_port="${SSH_PORT:-22}"
 ssh_user="${SSH_USER:-root}"
+ssh_key="${SSH_KEY:-}"
+
+# Two branches rather than an unquoted "$ssh_opts": an empty SSH_KEY must
+# vanish, not become an empty argument, and word-splitting a built-up
+# option string is the bug shellcheck SC2086 is about.
+node_ssh() {
+    if [ -n "$ssh_key" ]; then
+        ssh -i "$ssh_key" -p "$ssh_port" "${ssh_user}@${host}" "$@"
+    else
+        ssh -p "$ssh_port" "${ssh_user}@${host}" "$@"
+    fi
+}
 
 echo "Capping Dokploy resources on ${ssh_user}@${host}:${ssh_port} ..."
 
-ssh -p "$ssh_port" "${ssh_user}@${host}" 'sh -s' <<'EOF'
+node_ssh 'sh -s' <<'EOF'
 set -eu
 
 # Swarm service: docker service update. A plain `docker update` here gets

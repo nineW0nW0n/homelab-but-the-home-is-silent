@@ -7,12 +7,15 @@ Idempotent POSIX `sh`, one-time-per-node unless noted — except
 the bar (pre-commit enforces it). Run twice, confirm the second run is a
 no-op, before calling a script change done.
 
-**`ssh-add` first.** No node script passes `-i`, and the usage examples take
-a bare IP, which matches no `Host` block in `~/.ssh/config`, so
-`IdentityFile`/`IdentitiesOnly` never apply either. All seven silently
+**`ssh-add` first.** The usage examples take a bare IP, which matches no
+`Host` block in `~/.ssh/config`, so `IdentityFile`/`IdentitiesOnly` never
+apply. Six of the seven node scripts pass no `-i` either and silently
 depend on the right key already being agent-loaded: run `ssh-add
 ~/.ssh/id_ed25519_vps`, or pass the `vps0N-root` alias instead of a bare IP.
 Symptom when you forget: `Permission denied (publickey)`.
+`cap-dokploy-resources.sh` is the exception — it honours an optional
+`SSH_KEY` env var — and the other six are worth the same one-line
+treatment when someone next touches them.
 
 ## Scripts
 
@@ -39,14 +42,27 @@ Symptom when you forget: `Permission denied (publickey)`.
 - `cap-dokploy-resources.sh <host>`: memory-caps Dokploy's own control
   plane, not app workloads (those get `mem_limit` in their compose, rail
   4). `dokploy` 1024M/512M, `dokploy-postgres` 320M/128M,
-  `dokploy-traefik` 128m with 256m memory+swap.
-- `setup-maintenance.sh <host>`: caps container logs (`daemon.json`
-  log-opts, 10m x 3 files each), caps journald (`SystemMaxUse=200M`,
-  restarted immediately), drops a weekly `/etc/cron.d/docker-prune`
-  (Sunday 03:00, `docker system prune -af --filter until=168h`, never
-  volumes), enables `unattended-upgrades` (Debian's shipped security-only
-  origins, never overridden). No RAM-freeing cron: dropping page cache
-  frees nothing real, and swap plus the Dokploy caps cover memory pressure.
+  `dokploy-traefik` 128m with 256m memory+swap. Takes an optional
+  `SSH_KEY`; unset, it behaves like the rest and leans on the agent.
+- `setup-maintenance.sh <host>`: switches Docker's log driver to
+  `journald` in `daemon.json` (container stdout lands in the systemd
+  journal, which `stacks/<node>/vector.yaml` reads -- no `docker.sock`
+  needed), makes the journal persistent (`Storage=persistent` +
+  `mkdir -p /var/log/journal`) and caps it (`SystemMaxUse=1G`, restarted
+  immediately -- 1G, not 200M, now that container logs land there too;
+  `SystemMaxUse` only governs `/var/log/journal`, so the cap is only real
+  once storage is persistent), drops a weekly
+  `/etc/cron.d/docker-prune` (Sunday 03:00, `docker system prune -af
+  --filter until=168h`, never volumes), enables `unattended-upgrades`
+  (Debian's shipped security-only origins, never overridden). No
+  RAM-freeing cron: dropping page cache frees nothing real, and swap plus
+  the Dokploy caps cover memory pressure.
+- `install-aide.sh <host>`: installs AIDE, builds the file-integrity
+  baseline once (`aideinit`, a few minutes of CPU), and disables Debian's
+  `dailyaidecheck.timer` (mails root, no mail here). A daily cron.d entry
+  runs `/usr/sbin/aide.wrapper --update`, pipes the report into the
+  journal as `SYSLOG_IDENTIFIER=aide`, then adopts the new database as
+  tomorrow's baseline -- a change log, not a tamper lock.
 - `check-rails.sh`: **not a provisioning script** — no node, no ssh, no
   arguments; a repo-wide check that runs on every commit via
   `.pre-commit-config.yaml` and again under `pre-commit run --all-files` in
@@ -113,6 +129,12 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
   never sees those packets — DNAT'd in PREROUTING, routed via FORWARD. Check
   `systemctl is-active docker-wan-drop` before trusting a sweep taken from
   inside the node.
+- **Rewrite `daemon.json` whole when changing the log driver, never
+  merge a driver change into the existing opts** — journald rejects
+  `json-file`'s `max-size`/`max-file`, and dockerd refuses to start on
+  unknown log-opts, so a merge takes Docker down on the next restart.
+  `setup-maintenance.sh` matches the whole file and writes the whole
+  file for exactly that reason.
 - **Two scripts write `daemon.json`** — `setup-maintenance.sh` recognises
   harden's by an exact match on `{"ip":"127.0.0.1"}`; change what either
   writes, fix the other's match in the same commit.
