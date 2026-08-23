@@ -48,15 +48,22 @@ service; see the spec.
 
 ### Task 1: Rescue the secrets Dokploy holds (Ex, blocking)
 
-Nothing else may start until this is done. `MYSQL_ROOT_PASSWORD` and
-`DB_PASSWORD` are baked into the existing MySQL volume; losing them turns a
+Nothing else may start until this is done. The MySQL root and app
+passwords are baked into the existing MySQL volume; losing them turns a
 migration into a restore.
+
+The GitHub secret names are **not** the names Dokploy uses. They follow the
+repo convention `<OWNER>_<THING>[_VPS0N]`, where the owner is the hostname
+the workload serves. The container's own variable names are unchanged --
+the MySQL image requires `MYSQL_ROOT_PASSWORD` inside the container -- only
+the value's source is renamed.
 
 **Files:** none (GitHub Secrets only)
 
 **Interfaces:**
-- Produces: GitHub secrets `MYSQL_ROOT_PASSWORD`, `DB_PASSWORD`,
-  `EBK_SECURITY_SECRET_KEY`, consumed by Task 4's `deploy.yml` changes.
+- Produces: GitHub secrets `BOOKING_MYSQL_ROOT_PASSWORD`,
+  `BOOKING_MYSQL_APP_PASSWORD`, `BUDGET_SECRET_KEY`, consumed by Task 4's
+  `deploy.yml` changes.
 
 - [ ] **Step 1: Read the values out of Dokploy**
 
@@ -67,13 +74,18 @@ Environment tab. Copy `MYSQL_ROOT_PASSWORD` and `DB_PASSWORD`. Then open
 - [ ] **Step 2: Store them as GitHub secrets**
 
 At `https://github.com/nineW0nW0n/homelab-but-the-home-is-silent/settings/secrets/actions`
-create `MYSQL_ROOT_PASSWORD`, `DB_PASSWORD`, `EBK_SECURITY_SECRET_KEY` with
-those exact values. Do not regenerate them.
+create these three, with those exact values. Do not regenerate them.
+
+| Dokploy's name | GitHub secret |
+|---|---|
+| `MYSQL_ROOT_PASSWORD` | `BOOKING_MYSQL_ROOT_PASSWORD` |
+| `DB_PASSWORD` | `BOOKING_MYSQL_APP_PASSWORD` |
+| `EBK_SECURITY_SECRET_KEY` | `BUDGET_SECRET_KEY` |
 
 - [ ] **Step 3: Verify names only, never values**
 
 ```sh
-gh secret list | grep -E 'MYSQL_ROOT_PASSWORD|DB_PASSWORD|EBK_SECURITY_SECRET_KEY'
+gh secret list | grep -E 'BOOKING_MYSQL_ROOT_PASSWORD|BOOKING_MYSQL_APP_PASSWORD|BUDGET_SECRET_KEY'
 ```
 
 Expected: three rows.
@@ -83,9 +95,9 @@ Expected: three rows.
 The `approve` job rejects a secret containing `# $ " ' \` or a backtick.
 If any of the three contains one, the deploy fails closed before touching a
 node. `EBK_SECURITY_SECRET_KEY` may be regenerated freely if it trips the
-guard (it only invalidates sessions). **`MYSQL_ROOT_PASSWORD` and
-`DB_PASSWORD` may not** -- if either trips it, stop and raise it: the
-password must be changed inside MySQL first, which is a separate procedure.
+guard (it only invalidates sessions). **The two MySQL passwords may
+not** -- if either trips it, stop and raise it: the password must be
+changed inside MySQL first, which is a separate procedure.
 
 ---
 
@@ -171,7 +183,7 @@ vps01, `xx01-xx49` is apps.
       DB_HOST: mysql
       DB_NAME: easyappointments
       DB_USERNAME: easyappointments
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PASSWORD: ${BOOKING_MYSQL_APP_PASSWORD}
       MAIL_PROTOCOL: mail
       MAIL_SMTP_DEBUG: "0"
       MAIL_SMTP_AUTH: "0"
@@ -199,10 +211,10 @@ vps01, `xx01-xx49` is apps.
     container_name: booking-ptpwn8-mysql-1
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${BOOKING_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: easyappointments
       MYSQL_USER: easyappointments
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${BOOKING_MYSQL_APP_PASSWORD}
     volumes:
       - booking-mysql-data:/var/lib/mysql
     networks:
@@ -223,7 +235,7 @@ vps01, `xx01-xx49` is apps.
       EBK_LOG_MODE: console
       EBK_USER_MAX_TRANSACTION_PICTURE_SIZE: "10485760"
       EBK_USER_ENABLE_REGISTER: "false"
-      EBK_SECURITY_SECRET_KEY: ${EBK_SECURITY_SECRET_KEY}
+      EBK_SECURITY_SECRET_KEY: ${BUDGET_SECRET_KEY}
     volumes:
       - ezbookkeeping-data:/ezbookkeeping/data
       - ezbookkeeping-storage:/ezbookkeeping/storage
@@ -283,7 +295,8 @@ ssh vps02-root 'cd /root/.v1check/vps01 && \
   for v in CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING NETDATA_CLAIM_TOKEN \
            NETDATA_CLAIM_ROOMS OPENOBSERVE_INGEST_USER OPENOBSERVE_INGEST_PASSWORD \
            CF_ACCESS_SIEM_CLIENT_ID CF_ACCESS_SIEM_CLIENT_SECRET \
-           MYSQL_ROOT_PASSWORD DB_PASSWORD EBK_SECURITY_SECRET_KEY; do \
+           BOOKING_MYSQL_ROOT_PASSWORD BOOKING_MYSQL_APP_PASSWORD \
+           BUDGET_SECRET_KEY; do \
     echo "$v=x"; done > .env && \
   docker compose config --quiet && echo "compose config OK"'
 ssh vps02-root 'rm -rf /root/.v1check'
@@ -325,25 +338,26 @@ git commit -m "feat(vps01): bring booking and ezbookkeeping into the stack"
 In `deploy-vps01`'s "Write remote .env" step, add to its `env:` mapping:
 
 ```yaml
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          EBK_SECURITY_SECRET_KEY: ${{ secrets.EBK_SECURITY_SECRET_KEY }}
+          BOOKING_MYSQL_ROOT_PASSWORD: ${{ secrets.BOOKING_MYSQL_ROOT_PASSWORD }}
+          BOOKING_MYSQL_APP_PASSWORD: ${{ secrets.BOOKING_MYSQL_APP_PASSWORD }}
+          BUDGET_SECRET_KEY: ${{ secrets.BUDGET_SECRET_KEY }}
 ```
 
 and to the piped `printf` group, one `printf` per key (120-col yamllint):
 
 ```sh
-            printf 'MYSQL_ROOT_PASSWORD=%s\n' "$MYSQL_ROOT_PASSWORD"
-            printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
-            printf 'EBK_SECURITY_SECRET_KEY=%s\n' "$EBK_SECURITY_SECRET_KEY"
+            printf 'BOOKING_MYSQL_ROOT_PASSWORD=%s\n' "$BOOKING_MYSQL_ROOT_PASSWORD"
+            printf 'BOOKING_MYSQL_APP_PASSWORD=%s\n' "$BOOKING_MYSQL_APP_PASSWORD"
+            printf 'BUDGET_SECRET_KEY=%s\n' "$BUDGET_SECRET_KEY"
 ```
 
 - [ ] **Step 2: Add them to the dotenv-safety guard**
 
 In the `approve` job's "Reject secrets a dotenv parser would mangle" step,
 add the same three names to the `env:` mapping and to the `for name in`
-list. A `#` in `DB_PASSWORD` would otherwise reach MySQL truncated and fail
-authentication -- the exact failure this guard was built for.
+list. A `#` in `BOOKING_MYSQL_APP_PASSWORD` would otherwise reach MySQL
+truncated and fail authentication -- the exact failure this guard was built
+for.
 
 - [ ] **Step 3: Add the apps to the vps01 verify step**
 

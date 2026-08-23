@@ -188,6 +188,64 @@ would actually catch an open port.
 **6. Disable `cloudflared`'s metrics listener** (`127.0.0.1:20241` on
 vps01 and vps02). Nothing scrapes it.
 
+**7. Rename the inconsistent secrets.** The convention below is applied to
+the three new secrets by this migration; the existing set is brought in
+line afterwards, as its own PR.
+
+## Secret naming
+
+```
+<OWNER>_<THING>[_VPS0N]
+```
+
+- **OWNER** is the vendor or the workload: `CLOUDFLARE`, `R2`, `TELEGRAM`,
+  `NETDATA`, `OPENOBSERVE`, `SSH`, `BOOKING`, `BUDGET`, `WORKER`.
+- **Node scope is always a suffix**, always `_VPS0N`, never in the middle.
+- Credential pairs use consistent halves: `_ID`/`_SECRET` for tokens,
+  `_USER`/`_PASSWORD` for logins.
+- No ownerless names.
+
+Workloads are named for the **hostname they serve**, not the software:
+`BOOKING`/`BUDGET`, not `EASYAPPOINTMENTS`/`EZBOOKKEEPING`. Swapping the
+budget app later leaves `BUDGET_SECRET_KEY` still true.
+
+A GitHub secret's name is independent of the container's variable name.
+The MySQL image requires `MYSQL_ROOT_PASSWORD` inside the container; only
+the source is renamed:
+
+```yaml
+MYSQL_ROOT_PASSWORD: ${BOOKING_MYSQL_ROOT_PASSWORD}
+EBK_SECURITY_SECRET_KEY: ${BUDGET_SECRET_KEY}
+```
+
+Applied by this migration:
+
+| Dokploy's name | GitHub secret |
+|---|---|
+| `MYSQL_ROOT_PASSWORD` | `BOOKING_MYSQL_ROOT_PASSWORD` |
+| `DB_PASSWORD` | `BOOKING_MYSQL_APP_PASSWORD` |
+| `EBK_SECURITY_SECRET_KEY` | `BUDGET_SECRET_KEY` |
+
+Deferred to follow-on 7:
+
+| Current | Problem | Becomes |
+|---|---|---|
+| `CF_ACCESS_CLIENT_ID`/`_SECRET` | second prefix for one vendor; does not say which app | `CLOUDFLARE_ACCESS_STATUS_CLIENT_ID`/`_SECRET` |
+| `CF_ACCESS_SIEM_CLIENT_ID`/`_SECRET` | same prefix problem | `CLOUDFLARE_ACCESS_SIEM_CLIENT_ID`/`_SECRET` |
+| `CLOUDFLARE_TUNNEL_TOKEN` | vps00's, but unsuffixed -- reads global | `CLOUDFLARE_TUNNEL_TOKEN_VPS00` |
+| `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING` | trailing tunnel name is dead weight | `CLOUDFLARE_TUNNEL_TOKEN_VPS01` |
+| `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` | actively wrong: that tunnel carries `siem` too | `CLOUDFLARE_TUNNEL_TOKEN_VPS02` |
+| `VPS00_HOST` / `_VPS01` / `_VPS02` | node as *prefix*, against the rule | `SSH_HOST_VPS0N` |
+| `DEBUG_KEY` | ownerless | `WORKER_DEBUG_KEY` |
+
+**The rename PR must also make the guard fail on empty.** A renamed-but-
+missed secret reference does not error -- `${{ secrets.TYPO }}` renders as
+an empty string, `actionlint` sees valid syntax, and the dotenv guard
+currently prints `skip NAME: not set` and continues. That would deploy an
+empty tunnel token or database password and report success. Requiring
+non-empty for known-required names turns the single most likely failure of
+a rename into a loud CI stop before any node is touched.
+
 ## Risks
 
 | Risk | Mitigation |
