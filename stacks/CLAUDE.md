@@ -350,3 +350,21 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   straight to `localhost:3000`, `:19999` and `:5080` -- so two of the
   three were pure overhead. A control plane is a workload: measure it
   and cap it like one, or do not run it.
+- **Docker's embedded DNS forgot every container name on a user-defined
+  network, on two nodes at once** (2026-08-23, Docker 29.7.2). Symptom:
+  `booking` 500 with `getaddrinfo for mysql failed` while the container
+  was Up and `mysql` reachable by IP; `openobserve` on vps02 could not
+  resolve its own name either, unnoticed because nothing there uses it.
+  `127.0.0.11` still resolved external names, so "DNS works" from a
+  `wget google.com` proves nothing -- query a *container* name from
+  inside the container's netns. It happened in the window that held
+  `docker swarm leave --force` and `docker system prune -af` on both
+  nodes; replaying every `deploy.yml` action on vps02 (`pull`, `up -d`,
+  `image prune`, `restart`, a `docker run --rm`) reproduced nothing, so
+  the Swarm teardown is the suspect and is not proven. Fix per container:
+  `docker network disconnect <net> <c>` then `docker network connect
+  --alias <service> --alias <container> <net> <c>` -- a plain `connect`
+  restores the container name and **drops the Compose service alias**,
+  which is the name the app actually dials; or `docker compose up -d
+  --force-recreate`. After any change to Docker networking on a node,
+  probe the app on its loopback port before calling the node done.
