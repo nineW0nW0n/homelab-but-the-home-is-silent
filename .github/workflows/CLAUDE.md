@@ -176,6 +176,17 @@ Incident histories behind these rules: `failure-log` skill
   ~5s, and so failed on all three healthy nodes; it polls now, 30 tries 2s
   apart. A post-deploy check runs at the worst possible moment by
   definition.
+- **`.State.Running` is not aliveness for anything with a restart
+  policy.** Under `restart: unless-stopped` a container that crashes on
+  startup is Running for a moment out of every minute, and the verify step
+  sampled all three nodes inside that moment and printed `ok vector` for a
+  Vector that had never once completed startup. Snapshot `.RestartCount`,
+  wait, and require Running plus an unchanged count. The wait must exceed
+  60s -- the Docker restart backoff caps there, so a mature crashloop ticks
+  its counter only once a minute and a 20s window passed the same broken
+  container. A polling HTTP probe has the identical hole: it can catch a
+  looping container in its up window, which is why vps02 checks openobserve
+  both ways.
 - **The `gitleaks` hook scans staged changes only,** so it contributes
   nothing under `pre-commit run --all-files` in `validate.yml`. Kept once,
   in root's failure log; don't duplicate it here.
