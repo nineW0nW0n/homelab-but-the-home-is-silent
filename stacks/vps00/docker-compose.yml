@@ -67,6 +67,14 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
+      # Vector 0.57.0 turned config env-var interpolation OFF by
+      # default; every ${...} in vector.yaml was passed through as a
+      # literal string until this was set. The sink URI became a URI
+      # containing spaces and braces -- "invalid uri character" --
+      # and the credentials were the literal text of their own
+      # placeholders. Upstream suggests the secrets backend instead;
+      # that is a bigger change than this rollout wants today.
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
       NODE_NAME: vps00
       OPENOBSERVE_INGEST_URL: https://siem-ingest.maybeit.work
       OPENOBSERVE_INGEST_USER: ${OPENOBSERVE_INGEST_USER}

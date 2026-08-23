@@ -272,6 +272,15 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   dashboard and nothing here noticed. Ask
   `/accounts/{id}/access/apps/{app}/policies` before writing a count — an
   undocumented policy is an access grant nobody is reviewing.
+- **Vector 0.57.0 disabled config env-var interpolation by default**, so
+  every `${...}` in `vector.yaml` is a literal string unless the container
+  sets `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true`. It surfaced
+  as `invalid uri character` from the sink -- the URI was the placeholder
+  text, spaces and all -- and the credentials were likewise the literal
+  text of their own placeholders. **`vector validate` cannot catch this**:
+  an uninterpolated `${...}` is a perfectly good YAML string, so validate
+  said `Validated` for a config that could not send a single request.
+  Validate proves syntax; only a real request proves interpolation.
 - **Never set `current_boot_only: false` on the Vector journald source.**
   Vector rejects it outright for systemd 250-257 and refuses to start;
   Debian 12 runs systemd 252 and the `vector:*-debian` image ships

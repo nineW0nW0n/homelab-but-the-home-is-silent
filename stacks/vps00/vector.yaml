@@ -59,11 +59,14 @@ sinks:
       max_events: 500
       timeout_secs: 5
     request:
-      # Cloudflare Access service token. Empty on vps02, which posts to
-      # localhost and never crosses the edge; OpenObserve ignores them.
+      # Cloudflare Access service token. vps02 posts to localhost and
+      # never crosses the edge, so it has no such secret and falls back to
+      # the literal "none", which OpenObserve ignores. The fallback is a
+      # word rather than "" on purpose: an empty header value is a shape
+      # nothing here has ever exercised, and this costs one word to avoid.
       headers:
-        CF-Access-Client-Id: "${CF_ACCESS_SIEM_CLIENT_ID:-}"
-        CF-Access-Client-Secret: "${CF_ACCESS_SIEM_CLIENT_SECRET:-}"
+        CF-Access-Client-Id: "${CF_ACCESS_SIEM_CLIENT_ID:-none}"
+        CF-Access-Client-Secret: "${CF_ACCESS_SIEM_CLIENT_SECRET:-none}"
     # Off: the healthcheck would hit the bare URI, which Access answers
     # with a redirect, and Vector would refuse to start on vps00/vps01.
     healthcheck:
