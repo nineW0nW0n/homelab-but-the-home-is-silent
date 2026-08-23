@@ -10,13 +10,19 @@
 them, and free ~848 MiB on vps00.
 
 **Architecture:** The two apps join vps01's existing Compose stack with
-their current volumes declared `external: true`, behind a repo-owned
-Traefik container. Cutover is zero-downtime: the new Traefik binds a spare
-loopback port, is verified with a `Host:` header, and the tunnel's ingress
-is flipped before anything is deleted.
+their current volumes declared `external: true`, each publishing its own
+loopback port from the block scheme -- no reverse proxy; `cloudflared`
+dials the ports directly. Cutover is zero-downtime: the new containers come
+up and are verified while Dokploy still serves `:80`, and the tunnel's
+ingress is flipped before anything is deleted.
 
-**Tech Stack:** Docker Compose (classic keys, rail 4), Traefik v3,
-Cloudflare Tunnel, GitHub Actions, POSIX `sh`.
+**Tech Stack:** Docker Compose (classic keys, rail 4), Cloudflare Tunnel,
+GitHub Actions, POSIX `sh`.
+
+**Port scheme:** `8NXX` -- `N` is the node (0/1/2), `XX01-XX49` apps,
+`XX50-XX99` tools. This plan assigns `8101` booking and `8102` budget.
+Moving `19999` and `5080` onto the scheme is follow-on work, one PR per
+service; see the spec.
 
 **Spec:** `docs/superpowers/specs/2026-08-23-dokploy-removal-design.md`
 
@@ -126,79 +132,27 @@ verified fact rather than an assumption.
 
 ---
 
-### Task 3: Add Traefik and both apps to vps01's stack
+### Task 3: Add both apps to vps01's stack
+
+No reverse proxy. Each app publishes its own loopback port from the block
+scheme and `cloudflared` dials it directly.
 
 **Files:**
 - Modify: `stacks/vps01/docker-compose.yml`
-- Create: `stacks/vps01/traefik.yml`
 
 **Interfaces:**
 - Consumes: Task 1's secret names.
-- Produces: services `traefik` (on `127.0.0.1:8080`), `easyappointments`,
-  `mysql`, `ezbookkeeping`; network `apps`; external volumes as named in
-  Global Constraints.
+- Produces: services `easyappointments` (on `127.0.0.1:8101`), `mysql`,
+  `ezbookkeeping` (on `127.0.0.1:8102`); network `apps`; external volumes
+  as named in Global Constraints.
 
-- [ ] **Step 1: Write Traefik's static config**
-
-Create `stacks/vps01/traefik.yml`:
-
-```yaml
----
-# Repo-owned Traefik for vps01, replacing Dokploy's. Docker provider only:
-# routes come from container labels in docker-compose.yml, so there is no
-# dynamic file to drift.
-#
-# No TLS anywhere: Cloudflare terminates it at the edge and the tunnel
-# reaches this over loopback. No ACME, no certificate storage, no :443.
-entryPoints:
-  web:
-    address: ":8080"
-
-providers:
-  docker:
-    endpoint: unix:///var/run/docker.sock
-    # Nothing is exposed unless it says so. Netdata, cloudflared and vector
-    # share this daemon and must never gain a public route by accident.
-    exposedByDefault: false
-    network: apps
-
-# The dashboard is an unauthenticated admin surface. Off.
-api:
-  dashboard: false
-
-log:
-  level: INFO
-
-# Access logs go to stdout, which the journald driver puts in the journal,
-# which Vector ships to OpenObserve. That is the whole point of having them.
-accessLog: {}
-```
-
-- [ ] **Step 2: Add the services to the stack**
+- [ ] **Step 1: Add the services to the stack**
 
 In `stacks/vps01/docker-compose.yml`, add these services after `vector` and
-before the `volumes:` block:
+before the `volumes:` block. Ports follow the scheme in the spec: `81xx` is
+vps01, `xx01-xx49` is apps.
 
 ```yaml
-  traefik:
-    image: traefik:v3.6.7
-    container_name: traefik
-    restart: unless-stopped
-    # Rail 1: loopback only. cloudflared runs with network_mode: host, so
-    # 127.0.0.1:8080 is reachable to it and to nothing off-node.
-    ports:
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - ./traefik.yml:/etc/traefik/traefik.yml:ro
-      # Read-only docker.sock: Traefik needs to watch containers, not
-      # control them. Read-only still grants full API read, so this is a
-      # reduction, not a boundary.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - apps
-    mem_limit: 128m
-    mem_reservation: 64m
-
   easyappointments:
     image: alextselegidis/easyappointments:1.6.0
     container_name: booking-ptpwn8-easyappointments-1
@@ -229,12 +183,12 @@ before the `volumes:` block:
       MAIL_FROM_ADDRESS: booking@maybeit.work
       MAIL_FROM_NAME: maybeit.work Booking
       MAIL_REPLY_TO_ADDRESS: booking@maybeit.work
-    labels:
-      traefik.enable: "true"
-      traefik.docker.network: apps
-      traefik.http.routers.booking.rule: Host(`booking.maybeit.work`)
-      traefik.http.routers.booking.entrypoints: web
-      traefik.http.services.booking.loadbalancer.server.port: "80"
+    # Rail 1: loopback only. cloudflared runs network_mode: host, so
+    # 127.0.0.1:8101 is reachable to it and to nothing off-node. The bind
+    # address is written explicitly rather than relying on daemon.json's
+    # default -- a config you authored is no proof the daemon honoured it.
+    ports:
+      - "127.0.0.1:8101:80"
     networks:
       - apps
     mem_limit: 256m
@@ -274,12 +228,9 @@ before the `volumes:` block:
       - ezbookkeeping-data:/ezbookkeeping/data
       - ezbookkeeping-storage:/ezbookkeeping/storage
       - /etc/localtime:/etc/localtime:ro
-    labels:
-      traefik.enable: "true"
-      traefik.docker.network: apps
-      traefik.http.routers.budget.rule: Host(`budget.maybeit.work`)
-      traefik.http.routers.budget.entrypoints: web
-      traefik.http.services.budget.loadbalancer.server.port: "8080"
+    # Rail 1: loopback only, same reasoning as easyappointments above.
+    ports:
+      - "127.0.0.1:8102:8080"
     networks:
       - apps
     security_opt:
@@ -353,8 +304,8 @@ every new service, and fails on a `deploy:` block).
 - [ ] **Step 6: Commit**
 
 ```sh
-git add stacks/vps01/docker-compose.yml stacks/vps01/traefik.yml
-git commit -m "feat(vps01): bring booking, ezbookkeeping and our own Traefik into the stack"
+git add stacks/vps01/docker-compose.yml
+git commit -m "feat(vps01): bring booking and ezbookkeeping into the stack"
 ```
 
 ---
@@ -399,7 +350,6 @@ authentication -- the exact failure this guard was built for.
 In `Verify vps01`, alongside the existing checks:
 
 ```sh
-            was_traefik=$(snap traefik)
             was_mysql=$(snap booking-ptpwn8-mysql-1)
             was_ezb=$(snap ezbookkeeping)
 ```
@@ -407,7 +357,6 @@ In `Verify vps01`, alongside the existing checks:
 taken before the shared `sleep 75`, and after it:
 
 ```sh
-            up traefik "$was_traefik"
             up booking-ptpwn8-mysql-1 "$was_mysql"
             up ezbookkeeping "$was_ezb"
 ```
@@ -415,8 +364,8 @@ taken before the shared `sleep 75`, and after it:
 Change the two existing app probes to go through the new port:
 
 ```sh
-            probe "booking via Traefik" http://127.0.0.1:8080/ booking.maybeit.work
-            probe "budget via Traefik" http://127.0.0.1:8080/ budget.maybeit.work
+            probe booking http://127.0.0.1:8101/
+            probe budget http://127.0.0.1:8102/
 ```
 
 - [ ] **Step 4: Lint and commit**
@@ -436,24 +385,27 @@ echo, or the script terminates early.
 ### Task 5: Deploy and cut over with the tunnel
 
 The apps keep serving through Dokploy's Traefik on `:80` throughout. The
-new stack comes up alongside on `:8080`.
+new containers come up alongside on `:8101` and `:8102`.
 
 **Files:** none (deploy + Cloudflare)
 
 **Interfaces:**
 - Consumes: Tasks 3 and 4.
-- Produces: `booking`/`budget` served by the repo-owned Traefik.
+- Produces: `booking`/`budget` served directly from their own loopback
+  ports, with Dokploy no longer in the request path.
 
 - [ ] **Step 1: Open the PR and let Ex merge it**
 
 Merging triggers `deploy.yml` (paths include `stacks/**`). Ex approves the
 `production` gate. Hand him the run URL directly.
 
-The verify step's app probes should pass. They curl the origin directly on
-loopback (`127.0.0.1:8080`) with a `Host:` header, so they test the new
-Traefik regardless of where the tunnel still points. A failure here means
-Traefik or an app is genuinely down -- read the FAIL line rather than
-assuming it is a cutover-ordering artefact.
+The verify step's app probes should pass. They curl each app directly on
+its new loopback port, so they test the new containers regardless of where
+the tunnel still points. A failure here means an app is genuinely down --
+read the FAIL line rather than assuming it is a cutover-ordering artefact.
+
+No `Host:` header is needed now: without a proxy in front, each port serves
+exactly one app.
 
 - [ ] **Step 2: Assert the volumes were adopted, not recreated**
 
@@ -467,12 +419,12 @@ Expected: `4`. **A `0` means Compose created an empty volume: stop, do not
 proceed, do not delete anything.** Restore from
 `r2://homelab-backups/weekly/booking-mysql-*.sql.gz`.
 
-- [ ] **Step 3: Verify both apps answer through the new Traefik**
+- [ ] **Step 3: Verify both apps answer on their new ports**
 
 ```sh
-ssh vps01-root 'for h in booking.maybeit.work budget.maybeit.work; do
-  printf "%-24s " "$h"
-  curl -s -o /dev/null -w "%{http_code}\n" -H "Host: $h" http://127.0.0.1:8080/
+ssh vps01-root 'for p in 8101 8102; do
+  printf "%s " "$p"
+  curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:$p/"
 done'
 ```
 
@@ -482,7 +434,8 @@ traffic at this point; nothing user-facing has changed.
 - [ ] **Step 4: Flip the tunnel ingress**
 
 Read the current config first, then PUT the full ingress list with the two
-app hostnames moved to `:8080`, catch-all last. Via `cloudflare-api`:
+app hostnames moved to their own ports, catch-all last. Via
+`cloudflare-api`:
 
 ```js
 async () => {
@@ -493,10 +446,15 @@ async () => {
 }
 ```
 
-Then PUT the same list with `service` changed from `http://localhost:80` to
-`http://localhost:8080` for `booking.maybeit.work` and
-`budget.maybeit.work`, leaving `vps01-metrics.maybeit.work` and the
-`http_status:404` catch-all untouched.
+Then PUT the same list with `service` changed from `http://localhost:80`
+to `http://localhost:8101` for `booking.maybeit.work` and to
+`http://localhost:8102` for `budget.maybeit.work`, leaving
+`vps01-metrics.maybeit.work` and the `http_status:404` catch-all
+untouched.
+
+This is the step the port scheme exists for: each hostname now names a
+distinct origin port, so a route pointed at the wrong node fails with
+connection-refused rather than returning 200 from the wrong service.
 
 - [ ] **Step 5: Verify from the public side**
 
@@ -531,8 +489,8 @@ Only now, and only after Task 5 Step 2 returned `4`.
 
 ```sh
 ssh vps01-root 'docker rm -f dokploy-traefik && \
-  curl -s -o /dev/null -w "still 200 on 8080: %{http_code}\n" \
-  -H "Host: booking.maybeit.work" http://127.0.0.1:8080/'
+  curl -s -o /dev/null -w "booking still 200: %{http_code}\n" \
+  http://127.0.0.1:8101/'
 ```
 
 - [ ] **Step 2: Remove the idle Traefiks from vps00 and vps02**
@@ -745,7 +703,7 @@ Expected: 200/200 (or 302 for budget behind Access), `4`, `clean` and
 The apps were recreated, so their log driver is `journald` from birth:
 
 ```sh
-ssh vps01-root 'for c in traefik booking-ptpwn8-mysql-1 ezbookkeeping; do
+ssh vps01-root 'for c in booking-ptpwn8-easyappointments-1 booking-ptpwn8-mysql-1 ezbookkeeping; do
   printf "%-30s %s\n" "$c" "$(docker inspect -f "{{.HostConfig.LogConfig.Type}}" "$c")"
 done'
 ```

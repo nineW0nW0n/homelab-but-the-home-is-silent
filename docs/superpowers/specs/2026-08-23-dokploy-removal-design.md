@@ -31,7 +31,7 @@ failure log. Removing Dokploy makes the repo match its own thesis.
 | `dokploy` (Swarm service, vps00) | removed |
 | `dokploy-postgres` (Swarm service, vps00) | removed |
 | `dokploy-traefik` (vps00, vps02) | removed -- routes nothing |
-| `dokploy-traefik` (vps01) | replaced by a repo-owned `traefik` container |
+| `dokploy-traefik` (vps01) | removed; no proxy replaces it |
 | `booking` / EasyAppointments + MySQL | moves into `stacks/vps01/` |
 | `ezbookkeeping` | moves into `stacks/vps01/` |
 | Docker Swarm (all three) | left; no services remain |
@@ -39,28 +39,28 @@ failure log. Removing Dokploy makes the repo match its own thesis.
 
 ## Decisions
 
-**Keep a Traefik, as a repo-owned container.** It costs ~80 MiB on vps01,
-and it buys **routing as code**: a new app is labels in
-`docker-compose.yml`, committed and reviewed like anything else. Without
-it, every new hostname is a compose change *plus* a tunnel-ingress edit in
-Cloudflare -- routing split across two places, one of them a dashboard.
-This repo's failure log is largely dashboard-versus-docs drift (the geo
-rule that silently killed autodeploy; an Access policy count wrong for
-three days), so keeping routing in the same commit as the service is worth
-real memory.
+**No reverse proxy. `cloudflared` routes straight to each app's loopback
+port.** Decided 2026-08-23 after weighing Traefik twice.
 
-The counter-argument, recorded so it is not re-derived: `cloudflared`
-already routes hostname to port and can match paths, Cloudflare terminates
-TLS so Traefik's ACME machinery is idle, and two fixed apps could bind
-distinct loopback ports with no proxy at all. That is the cheaper design
-and a legitimate choice if memory ever gets tight.
+Traefik would have bought routing-as-code (a new app is labels in the
+compose file rather than a compose change *plus* a Cloudflare ingress
+edit), path rewriting, and middlewares. It costs ~80 MiB and, with the
+Docker provider, a `docker.sock` mount -- read-only, but that still grants
+`docker inspect` on every container, and therefore read access to
+`MYSQL_ROOT_PASSWORD`, `DB_PASSWORD` and `EBK_SECURITY_SECRET_KEY` in their
+environments. A file-provider Traefik would have avoided the socket while
+keeping the features.
 
-What `cloudflared` cannot do at all: **rewrite** a path (it matches but
-cannot strip a prefix) and middlewares -- rate limiting, basic auth, header
-manipulation.
+Dropped anyway: two fixed apps need none of it, and the removal takes a
+container, an image pin, a network hop and a secret-reading surface with
+it. `cloudflared` already does hostname *and* path matching; Cloudflare
+terminates TLS, so Traefik's ACME machinery would have sat idle.
+EasyAppointments is Apache and already logs every request to stdout, so
+per-request logging survives for booking without a proxy; ezBookkeeping
+logs app events only, and that visibility is the one real loss.
 
-The 80 MiB lands on vps01, which sits near 1060 MB of 1966 MB once Dokploy
-is gone. vps00 is the constrained node and gets no Traefik.
+Revisit if the app count grows, or the moment a path needs *rewriting*
+rather than matching -- `cloudflared` cannot strip a prefix.
 
 **Keep every existing container and volume name**, however ugly:
 
@@ -75,10 +75,53 @@ risks the only irreplaceable thing on these nodes. The volumes are
 declared `external: true` so Compose adopts them instead of creating new
 empty ones.
 
-**Cut over with zero downtime.** The new Traefik binds `127.0.0.1:8080`
-while Dokploy's still holds `:80`. Verify through the new one with a `Host:`
-header, then flip the tunnel's ingress from `:80` to `:8080`, then delete
-Dokploy. No moment where a hostname points at nothing.
+**Cut over with zero downtime.** The apps come up on their new loopback
+ports while Dokploy's Traefik still holds `:80` and still serves live
+traffic. Verify each new port directly, then flip the tunnel's ingress,
+then delete Dokploy. No moment where a hostname points at nothing.
+
+## Port scheme
+
+Defined here, applied from here on. Every port below is loopback-only;
+`22` remains the only port reachable from off-node (rail 1).
+
+```
+   8 N X X
+   │ │ └─┴── service number within its category
+   │ └────── node: 0 = vps00, 1 = vps01, 2 = vps02
+   └──────── fixed prefix
+
+   NN01-NN49   apps   -- user-facing, reached through the tunnel
+   NN50-NN99   tools  -- observability and operations
+```
+
+A tool that exists on every node keeps the **same last two digits** on all
+of them, so the node digit is the only thing that changes:
+
+| Port | Node | Category | Service |
+|---|---|---|---|
+| 8101 | vps01 | app | `booking.maybeit.work` |
+| 8102 | vps01 | app | `budget.maybeit.work` |
+| 8050 | vps00 | tool | netdata |
+| 8150 | vps01 | tool | netdata |
+| 8250 | vps02 | tool | netdata |
+| 8251 | vps02 | tool | openobserve |
+
+**Why per-node blocks, and not one scheme repeated everywhere.**
+`cloudflared` runs `network_mode: host` and dials `localhost:PORT`. If
+every node used identical ports, a mixed-up tunnel token or route would
+land on the wrong node and still return `200` from the wrong service --
+which is rail 2's original incident, where a shared token load-balanced
+across nodes with different origins. Distinct per-node ports make that
+misroute fail with connection-refused instead of quietly serving wrong
+data. The scheme is a safety property first and a lookup convenience
+second.
+
+Renumbering `19999` and `5080` is **not** part of this migration. Each
+move touches tunnel ingress, deploy probes, `check-rails.sh`'s sweep list
+(a rail-1 enforcement point) and -- for `5080` -- Vector's ingest URL on
+all three nodes. They ship as their own PRs, one service at a time, each
+independently verified. See "Follow-on work".
 
 **Secrets move to GitHub Secrets.** `MYSQL_ROOT_PASSWORD`, `DB_PASSWORD`
 and `EBK_SECURITY_SECRET_KEY` exist today only in Dokploy's Postgres. The
@@ -88,11 +131,62 @@ be read out **before** Dokploy is destroyed.
 
 ## Non-goals
 
-- Tuning `netdata` (141 MiB per node, now the second-largest consumer).
-  Worth its own look; not this change.
 - Renaming volumes, containers or the Compose project.
 - Replacing Dokploy's UI. Losing the dashboard is accepted, explicitly.
-- Touching the backup scripts' logic, schedule or R2 layout.
+- Changing the existing backup scripts' logic, schedule or R2 layout.
+- Renumbering `19999` and `5080` (own PRs, see below).
+
+## Follow-on work
+
+Each is its own PR with its own verification. Ordered by dependency, not
+importance.
+
+**1. Netdata to metrics only.** Ex's call: Netdata covers metrics for
+nodes and containers; logs are OpenObserve's job alone. Disable
+`sd-jrnl.plugin` and `sd-unit.plugin` along with three receivers nothing
+feeds -- `otel-plugin` (`127.0.0.1:4317`), statsd (`127.0.0.1:8125`) and
+`netflow`. Then measure and set `mem_limit` to the observed figure plus
+headroom, the method that moved OpenObserve 384m to 512m.
+
+Recorded cost, accepted: when OpenObserve or Vector is down, there is no
+longer a dashboard showing that node's logs. Recovery reading is `ssh` plus
+`journalctl`.
+
+**2. Back up OpenObserve to R2.** **This reverses a documented decision.**
+`stacks/CLAUDE.md` says the volume is deliberately not backed up because
+"logs are evidence, not a dataset". That line must be rewritten, not left
+to contradict the new script. The reasoning changed: with Netdata reduced
+to metrics, OpenObserve holds the only copy of the fleet's logs.
+
+Follow the shape of `backup-ezbookkeeping.sh` exactly -- stop the
+container, tar the volume, start it, upload with rclone, stamp
+`.last-success` only after the object exists off-node, and register it with
+`check-backup-age.sh`. Two things need deciding at implementation time,
+both measured rather than assumed: the archive's growth rate (30 days of
+three nodes' logs is not the 212 KB ezBookkeeping produces), and whether it
+belongs under the existing `daily/` or `weekly/` prefix -- R2's lifecycle
+rules are scoped to those two prefixes, so a third would expire never.
+
+**3. Netdata onto the port scheme.** `19999` becomes `8050` / `8150` /
+`8250`. Touches `netdata.conf`, three tunnels' ingress, the deploy probes
+and the sweep list.
+
+**4. OpenObserve onto the port scheme.** `5080` becomes `8251`. The
+riskiest of the renumbers: Vector's `OPENOBSERVE_INGEST_URL` on vps02 is
+loopback and moves with it, and a mistake makes the log stack go quiet
+rather than fail loudly. Verify by querying for a fresh marker from all
+three nodes, not by container state.
+
+**5. Rail 1 gets an enforcement point.** Record the post-migration
+listener set (`ss -lntp`, all three nodes) in `stacks/CLAUDE.md` as a
+baseline, and add a scheduled workflow running the off-node port sweep.
+Node addresses come from the existing `VPS0N_HOST` secrets; the job prints
+only `port OPEN/closed`, never an address (rail 5). Rail 1 has been
+source-checked only since it was written -- this is the first thing that
+would actually catch an open port.
+
+**6. Disable `cloudflared`'s metrics listener** (`127.0.0.1:20241` on
+vps01 and vps02). Nothing scrapes it.
 
 ## Risks
 
@@ -100,7 +194,7 @@ be read out **before** Dokploy is destroyed.
 |---|---|
 | MySQL starts on an empty database | `external: true` volumes; row count asserted after cutover against the measured baseline (14 tables, `ea_users` 4) |
 | Dokploy secrets lost with the control plane | Read out and stored in GitHub Secrets as Task 1, before anything is deleted |
-| Apps unreachable during cutover | New Traefik on a spare port, verified before the tunnel moves |
+| Apps unreachable during cutover | Apps come up on their new ports and are verified while Dokploy still serves `:80`; the tunnel moves only after |
 | Backup scripts break on renamed things | Nothing is renamed; scripts asserted working after cutover |
 | Swarm removal breaks networking | `dokploy-network` is an overlay Dokploy created; the new stack uses a plain bridge network and does not reference it |
 
