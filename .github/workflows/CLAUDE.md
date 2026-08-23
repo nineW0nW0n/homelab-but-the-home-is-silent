@@ -24,8 +24,12 @@ then `wrangler deploy`, entirely separate from the node deploy path; see
    secret that lands in a `.env`, `.r2.env` or `.telegram.env` and fails
    the run before any node is touched if one contains `#`, `$`, a quote,
    a backslash, a backtick, or edge whitespace. It prints names, never
-   values. It lives here because all three deploys `needs:` this job, so
-   one copy covers the run. `concurrency: deploy-production`, `cancel-in-progress:
+   values. The same step also checks the two OpenObserve passwords
+   against OpenObserve's own startup policy (8-128 characters, lower,
+   upper, digit, and one of `! @ % - _`), because it panics rather than
+   complains and the symptom is a crashloop that never names the
+   password. It lives here because all three deploys `needs:` this job,
+   so one copy covers the run. `concurrency: deploy-production`, `cancel-in-progress:
    false`: a second push queues, doesn't abort a deploy in flight. A single
    `approve` job holds the `production` environment and the three deploy
    jobs `needs:` it, so one approval covers the run and all three nodes
