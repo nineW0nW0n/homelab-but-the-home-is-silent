@@ -200,6 +200,7 @@ Never register a second marketplace for a plugin you already have.
 | A step only Ex can do in a dashboard: Access app, tunnel public hostname, GitHub repo secret, R2 lock rule | `wizard` | instead of writing those steps as prose in a handoff; Ex is not an engineer and wants direct links |
 | Narrowing an Access policy, adding a public hostname, or telling a 530 (tunnel never connected) from a 403 (Access) | `cloudflare:cloudflare-one` | before changing Access or Tunnel config |
 | You are about to run `wrangler secret put`, `r2 bucket lock add`, `kv`, or `dev` | `cloudflare:wrangler` | before the command; wrangler is pinned at 4.123.0 in `worker/status/package.json` |
+| Reading logs: what a container logged, debugging an app error after the fact, checking log ingestion | `query-logs` | before querying OpenObserve; it has the payload shape and field-name gotchas |
 
 `test-driven-development` doesn't apply directly: there's no application
 code here to unit test. Its spirit still applies: confirm `pre-commit` /
