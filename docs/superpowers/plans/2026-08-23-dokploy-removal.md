@@ -398,8 +398,20 @@ echo, or the script terminates early.
 
 ### Task 5: Deploy and cut over with the tunnel
 
-The apps keep serving through Dokploy's Traefik on `:80` throughout. The
-new containers come up alongside on `:8101` and `:8102`.
+**Not zero-downtime, corrected 2026-08-23.** The first draft said the new
+containers come up alongside Dokploy's. They cannot: the container names
+are frozen to the strings Dokploy's containers already hold, so `docker
+compose up` fails with `Conflict. The container name ... is already in
+use`, and even with different names two MySQL processes cannot share one
+data volume. Dokploy's three containers on vps01 are removed (`docker rm
+-f`, which leaves named volumes alone) immediately before the deploy is
+approved, and the apps are down from that moment until `up -d` brings
+them back on `:8101` and `:8102` and the tunnel is flipped -- a few
+minutes. Dokploy's autodeploy is dead (the zone geo rule 403s GitHub's
+webhook servers, `dokploy/CLAUDE.md`), so a push will not recreate them.
+
+Sequence: merge, wait for the run to reach the `approve` gate, remove the
+containers, approve, verify, flip the tunnel.
 
 **Files:** none (deploy + Cloudflare)
 
@@ -410,8 +422,18 @@ new containers come up alongside on `:8101` and `:8102`.
 
 - [ ] **Step 1: Open the PR and let Ex merge it**
 
-Merging triggers `deploy.yml` (paths include `stacks/**`). Ex approves the
-`production` gate. Hand him the run URL directly.
+Merging triggers `deploy.yml` (paths include `stacks/**`). The run stops at
+the `production` gate. **Before Ex approves**, remove Dokploy's containers
+on vps01 -- names only, volumes untouched:
+
+```sh
+ssh vps01-root 'docker rm -f booking-ptpwn8-easyappointments-1 \
+  booking-ptpwn8-mysql-1 ezbookkeeping && docker volume ls -q | grep -c -E \
+  "booking-ptpwn8_mysql-data|rqdyxo_(data|storage)"'
+```
+
+Expected: the three names echoed, then `3` -- all three volumes survived
+the removal. Then Ex approves. Hand him the run URL directly.
 
 The verify step's app probes should pass. They curl each app directly on
 its new loopback port, so they test the new containers regardless of where
