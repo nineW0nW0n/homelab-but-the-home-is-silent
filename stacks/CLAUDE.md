@@ -221,6 +221,19 @@ Netdata is metrics; this is logs, deliberately a separate tool.
 - Retention is `ZO_COMPACT_DATA_RETENTION_DAYS=30`, and the volume is
   **not backed up**: logs are evidence, not a dataset, and losing 30
   days of them on a rebuild is accepted.
+- **Vector authenticates as `vector-ingest@maybeit.work`, not root**
+  (2026-08-23). Rotating or deleting it never touches the account Ex logs
+  in with. It is an **admin** user, though, and that is a ceiling not a
+  choice: open-source OpenObserve accepts only `root` and `admin`, and
+  rejects `member`, `viewer` and `editor` with `Custom roles not allowed`.
+  So this buys credential separation, **not** least privilege -- a leaked
+  ingest credential still has admin on the org. The real gate in front of
+  the endpoint is the Cloudflare Access service token.
+- **Measured memory, 2026-08-23**, after ~50 min of ingest from three
+  nodes: `openobserve` 338-343 MiB steady (three samples, not growing),
+  `vector` 56 MiB, `netdata` 141 MiB, `cloudflared` 31 MiB; host 1061 MB
+  of 1966 MB used. OpenObserve's cap was raised 384m -> 512m on the back
+  of that, because 89% of a cap is not a working margin.
 - **`deploy.yml`'s verify step proves liveness, not ingestion** — only
   that the `vector` container is running. Prove ingestion by hand, once
   per node: `logger -t siem-test "hello from $(hostname)"`, then find
