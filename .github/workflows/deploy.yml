@@ -169,14 +169,40 @@ jobs:
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
             # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
-            running=$(docker inspect -f "{{.State.Running}}" \
-              cloudflared-vps00 2>/dev/null || echo missing)
-            [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
-            echo "ok   cloudflared"
-            running=$(docker inspect -f "{{.State.Running}}" \
-              vector 2>/dev/null || echo missing)
-            [ "$running" = true ] || { echo "FAIL vector: $running"; exit 1; }
-            echo "ok   vector"
+            #
+            # Running alone is not aliveness. Under restart:
+            # unless-stopped a container that crashes on startup is
+            # Running for a moment out of every minute, and this check
+            # caught vector there and printed "ok" while it had never
+            # once started. Sample the restart counter across a wait
+            # instead: unchanged means it is genuinely staying up. An
+            # absolute count would not work -- a healthy container that
+            # restarted once weeks ago keeps that count until something
+            # recreates it.
+            #
+            # 75s, and one window shared by every container on the node:
+            # the Docker restart backoff caps at 60s, so a mature
+            # crashloop ticks its counter only once a minute and a
+            # shorter sample can sit entirely between two restarts and
+            # see no change. A 20s window did exactly that against a
+            # vector that had never started once.
+            snap() {
+              docker inspect -f "{{.State.Running}} {{.RestartCount}}" \
+                "$1" 2>/dev/null || echo "missing missing"
+            }
+            up() {
+              now=$(snap "$1")
+              if [ "$now" != "true ${2##* }" ]; then
+                echo "FAIL $1: was [$2], now [$now]"
+                exit 1
+              fi
+              echo "ok   $1"
+            }
+            was_cloudflared=$(snap cloudflared-vps00)
+            was_vector=$(snap vector)
+            sleep 75
+            up cloudflared-vps00 "$was_cloudflared"
+            up vector "$was_vector"
           '
 
   deploy-vps01:
@@ -368,14 +394,40 @@ jobs:
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
             # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
-            running=$(docker inspect -f "{{.State.Running}}" \
-              cloudflared-vps01 2>/dev/null || echo missing)
-            [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
-            echo "ok   cloudflared"
-            running=$(docker inspect -f "{{.State.Running}}" \
-              vector 2>/dev/null || echo missing)
-            [ "$running" = true ] || { echo "FAIL vector: $running"; exit 1; }
-            echo "ok   vector"
+            #
+            # Running alone is not aliveness. Under restart:
+            # unless-stopped a container that crashes on startup is
+            # Running for a moment out of every minute, and this check
+            # caught vector there and printed "ok" while it had never
+            # once started. Sample the restart counter across a wait
+            # instead: unchanged means it is genuinely staying up. An
+            # absolute count would not work -- a healthy container that
+            # restarted once weeks ago keeps that count until something
+            # recreates it.
+            #
+            # 75s, and one window shared by every container on the node:
+            # the Docker restart backoff caps at 60s, so a mature
+            # crashloop ticks its counter only once a minute and a
+            # shorter sample can sit entirely between two restarts and
+            # see no change. A 20s window did exactly that against a
+            # vector that had never started once.
+            snap() {
+              docker inspect -f "{{.State.Running}} {{.RestartCount}}" \
+                "$1" 2>/dev/null || echo "missing missing"
+            }
+            up() {
+              now=$(snap "$1")
+              if [ "$now" != "true ${2##* }" ]; then
+                echo "FAIL $1: was [$2], now [$now]"
+                exit 1
+              fi
+              echo "ok   $1"
+            }
+            was_cloudflared=$(snap cloudflared-vps01)
+            was_vector=$(snap vector)
+            sleep 75
+            up cloudflared-vps01 "$was_cloudflared"
+            up vector "$was_vector"
             probe "booking via Traefik" http://127.0.0.1:80/ booking.maybeit.work
             probe "budget via Traefik" http://127.0.0.1:80/ budget.maybeit.work
           '
@@ -510,13 +562,43 @@ jobs:
             # exist, so the FAIL line below never prints and the log
             # shows docker stderr instead. A rename is plausible --
             # see the Dokploy project-prefix warning in stacks/vps01/CLAUDE.md.
-            running=$(docker inspect -f "{{.State.Running}}" \
-              cloudflared-vps02 2>/dev/null || echo missing)
-            [ "$running" = true ] || { echo "FAIL cloudflared: $running"; exit 1; }
-            echo "ok   cloudflared"
+            #
+            # Running alone is not aliveness. Under restart:
+            # unless-stopped a container that crashes on startup is
+            # Running for a moment out of every minute, and this check
+            # caught vector there and printed "ok" while it had never
+            # once started. Sample the restart counter across a wait
+            # instead: unchanged means it is genuinely staying up. An
+            # absolute count would not work -- a healthy container that
+            # restarted once weeks ago keeps that count until something
+            # recreates it.
+            #
+            # 75s, and one window shared by every container on the node:
+            # the Docker restart backoff caps at 60s, so a mature
+            # crashloop ticks its counter only once a minute and a
+            # shorter sample can sit entirely between two restarts and
+            # see no change. A 20s window did exactly that against a
+            # vector that had never started once.
+            snap() {
+              docker inspect -f "{{.State.Running}} {{.RestartCount}}" \
+                "$1" 2>/dev/null || echo "missing missing"
+            }
+            up() {
+              now=$(snap "$1")
+              if [ "$now" != "true ${2##* }" ]; then
+                echo "FAIL $1: was [$2], now [$now]"
+                exit 1
+              fi
+              echo "ok   $1"
+            }
+            was_cloudflared=$(snap cloudflared-vps02)
+            was_openobserve=$(snap openobserve)
+            was_vector=$(snap vector)
+            sleep 75
+            up cloudflared-vps02 "$was_cloudflared"
+            # Both, not either: /healthz proves it answers, the restart
+            # counter proves it is not answering from inside a loop.
             probe openobserve http://127.0.0.1:5080/healthz
-            running=$(docker inspect -f "{{.State.Running}}" \
-              vector 2>/dev/null || echo missing)
-            [ "$running" = true ] || { echo "FAIL vector: $running"; exit 1; }
-            echo "ok   vector"
+            up openobserve "$was_openobserve"
+            up vector "$was_vector"
           '

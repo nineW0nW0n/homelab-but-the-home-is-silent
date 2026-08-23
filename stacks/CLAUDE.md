@@ -272,6 +272,12 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   dashboard and nothing here noticed. Ask
   `/accounts/{id}/access/apps/{app}/policies` before writing a count — an
   undocumented policy is an access grant nobody is reviewing.
+- **Never set `current_boot_only: false` on the Vector journald source.**
+  Vector rejects it outright for systemd 250-257 and refuses to start;
+  Debian 12 runs systemd 252 and the `vector:*-debian` image ships
+  journalctl 257, so both ends are in the range and no node can ever take
+  it. It crashlooped all three, and `Verify` called them green. Losing the
+  pre-reboot backfill is the price of a Vector that starts.
 - **Never pin a journald source to `/var/log/journal`** — a node with
   volatile journal storage has nothing there, so Vector ships nothing and
   still reports healthy; assert `Storage=persistent`

@@ -17,9 +17,13 @@ sources:
     # with Storage=auto and no /var/log/journal keeps its journal in
     # /run/log/journal, and a pinned directory would read an empty dir,
     # ship nothing, and report healthy. Both paths are mounted in compose.
-    # Ship history on first start, not just this boot; the checkpoint in
-    # data_dir stops re-sends after that.
-    current_boot_only: false
+    # No current_boot_only here. `false` (ship history from before this
+    # boot) is rejected outright by Vector for systemd 250-257, and both
+    # ends are in that range: Debian 12's host systemd is 252 and this
+    # image's own journalctl is 257. Setting it crashlooped every node.
+    # The default, true, is the only working value -- so a reboot's
+    # pre-reboot journal is not backfilled; the checkpoint in data_dir
+    # still stops re-sends within a boot.
     # Vector's own stderr lands in the journal too (Docker's journald log
     # driver), so a failing sink logs an error that becomes an event that
     # fails again: a self-feeding loop. Drop our own container's logs.
