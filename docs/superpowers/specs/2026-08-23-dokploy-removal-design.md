@@ -39,12 +39,28 @@ failure log. Removing Dokploy makes the repo match its own thesis.
 
 ## Decisions
 
-**Keep a Traefik, as a repo-owned container.** Ex's call. It is not
-strictly required -- `cloudflared` already routes hostname to port, and two
-fixed apps could bind distinct loopback ports with no proxy at all, saving
-~80 MiB. Recorded because the alternative should be reachable later without
-re-deriving it. Traefik earns its place if the app count grows or
-path-routing is ever wanted.
+**Keep a Traefik, as a repo-owned container.** It costs ~80 MiB on vps01,
+and it buys **routing as code**: a new app is labels in
+`docker-compose.yml`, committed and reviewed like anything else. Without
+it, every new hostname is a compose change *plus* a tunnel-ingress edit in
+Cloudflare -- routing split across two places, one of them a dashboard.
+This repo's failure log is largely dashboard-versus-docs drift (the geo
+rule that silently killed autodeploy; an Access policy count wrong for
+three days), so keeping routing in the same commit as the service is worth
+real memory.
+
+The counter-argument, recorded so it is not re-derived: `cloudflared`
+already routes hostname to port and can match paths, Cloudflare terminates
+TLS so Traefik's ACME machinery is idle, and two fixed apps could bind
+distinct loopback ports with no proxy at all. That is the cheaper design
+and a legitimate choice if memory ever gets tight.
+
+What `cloudflared` cannot do at all: **rewrite** a path (it matches but
+cannot strip a prefix) and middlewares -- rate limiting, basic auth, header
+manipulation.
+
+The 80 MiB lands on vps01, which sits near 1060 MB of 1966 MB once Dokploy
+is gone. vps00 is the constrained node and gets no Traefik.
 
 **Keep every existing container and volume name**, however ugly:
 
