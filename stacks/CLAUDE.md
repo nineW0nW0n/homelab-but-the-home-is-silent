@@ -105,6 +105,20 @@ vps00/vps02, vps01 adds `[plugins] backup_age = yes`) and
 `health_alarm_notify.conf` (generated at deploy time, never committed —
 `docker compose config` doesn't need it to exist, `docker compose up` does).
 
+**Metrics only, since 2026-08-23.** `systemd-journal`, `systemd-units`,
+`otel`, `statsd` and `netflow` are `= no` in `[plugins]`: logs are
+OpenObserve's job, and the three receivers had no sender. Accepted cost:
+while OpenObserve or Vector is down there is no dashboard view of a node's
+logs; recovery reading is `ssh` + `journalctl`. The plugin keys are the
+ones the agent prints at `http://127.0.0.1:19999/netdata.conf`, not the
+binary names in `ps` (`sd-jrnl.plugin` is `systemd-journal`). Effective
+values were read back from that URL on vps02 before merging: assert there,
+never from the file you wrote. Note `netflow` had been listening on
+`0.0.0.0:2055`/`6343` UDP on every node -- Netdata is `network_mode: host`,
+so `daemon.json`'s loopback bind never applied to it and UFW was the only
+layer in front. The TCP sweep in rail 1 does not see UDP; `ss -lunp` on
+the node does.
+
 **No docker.sock.** A `:ro` bind on a socket restricts nothing: anything that
 can reach the Docker API can `docker run -v /:/host`, i.e. host root. Mounting
 it turned any Netdata RCE into instant root on all three nodes at once. Cost is
