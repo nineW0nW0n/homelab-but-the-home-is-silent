@@ -1,9 +1,9 @@
 # Handoff, SIEM-ish log centralisation on vps02 (OpenObserve + Vector)
 
-**Written:** 2026-08-22, mid-rollout. Ex stopped the session during the
-final-review fix wave; everything is committed on branch
-`feat/siem-openobserve`, **nothing is pushed, deployed, or configured in
-Cloudflare yet.**
+**Written:** 2026-08-22, mid-rollout. **Updated 2026-08-23:** the fix wave
+has been re-reviewed and the branch re-validated on vps02; the branch is
+pushed and a PR is open. **Nothing is deployed or configured in Cloudflare
+yet** — resume at Task 8 (the six GitHub secrets).
 
 **Audience:** the next agent. Read `.claude/CLAUDE.md` (root),
 `stacks/CLAUDE.md`, `scripts/CLAUDE.md` first; the hard rails there apply
@@ -32,42 +32,48 @@ Binding documents, in order of authority:
 | `scripts/check-rails.sh` | asserts the three `vector.yaml` identical; asserts journald driver string in `setup-maintenance.sh`; sweep list gains 5080 |
 | Docs | `stacks/CLAUDE.md` Logs section + hostnames, `scripts/CLAUDE.md`, root rail 1 sweep list, README |
 
-Validated: `pre-commit run --all-files` green at HEAD, `check-rails` green,
-every `CLAUDE.md` under budget. **`docker compose config` and `vector
-validate` were run on vps02 only for the state before the fix wave**
-(commit "feat(check-rails): assert vector.yaml is identical..."). The fix
-wave changed `vector.yaml` (dropped `journal_directory`, added
-`exclude_matches`, added the `_timestamp` remap) and has **not** been
-validated with Vector since. Laptop has no Docker; validate on vps02:
+Validated 2026-08-23, post-fix-wave, on vps02 (laptop has no Docker):
+`vector validate` on the current `vector.yaml` says `Validated`, and
+`docker compose config --quiet` passes for all three stacks with `x`
+placeholders. The three `vector.yaml` are byte-identical (`md5`), so one
+Vector run covers all three. `pre-commit run --all-files` and
+`check-rails` green; every `CLAUDE.md` under budget.
+
+To re-run it, copy with `tar`, not `rsync` — **macOS's bundled `rsync`
+stalls and dies with `poll: timeout` against these nodes** (2026-08-23);
+CI is unaffected, `deploy.yml` runs rsync on Linux.
 
 ```sh
-T=/root/.siem-validate; for n in vps00 vps01 vps02; do ssh vps02-root "mkdir -p $T/$n"; rsync -az stacks/$n/ vps02-root:$T/$n/; done
+T=/root/.siem-validate
+ssh vps02-root "mkdir -p $T"
+tar cz -C stacks vps00 vps01 vps02 | ssh vps02-root "tar xz -C $T"
 ssh vps02-root "docker run --rm -v $T/vps02/vector.yaml:/etc/vector/vector.yaml:ro \
   -e NODE_NAME=x -e OPENOBSERVE_INGEST_URL=http://127.0.0.1:5080 \
   -e OPENOBSERVE_INGEST_USER=x -e OPENOBSERVE_INGEST_PASSWORD=x \
   timberio/vector:0.57.0-debian validate --no-environment /etc/vector/vector.yaml"
-# then docker compose config --quiet per stack with x placeholders; then rm -rf $T
+# then a .env of NAME=x per stack, docker compose config --quiet each; then rm -rf $T
 ```
 
-## Where the process stopped
+## Where the process stopped, and what closed it
 
 The commit "fix(siem): final-review fix wave ..." applied all seven
-findings plus three minors from the whole-branch review **but its scoped
-re-review never ran** (the implementer was stopped before writing its
-report). Resume here:
+findings plus three minors from the whole-branch review, but its scoped
+re-review never ran (the implementer was stopped before writing its
+report). **Re-reviewed 2026-08-23 against the ledger's "Final review: With
+fixes" list — all ten present and correct, no new findings:**
 
-1. Re-review that one commit against the list in `.superpowers/sdd/.../progress.md`
-   ("Final review: With fixes ...") or, failing the ledger, against this
-   list: journal dir unpinned; `._timestamp = to_unix_timestamp(timestamp!(.timestamp), unit: "microseconds")`;
-   `exclude_matches: {CONTAINER_NAME: ["vector"]}`; `Storage=persistent` +
-   `mkdir -p /var/log/journal` idempotent; `install-aide.sh` keys on
-   `is-enabled = enabled`; vps02 `vector` has `depends_on: [openobserve]`;
-   check-rails journald grep guarded and moved below the rail-1 echoes;
-   README/root say the third workload ships once secrets + Cloudflare objects
-   exist; `stacks/CLAUDE.md` "Eight routes documented; six live, two pending",
-   liveness-vs-ingestion note, first-deploy wire-format check, failure-log line.
-2. Run the Vector validation above.
-3. Push, open the PR (plan Task 7 Step 8 has the body), give Ex the link.
+| Finding | State |
+|---|---|
+| #1 `journal_directory` unpinned | done; both `/var/log/journal` and `/run/log/journal` bind-mounted read-only on all three nodes, plus `/etc/machine-id` |
+| #2 `_timestamp` | `to_unix_timestamp(timestamp!(.timestamp), unit: "microseconds")`, VRL accepted by `vector validate` |
+| #3 Vector self-loop | `exclude_matches: {CONTAINER_NAME: ["vector"]}` |
+| #4 merge-order wording | README + root say "ships once its secrets and Cloudflare objects exist" |
+| #5 verify is liveness-only | called out in `stacks/CLAUDE.md` with the `logger -t siem-test` procedure |
+| #6 `install-aide.sh` under `set -e` | keys on the printed `enabled`, not the exit status |
+| #7 wire-format check | named as a first-deploy check on vps02 |
+| minor: `depends_on` | `depends_on: [openobserve]` on vps02's vector |
+| minor: check-rails guard | `[ -f ]`-guarded and moved out of the rail-1 echo block |
+| minor: "Eight hostnames" | now "Eight routes documented; six live … two pending" |
 
 Then the operational tasks, in this order (merge == deploy, do not merge
 early):
@@ -89,9 +95,11 @@ Tunnels: `homelab-but-the-home-is-silent` (vps00), `vps01-booking`,
 "Block non-local traffic" (block, `(ip.src.country ne "PH" and http.host ne
 "maybeit.work")`). Nothing SIEM-related exists yet.
 
-**Observation, not acted on:** the `budget` Access app carries a second
-policy `partner email allow`; `stacks/CLAUDE.md` says it has one policy.
-Ask Ex whether that is intended, then fix the doc or the policy.
+**Resolved 2026-08-23:** the `budget` Access app's second policy
+`partner email allow` is intended — Ex's partner uses ezBookkeeping.
+`stacks/CLAUDE.md` now records both policies and the rule behind them
+(one policy per person per app, ops surfaces stay owner-only), plus a
+failure-log line about counting policies by reading them back.
 
 ## Deferred (recorded, not done)
 
