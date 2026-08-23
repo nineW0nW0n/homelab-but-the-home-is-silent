@@ -39,8 +39,9 @@ tunnels:
   at), token `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
 - `budget.maybeit.work` → `http://localhost:80` on vps01, same tunnel:
   ezBookkeeping, the SQLite dataset `vps01/CLAUDE.md` backs up. Behind its
-  own Access application (`budget`, 24h session) since 2026-08-20, one
-  policy: `owner email allow`. Until then the zone geo rule was the only
+  own Access application (`budget`, 24h session) since 2026-08-20, **two**
+  policies: `owner email allow` and `partner email allow` (read back from
+  the API 2026-08-23). Until then the zone geo rule was the only
   thing in front of it, so it was open to anyone in PH. No service-token
   policy — nothing automated polls it. **Access breaks non-browser
   ezBookkeeping clients**, which cannot complete the login flow; if a
@@ -64,6 +65,16 @@ tunnels:
   behind it.
 
 Every tunnel's catch-all is `http_status:404`.
+
+**Ex's partner gets her own policy on the apps she uses, never a shared
+login.** One `partner email allow` policy per app, added alongside
+`owner email allow`, so access is granted and revoked per app and the
+Access log names who did what. Today that is `budget` alone — the
+household's books are hers too. Adding her to another app is one more
+policy on that app, not a wider policy on this one, and not a second
+account sharing the owner's address. Ops surfaces (`dokploy`, `siem`, the
+three `*-metrics` apps) stay owner-only: nothing there is hers to use, and
+a policy that exists is a policy that can be widened by accident.
 
 **Two service tokens, never crossed.** `status-worker` opens the three
 `*-metrics` apps and nothing else; `siem-ingest` opens `siem-ingest` and
@@ -255,6 +266,12 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   either; authentication and the access log live in Cloudflare Access
   (Zero Trust → Logs → Access), which also records attempts that never
   reach the origin.
+- **Count Access policies by reading them back, never from what the last
+  session added.** This file said `budget` carried one policy for three
+  days while the app carried two: `partner email allow` was added in the
+  dashboard and nothing here noticed. Ask
+  `/accounts/{id}/access/apps/{app}/policies` before writing a count — an
+  undocumented policy is an access grant nobody is reviewing.
 - **Never pin a journald source to `/var/log/journal`** — a node with
   volatile journal storage has nothing there, so Vector ships nothing and
   still reports healthy; assert `Storage=persistent`
