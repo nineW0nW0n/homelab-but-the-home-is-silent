@@ -76,6 +76,9 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOOKING_MYSQL_ROOT_PASSWORD: ${{ secrets.BOOKING_MYSQL_ROOT_PASSWORD }}
+          BOOKING_MYSQL_APP_PASSWORD: ${{ secrets.BOOKING_MYSQL_APP_PASSWORD }}
+          BUDGET_SECRET_KEY: ${{ secrets.BUDGET_SECRET_KEY }}
         run: |
           # Compose truncates an unquoted .env value at '#' and
           # interpolates '$'; the shell scripts that source .r2.env and
@@ -101,6 +104,9 @@ jobs:
             R2_SECRET_ACCESS_KEY \
             TELEGRAM_BOT_TOKEN \
             TELEGRAM_CHAT_ID \
+            BOOKING_MYSQL_ROOT_PASSWORD \
+            BOOKING_MYSQL_APP_PASSWORD \
+            BUDGET_SECRET_KEY \
             ; do
             value=$(printenv "$name" || true)
             if [ -z "$value" ]; then
@@ -380,6 +386,9 @@ jobs:
           OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
           CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CF_ACCESS_SIEM_CLIENT_ID }}
           CF_ACCESS_SIEM_CLIENT_SECRET: ${{ secrets.CF_ACCESS_SIEM_CLIENT_SECRET }}
+          BOOKING_MYSQL_ROOT_PASSWORD: ${{ secrets.BOOKING_MYSQL_ROOT_PASSWORD }}
+          BOOKING_MYSQL_APP_PASSWORD: ${{ secrets.BOOKING_MYSQL_APP_PASSWORD }}
+          BUDGET_SECRET_KEY: ${{ secrets.BUDGET_SECRET_KEY }}
         run: |
           # One remote write: these printfs are grouped and piped together
           # into a single 'cat >', not '>>', so every value the stack needs
@@ -394,6 +403,9 @@ jobs:
             printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
             printf 'CF_ACCESS_SIEM_CLIENT_ID=%s\n' "$CF_ACCESS_SIEM_CLIENT_ID"
             printf 'CF_ACCESS_SIEM_CLIENT_SECRET=%s\n' "$CF_ACCESS_SIEM_CLIENT_SECRET"
+            printf 'BOOKING_MYSQL_ROOT_PASSWORD=%s\n' "$BOOKING_MYSQL_ROOT_PASSWORD"
+            printf 'BOOKING_MYSQL_APP_PASSWORD=%s\n' "$BOOKING_MYSQL_APP_PASSWORD"
+            printf 'BUDGET_SECRET_KEY=%s\n' "$BUDGET_SECRET_KEY"
           } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps01/.env'
 
@@ -544,11 +556,20 @@ jobs:
             }
             was_cloudflared=$(snap cloudflared-vps01)
             was_vector=$(snap vector)
+            was_mysql=$(snap booking-ptpwn8-mysql-1)
+            was_ezb=$(snap ezbookkeeping)
             sleep 75
             up cloudflared-vps01 "$was_cloudflared"
             up vector "$was_vector"
-            probe "booking via Traefik" http://127.0.0.1:80/ booking.maybeit.work
-            probe "budget via Traefik" http://127.0.0.1:80/ budget.maybeit.work
+            up booking-ptpwn8-mysql-1 "$was_mysql"
+            up ezbookkeeping "$was_ezb"
+            # Each app owns one loopback port (stacks/vps01/docker-compose.yml),
+            # so no Host header: the port names the app. This tests the
+            # containers this deploy owns regardless of where the tunnel
+            # points, so a FAIL here is an app that is down, not a
+            # cutover-ordering artefact.
+            probe booking http://127.0.0.1:8101/
+            probe budget http://127.0.0.1:8102/
           '
 
   deploy-vps02:
