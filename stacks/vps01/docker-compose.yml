@@ -98,8 +98,122 @@ services:
     mem_limit: 128m
     mem_reservation: 64m
 
+  # booking.maybeit.work and budget.maybeit.work, adopted from Dokploy on
+  # 2026-08-23. No reverse proxy: cloudflared dials each loopback port
+  # directly. Port scheme 8NXX (N = node, 01-49 apps, 50-99 tools), see
+  # docs/superpowers/specs/2026-08-23-dokploy-removal-design.md.
+  # Container and volume names are frozen to Dokploy's: backup-booking.sh
+  # and backup-ezbookkeeping.sh hardcode them.
+  easyappointments:
+    image: alextselegidis/easyappointments:1.6.0
+    container_name: booking-ptpwn8-easyappointments-1
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo 'ServerName booking.maybeit.work' >> /etc/apache2/apache2.conf
+        exec /usr/local/bin/docker-entrypoint.sh
+    environment:
+      BASE_URL: https://booking.maybeit.work
+      DEBUG_MODE: "FALSE"
+      DB_HOST: mysql
+      DB_NAME: easyappointments
+      DB_USERNAME: easyappointments
+      DB_PASSWORD: ${BOOKING_MYSQL_APP_PASSWORD}
+      MAIL_PROTOCOL: mail
+      MAIL_SMTP_DEBUG: "0"
+      MAIL_SMTP_AUTH: "0"
+      MAIL_SMTP_HOST: smtp.example.org
+      MAIL_SMTP_USER: ""
+      MAIL_SMTP_PASS: ""
+      MAIL_SMTP_CRYPTO: tls
+      MAIL_SMTP_PORT: "587"
+      MAIL_FROM_ADDRESS: booking@maybeit.work
+      MAIL_FROM_NAME: maybeit.work Booking
+      MAIL_REPLY_TO_ADDRESS: booking@maybeit.work
+    # Rail 1: loopback only. cloudflared runs network_mode: host, so
+    # 127.0.0.1:8101 is reachable to it and to nothing off-node. The bind
+    # address is written explicitly rather than relying on daemon.json's
+    # default -- a config you authored is no proof the daemon honoured it.
+    ports:
+      - "127.0.0.1:8101:80"
+    networks:
+      - apps
+    mem_limit: 256m
+    mem_reservation: 128m
+
+  mysql:
+    image: mysql:8.0
+    container_name: booking-ptpwn8-mysql-1
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${BOOKING_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: easyappointments
+      MYSQL_USER: easyappointments
+      MYSQL_PASSWORD: ${BOOKING_MYSQL_APP_PASSWORD}
+    volumes:
+      - booking-mysql-data:/var/lib/mysql
+    networks:
+      - apps
+    mem_limit: 640m
+    mem_reservation: 320m
+
+  ezbookkeeping:
+    image: mayswind/ezbookkeeping:1.6.1
+    container_name: ezbookkeeping
+    restart: unless-stopped
+    environment:
+      EBK_SERVER_DOMAIN: budget.maybeit.work
+      EBK_SERVER_ROOT_URL: https://budget.maybeit.work/
+      EBK_SERVER_ENABLE_GZIP: "true"
+      EBK_DATABASE_TYPE: sqlite3
+      EBK_DATABASE_DB_PATH: /ezbookkeeping/data/ezbookkeeping.db
+      EBK_LOG_MODE: console
+      # Upload ceiling, not the usual size; stops a full-resolution phone
+      # photo, receipts at 1080p land near 500 KB.
+      EBK_USER_MAX_TRANSACTION_PICTURE_SIZE: "10485760"
+      # Registration stays off. First account exists already.
+      EBK_USER_ENABLE_REGISTER: "false"
+      # 32+ random chars. Changing it invalidates every session.
+      EBK_SECURITY_SECRET_KEY: ${BUDGET_SECRET_KEY}
+    volumes:
+      - ezbookkeeping-data:/ezbookkeeping/data
+      - ezbookkeeping-storage:/ezbookkeeping/storage
+      - /etc/localtime:/etc/localtime:ro
+    # Rail 1: loopback only, same reasoning as easyappointments above.
+    ports:
+      - "127.0.0.1:8102:8080"
+    networks:
+      - apps
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    mem_reservation: 128m
+
 volumes:
   netdataconfig:
   netdatalib:
   netdatacache:
   vector-data:
+  # Adopted, not created. The names are Dokploy's and are deliberately
+  # frozen: backup-booking.sh and backup-ezbookkeeping.sh hardcode them,
+  # and a rename starts MySQL on an empty database (see dokploy/CLAUDE.md).
+  # external: true makes Compose refuse to run rather than silently create
+  # an empty volume if the name is ever wrong.
+  booking-mysql-data:
+    external: true
+    name: booking-ptpwn8_mysql-data
+  ezbookkeeping-data:
+    external: true
+    name: vps01booking-ezbookkeeping-rqdyxo_data
+  ezbookkeeping-storage:
+    external: true
+    name: vps01booking-ezbookkeeping-rqdyxo_storage
+
+networks:
+  apps:
