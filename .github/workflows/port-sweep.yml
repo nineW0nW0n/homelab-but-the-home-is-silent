@@ -20,9 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      VPS00: ${{ secrets.VPS00_HOST }}
-      VPS01: ${{ secrets.VPS01_HOST }}
-      VPS02: ${{ secrets.VPS02_HOST }}
+      VPS00: ${{ secrets.SSH_HOST_VPS00 }}
+      VPS01: ${{ secrets.SSH_HOST_VPS01 }}
+      VPS02: ${{ secrets.SSH_HOST_VPS02 }}
     steps:
       - name: Sweep all nodes
         run: |

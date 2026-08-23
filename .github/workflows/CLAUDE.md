@@ -82,21 +82,31 @@ never re-run until green).
 
 ## Required GitHub Secrets / Variables
 
+Naming: `<OWNER>_<THING>[_VPS0N]` (design spec, 2026-08-23) — owner
+prefix always, node scope always a suffix. Renamed 2026-08-24; a GitHub
+secret's name is independent of the container-side variable it feeds, so
+node `.env` keys and `wrangler` secret names kept their old spellings.
+
 Secrets: `SSH_PRIVATE_KEY_VPS00` / `_VPS01` / `_VPS02` (one CI key per
-node, see blast radius below), `SSH_KNOWN_HOSTS`, `VPS00_HOST`,
-`VPS01_HOST`, `VPS02_HOST`, `CLOUDFLARE_API_TOKEN`,
-`CLOUDFLARE_TUNNEL_TOKEN` (vps00), `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`
-(vps01), `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS` (vps02),
-`CLOUDFLARE_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+node, see blast radius below), `SSH_KNOWN_HOSTS`, `SSH_HOST_VPS00` /
+`_VPS01` / `_VPS02`, `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_TUNNEL_TOKEN_VPS00` / `_VPS01` / `_VPS02` (one per node,
+rail 2), `CLOUDFLARE_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`
 (vps01's `.r2.env`; without them both nightly backups exit 1),
 `NETDATA_CLAIM_TOKEN`, `NETDATA_CLAIM_ROOMS` (Netdata Cloud claim, the
-**same** value on all three nodes, unlike a tunnel token),
+**same** value on all three nodes, unlike a tunnel token; the only two
+the empty-secret guard treats as optional),
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (Netdata alert config on all 3
 nodes, and vps01's `.telegram.env` for `check-backup-age.sh`),
-`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` (status Worker's
-Cloudflare Access service token, `deploy-worker.yml`), `DEBUG_KEY` (gates
-`maybeit.work/debug`; unset, the route 404s for everyone — it fails
-closed).
+`CLOUDFLARE_ACCESS_SIEM_CLIENT_ID`/`_SECRET` (Vector's ingest token,
+written to vps00/vps01 `.env` under the old `CF_ACCESS_SIEM_*` keys),
+`CLOUDFLARE_ACCESS_STATUS_CLIENT_ID`/`_SECRET` (status Worker's
+Cloudflare Access service token, `deploy-worker.yml`; becomes wrangler
+secrets `CF_ACCESS_CLIENT_ID`/`_SECRET`), `WORKER_DEBUG_KEY` (gates
+`maybeit.work/debug` as wrangler secret `DEBUG_KEY`; unset, the route
+404s for everyone — it fails closed, which is why the worker's
+empty-secret guard leaves it out).
 
 Present as a repo secret but **consumed by no workflow**:
 `CLOUDFLARE_TUNNEL_ID`, for manual dashboard/CLI work. Don't delete it
