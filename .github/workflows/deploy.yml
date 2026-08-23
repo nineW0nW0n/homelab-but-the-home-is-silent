@@ -16,8 +16,20 @@ on:
     # infra/CLAUDE.md queued a full three-node production deploy that sat
     # 13h at the approval gate and, once approved, shipped a by-then stale
     # deploy.yml that wiped vps01's backup state.
+    #
+    # The same lesson, one directory further in: stacks/** matches
+    # stacks/CLAUDE.md and stacks/vps01/CLAUDE.md, so editing documentation
+    # queued a production deploy on 2026-08-23. Negated patterns exclude
+    # them. Negation is only available inside paths -- paths and
+    # paths-ignore cannot both be set for one event -- and later patterns
+    # win, so the exclusions must stay below what they narrow. Both forms
+    # are listed because ** matches across slashes and so does not
+    # reliably match the top-level stacks/CLAUDE.md, which is the exact
+    # file that triggered the deploy this fixes.
     paths:
       - stacks/**
+      - '!stacks/CLAUDE.md'
+      - '!stacks/**/CLAUDE.md'
       - .github/workflows/deploy.yml
   workflow_dispatch: {}
 
