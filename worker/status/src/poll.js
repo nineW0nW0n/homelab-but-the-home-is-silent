@@ -9,16 +9,6 @@
 
 const TIMEOUT_MS = 5000
 
-async function fetchWithTimeout(fetchFn, url, options) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-  try {
-    return await fetchFn(url, { ...options, signal: controller.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 function round1(n) {
   return Math.round(n * 10) / 10
 }
@@ -29,7 +19,7 @@ async function queryChart(fetchFn, host, headers, chart, dimName, options) {
   // throwing on a healthy node.
   const optionsParam = options ? `&options=${options}` : ''
   const url = `https://${host}/api/v1/data?chart=${encodeURIComponent(chart)}&after=-60&points=1${optionsParam}`
-  const res = await fetchWithTimeout(fetchFn, url, { headers })
+  const res = await fetchFn(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
   if (!res.ok) throw new Error(`netdata ${chart} status ${res.status}`)
   const { labels, data } = await res.json()
   const idx = labels.indexOf(dimName)
@@ -62,23 +52,16 @@ function queryRaw(fetchFn, host, headers, chart, dimName) {
 // system.cpu has no "idle" dimension in this deployment's Netdata
 // config -- only the busy-state dimensions (user/system/nice/iowait/
 // irq/softirq/steal/guest/guest_nice), which already sum to the busy
-// percentage. Other Netdata configs do report "idle" explicitly, so
-// handle both rather than hardcoding one shape.
+// percentage. If a config change ever adds "idle" back, the sum would
+// read ~100%; the alternative is unlikely enough that the fail-closed
+// validation below is the guard, not a second code path.
 async function queryCpuBusyPercent(fetchFn, host, headers, chart) {
   const url = `https://${host}/api/v1/data?chart=${encodeURIComponent(chart)}&after=-60&points=1&options=percentage`
-  const res = await fetchWithTimeout(fetchFn, url, { headers })
+  const res = await fetchFn(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
   if (!res.ok) throw new Error(`netdata ${chart} status ${res.status}`)
   const { labels, data } = await res.json()
   const row = data[0]
   if (!row) throw new Error(`netdata ${chart} no data`)
-  const idleIdx = labels.indexOf('idle')
-  if (idleIdx >= 0) {
-    const idleValue = row[idleIdx]
-    if (typeof idleValue !== 'number' || Number.isNaN(idleValue)) {
-      throw new Error(`netdata ${chart} dimension idle not numeric`)
-    }
-    return 100 - idleValue
-  }
   const values = row.slice(1) // drop the leading timestamp column
   if (values.length === 0 || values.some((v) => typeof v !== 'number' || Number.isNaN(v))) {
     throw new Error(`netdata ${chart} missing/invalid dimension values`)

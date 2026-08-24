@@ -13,7 +13,9 @@ test('pollAll marks a node up with parsed cpu/mem/disk percentages', async () =>
     NODE_HOSTS: 'vps00-metrics.maybeit.work',
   }
   const fetchFn = async (url) => {
-    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, 85])
+    // Shape confirmed against a live vps00 node: no "idle" dimension,
+    // just the busy-state ones summing to the busy percentage.
+    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'system'], [10, 5])
     if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
     if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
     if (url.includes('system.load'))
@@ -23,7 +25,7 @@ test('pollAll marks a node up with parsed cpu/mem/disk percentages', async () =>
   }
   const snapshot = await pollAll(env, fetchFn)
   assert.equal(snapshot.nodes.vps00.up, true)
-  assert.equal(snapshot.nodes.vps00.cpu, 15)
+  assert.equal(snapshot.nodes.vps00.cpu, 15) // 10 + 5, summed busy dims
   assert.equal(snapshot.nodes.vps00.mem, 60)
   assert.equal(snapshot.nodes.vps00.disk, 30)
   // load1 0.5 / 2 vCPUs * 100 = 25
@@ -72,37 +74,13 @@ test('pollAll fails a node closed when a Netdata dimension value is non-numeric'
     NODE_HOSTS: 'vps00-metrics.maybeit.work',
   }
   const fetchFn = async (url) => {
-    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, null])
+    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'system'], [15, null])
     if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
     if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
     return new Response('', { status: 200 })
   }
   const snapshot = await pollAll(env, fetchFn)
   assert.equal(snapshot.nodes.vps00.up, false)
-})
-
-test('pollAll sums busy-state dimensions when Netdata reports no idle dimension', async () => {
-  const env = {
-    CF_ACCESS_CLIENT_ID: 'id',
-    CF_ACCESS_CLIENT_SECRET: 'secret',
-    NODE_HOSTS: 'vps00-metrics.maybeit.work',
-  }
-  const fetchFn = async (url) => {
-    // Shape confirmed against a live vps00 node: no "idle" dimension,
-    // just the busy-state ones summing to the busy percentage.
-    if (url.includes('system.cpu')) {
-      return jsonResponse(['time', 'user', 'system', 'iowait'], [10, 5, 2])
-    }
-    if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
-    if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
-    if (url.includes('system.load'))
-      return jsonResponse(['time', 'load1', 'load5', 'load15'], [0.5, 0.3, 0.2])
-    if (url.includes('mem.swap')) return jsonResponse(['time', 'free', 'used'], [90, 10])
-    return new Response('', { status: 200 })
-  }
-  const snapshot = await pollAll(env, fetchFn)
-  assert.equal(snapshot.nodes.vps00.up, true)
-  assert.equal(snapshot.nodes.vps00.cpu, 17)
 })
 
 test('pollAll clamps load to 100 when load1 exceeds vCPU count', async () => {
@@ -112,7 +90,7 @@ test('pollAll clamps load to 100 when load1 exceeds vCPU count', async () => {
     NODE_HOSTS: 'vps00-metrics.maybeit.work',
   }
   const fetchFn = async (url) => {
-    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'idle'], [15, 85])
+    if (url.includes('system.cpu')) return jsonResponse(['time', 'user', 'system'], [10, 5])
     if (url.includes('system.ram')) return jsonResponse(['time', 'free', 'used'], [40, 60])
     if (url.includes('disk_space')) return jsonResponse(['time', 'avail', 'used'], [70, 30])
     // load1 of 5 on a 2 vCPU box is 250% raw -- must clamp to 100

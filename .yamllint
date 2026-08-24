@@ -1,11 +1,6 @@
 ---
 extends: default
 
-yaml-files:
-  - "*.yaml"
-  - "*.yml"
-  - ".yamllint"
-
 ignore:
   - .git/
   - node_modules/
@@ -36,6 +31,3 @@ rules:
     max: 1
     max-start: 0
     max-end: 0
-  trailing-spaces: enable
-  new-line-at-end-of-file: enable
-  key-duplicates: enable

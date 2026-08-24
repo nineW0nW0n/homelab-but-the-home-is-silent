@@ -124,13 +124,6 @@ services:
       DB_USERNAME: easyappointments
       DB_PASSWORD: ${BOOKING_MYSQL_APP_PASSWORD}
       MAIL_PROTOCOL: mail
-      MAIL_SMTP_DEBUG: "0"
-      MAIL_SMTP_AUTH: "0"
-      MAIL_SMTP_HOST: smtp.example.org
-      MAIL_SMTP_USER: ""
-      MAIL_SMTP_PASS: ""
-      MAIL_SMTP_CRYPTO: tls
-      MAIL_SMTP_PORT: "587"
       MAIL_FROM_ADDRESS: booking@maybeit.work
       MAIL_FROM_NAME: maybeit.work Booking
       MAIL_REPLY_TO_ADDRESS: booking@maybeit.work

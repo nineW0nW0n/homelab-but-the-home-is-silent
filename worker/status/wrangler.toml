@@ -11,7 +11,6 @@ routes = [
 [[rules]]
 type = "Text"
 globs = ["**/*.html"]
-fallthrough = true
 
 # Workers Logs, 7-day retention. Off until 2026-08-20, which is why the
 # cloudflare-observability MCP returned an empty set for this Worker --

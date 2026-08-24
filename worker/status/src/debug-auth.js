@@ -4,7 +4,9 @@
 
 // Constant-time-ish comparison. Not a strong guarantee in a JS runtime,
 // but it avoids the trivially timeable early-exit of === on strings and
-// costs one small function.
+// costs one small function. Kept hand-rolled on purpose:
+// crypto.subtle.timingSafeEqual is a workerd extension absent from plain
+// Node's webcrypto, and this module's tests run under `node --test`.
 function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false
   let diff = 0

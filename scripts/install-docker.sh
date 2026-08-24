@@ -42,7 +42,7 @@ command -v docker >/dev/null 2>&1 || {
     > /etc/apt/sources.list.d/docker.list
   apt-get -qq update >/dev/null
   DEBIAN_FRONTEND=noninteractive apt-get -y -qq install \
-    docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
+    docker-ce docker-ce-cli containerd.io \
     docker-compose-plugin >/dev/null
 }
 systemctl enable --now docker
