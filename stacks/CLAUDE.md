@@ -285,6 +285,12 @@ staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
 
 Incident histories behind these rules: `failure-log` skill (`stacks/`).
 
+- **When a service's port moves, grep its image's baked-in healthcheck
+  too.** The 2026-08-24 Netdata port move (19999 to 8050/8150/8250)
+  left the image's own healthcheck curling 19999, so Docker reported
+  `unhealthy` on all three nodes while Netdata answered 200 on the real
+  port. Fixed with a compose `healthcheck:` override per node; anything
+  keyed on Docker health status would have false-alarmed.
 - **A newly created Access application 404s at the edge before it starts
   `302`ing** — seconds, not minutes (observed 2026-08-20 creating the
   `budget` app). Do not read that 404 as a broken route and start unpicking
