@@ -34,15 +34,19 @@ never re-run until green).
    against OpenObserve's own startup policy (8-128 characters, lower,
    upper, digit, and one of `! @ % - _`), because it panics rather than
    complains and the symptom is a crashloop that never names the
-   password. It lives here because all three deploys `needs:` this job,
+   password. It lives here because the deploy matrix `needs:` this job,
    so one copy covers the run. `concurrency: deploy-production`, `cancel-in-progress:
    false`: a second push queues, doesn't abort a deploy in flight. A single
-   `approve` job holds the `production` environment and the three deploy
-   jobs `needs:` it, so one approval covers the run and all three nodes
-   deploy in parallel (rail 7). Do not put `environment: production` back
-   on the deploy jobs: GitHub prompts once per job, which is what made this
-   three clicks.
-3. Per node: SSH key via `webfactory/ssh-agent`, `known_hosts` pinned from
+   `approve` job holds the `production` environment and one matrix `deploy`
+   job (`include:` entries per node, each carrying the lowercase `node` id
+   and the uppercase `suffix` that `secrets[format(...)]` lookups need)
+   `needs:` it, so one approval covers the run and all three nodes deploy
+   in parallel as matrix legs (rail 7). `fail-fast: false` keeps the legs
+   independent: one node failing must not cancel the other two mid-deploy,
+   exactly as when they were three separate jobs. Do not put `environment:
+   production` back on the deploy job: GitHub prompts per matrix leg, which
+   is what made this three clicks.
+3. Per matrix leg: SSH key via `webfactory/ssh-agent`, `known_hosts` pinned from
    the `SSH_KNOWN_HOSTS` secret (never `StrictHostKeyChecking no`), `mkdir
    -p` the remote stack dir, `rsync -az --delete` the stack files, write
    that node's tunnel token and Netdata claim values into a remote `.env`
@@ -57,7 +61,7 @@ never re-run until green).
    list after a deploy shipped a fixed `vector.yaml` and changed nothing:
    the only reason it took effect was that the container happened to be
    crashlooping and picked the new file up on its next restart.
-4. vps01 only: the rsync excludes `backup/`, `backup-booking/`, `.r2.env`,
+4. vps01 only (`if: matrix.node == 'vps01'`): the rsync excludes `backup/`, `backup-booking/`, `.r2.env`,
    `.telegram.env` (failure log), two extra steps write those two
    credential files, and one brace group piped to `crontab -` installs all
    four entries at once because `crontab -` **replaces** the whole crontab.
@@ -67,8 +71,9 @@ never re-run until green).
    exactly why `.r2.env`/`.telegram.env` must be rsync-excluded: see the
    failure log below, where a deploy overlapping the `:30` check made it
    exit 1.
-5. Each deploy job ends with `Verify vps0N`, checking the node's own origin
-   over the SSH connection it already holds: Netdata answers 200 on
+5. Each leg ends with `Verify vps0N`: `scripts/verify-node.sh` piped over
+   the SSH connection the job already holds (`sh -s -- <args>`), args from
+   the leg's `matrix.verify_args`, checking the node's own origin: Netdata answers 200 on
    loopback, `cloudflared-vps0N` is running, and on vps01 both apps answer
    200 directly on their loopback ports (127.0.0.1:8101 and :8102) -- no
    proxy, no `Host:` header. Every HTTP probe polls, 30

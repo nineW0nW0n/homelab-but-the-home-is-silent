@@ -3,7 +3,8 @@ Parent: ../.claude/CLAUDE.md
 # scripts/: provisioning & bootstrap
 
 Idempotent POSIX `sh`, one-time-per-node unless noted — except
-`check-rails.sh`, which touches no node at all. `shellcheck -s sh` clean is
+`check-rails.sh` (touches no node at all) and `verify-node.sh` (CI-only,
+runs on a node every deploy; see below). `shellcheck -s sh` clean is
 the bar (pre-commit enforces it). Run twice, confirm the second run is a
 no-op, before calling a script change done.
 
@@ -53,6 +54,15 @@ someone next touches them.
   runs `/usr/sbin/aide.wrapper --update`, pipes the report into the
   journal as `SYSLOG_IDENTIFIER=aide`, then adopts the new database as
   tomorrow's baseline -- a change log, not a tamper lock.
+- `verify-node.sh`: **not a provisioning script** and never run from this
+  machine -- `deploy.yml`'s Verify step pipes it over the SSH connection it
+  already holds (`ssh ... "sh -s -- <args>" < scripts/verify-node.sh`), so
+  it executes on the node. Args (per-node, from the deploy matrix): Netdata
+  loopback port, OpenObserve `/healthz` port or `-`, comma-separated
+  `label:port` app probes or `-`, then the containers whose restart
+  counters are sampled across a 75s window. The incident comments behind
+  its checks (503 restart race, restart-counter aliveness, country-rule
+  403s) live in the script itself.
 - `check-rails.sh`: **not a provisioning script** — no node, no ssh, no
   arguments; a repo-wide check that runs on every commit via
   `.pre-commit-config.yaml` and again under `pre-commit run --all-files` in

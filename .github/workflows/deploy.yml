@@ -175,13 +175,42 @@ jobs:
           echo "ok: every secret that lands in a dotenv file is parser-safe"
           echo "ok: the OpenObserve passwords meet its startup policy"
 
-  deploy-vps00:
+  # One matrix job, three parallel legs, still hanging off the single
+  # approve gate (rail 7): needs: approve is inherited by every leg, so one
+  # approval covers all three nodes exactly as the three separate jobs did.
+  # fail-fast: false because the legs were independent jobs before -- one
+  # node failing must not cancel the other two mid-deploy.
+  #
+  # Each include entry carries both the lowercase node id (paths, container
+  # names) and the uppercase suffix: secrets[format('SSH_HOST_{0}', ...)]
+  # needs VPS0N and expressions cannot uppercase a string. verify_args are
+  # the arguments scripts/verify-node.sh documents: netdata port,
+  # openobserve /healthz port or '-', app probes or '-', then the
+  # containers whose restart counters are sampled.
+  deploy:
+    name: deploy-${{ matrix.node }}
     needs: approve
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: vps00
+            suffix: VPS00
+            verify_args: 8050 - - cloudflared-vps00 vector
+          - node: vps01
+            suffix: VPS01
+            verify_args: >-
+              8150 - booking:8101,budget:8102
+              cloudflared-vps01 vector booking-ptpwn8-mysql-1 ezbookkeeping
+          - node: vps02
+            suffix: VPS02
+            verify_args: 8250 8251 - cloudflared-vps02 openobserve vector
     env:
-      SSH_PORT: ${{ vars.VPS00_SSH_PORT || 22 }}
-      SSH_USER: ${{ vars.VPS00_SSH_USER || 'deploy' }}
-      SSH_HOST: ${{ secrets.SSH_HOST_VPS00 }}
+      NODE: ${{ matrix.node }}
+      SSH_PORT: ${{ vars[format('{0}_SSH_PORT', matrix.suffix)] || 22 }}
+      SSH_USER: ${{ vars[format('{0}_SSH_USER', matrix.suffix)] || 'deploy' }}
+      SSH_HOST: ${{ secrets[format('SSH_HOST_{0}', matrix.suffix)] }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -189,7 +218,7 @@ jobs:
       - name: Install SSH key
         uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555  # v0.10.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY_VPS00 }}
+          ssh-private-key: ${{ secrets[format('SSH_PRIVATE_KEY_{0}', matrix.suffix)] }}
 
       - name: Add known hosts
         env:
@@ -200,175 +229,16 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       - name: Ensure remote stack dir
-        run: ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'mkdir -p /opt/stacks/vps00'
+        run: ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p /opt/stacks/$NODE"
 
       - name: Sync stack files
+        if: matrix.node != 'vps01'
         run: |
           rsync -az --delete -e "ssh -p $SSH_PORT" \
-            stacks/vps00/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps00/"
+            "stacks/$NODE/" "$SSH_USER@$SSH_HOST:/opt/stacks/$NODE/"
 
-      - name: Write remote .env
-        env:
-          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS00 }}
-          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
-          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
-          OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
-          OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
-          CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_ID }}
-          CF_ACCESS_SIEM_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_SECRET }}
-        run: |
-          # One remote write: these printfs are grouped and piped together
-          # into a single 'cat >', not '>>', so every value the stack needs
-          # has to be printed here or it is lost. Split into one printf per
-          # key (not one long format string) so no line exceeds yamllint's
-          # 120 chars.
-          {
-            printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$TUNNEL_TOKEN"
-            printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
-            printf 'NETDATA_CLAIM_ROOMS=%s\n' "$NETDATA_CLAIM_ROOMS"
-            printf 'OPENOBSERVE_INGEST_USER=%s\n' "$OPENOBSERVE_INGEST_USER"
-            printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
-            printf 'CF_ACCESS_SIEM_CLIENT_ID=%s\n' "$CF_ACCESS_SIEM_CLIENT_ID"
-            printf 'CF_ACCESS_SIEM_CLIENT_SECRET=%s\n' "$CF_ACCESS_SIEM_CLIENT_SECRET"
-          } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'umask 077 && cat > /opt/stacks/vps00/.env'
-
-      - name: Write remote health_alarm_notify.conf
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          sed \
-            -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
-            -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" \
-            stacks/vps00/health_alarm_notify.conf.template | \
-            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'docker run --rm -i -v vps00_netdataconfig:/etc/netdata alpine:3.21 \
-               sh -c "cat > /etc/netdata/health_alarm_notify.conf && \
-                      chown 201:201 /etc/netdata/health_alarm_notify.conf && \
-                      chmod 600 /etc/netdata/health_alarm_notify.conf"'
-
-      - name: Deploy vps00
-        run: |
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'cd /opt/stacks/vps00 && \
-             if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
-               docker compose pull && docker compose up -d && docker image prune -f && \
-               docker compose restart netdata vector; \
-             else \
-               echo "no services defined, skipping compose pull/up"; \
-             fi'
-
-      - name: Verify vps00
-        run: |
-          # Probed from the node, not the runner: a zone-wide Cloudflare
-          # custom rule ("Block non-local traffic") blocks every request
-          # whose source country is not PH, so the public hostnames 403 from
-          # GitHub Actions while the service is perfectly healthy. Only the
-          # apex is exempt. The origin is what CI can honestly assert; the
-          # edge and tunnel path is covered by the status page and Netdata
-          # Cloud.
-          #
-          # Polls rather than asking once: the Deploy step above ends with
-          # 'docker compose restart netdata', and Netdata answers 503 for a
-          # few seconds while it initialises. Measured at ~5s on a real
-          # node; 60s of patience costs nothing when everything is healthy
-          # and still fails fast enough to be useful.
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" '
-            set -eu
-            probe() {
-              label=$1
-              url=$2
-              host=${3:-}
-              i=0
-              while [ $i -lt 30 ]; do
-                if [ -n "$host" ]; then
-                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
-                    -H "Host: $host" "$url" || true)
-                else
-                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
-                    || true)
-                fi
-                if [ "$code" = 200 ]; then
-                  echo "ok   $label"
-                  return 0
-                fi
-                i=$((i + 1))
-                sleep 2
-              done
-              echo "FAIL $label: last code $code"
-              return 1
-            }
-            probe netdata http://127.0.0.1:8050/api/v1/info
-            # 2>/dev/null || echo missing: unguarded, set -e kills the
-            # script at this assignment when the container does not
-            # exist, so the FAIL line below never prints and the log
-            # shows docker stderr instead. A rename is plausible --
-            # see the frozen-name entry in the stacks/vps01/CLAUDE.md failure log.
-            #
-            # Running alone is not aliveness. Under restart:
-            # unless-stopped a container that crashes on startup is
-            # Running for a moment out of every minute, and this check
-            # caught vector there and printed "ok" while it had never
-            # once started. Sample the restart counter across a wait
-            # instead: unchanged means it is genuinely staying up. An
-            # absolute count would not work -- a healthy container that
-            # restarted once weeks ago keeps that count until something
-            # recreates it.
-            #
-            # 75s, and one window shared by every container on the node:
-            # the Docker restart backoff caps at 60s, so a mature
-            # crashloop ticks its counter only once a minute and a
-            # shorter sample can sit entirely between two restarts and
-            # see no change. A 20s window did exactly that against a
-            # vector that had never started once.
-            snap() {
-              docker inspect -f "{{.State.Running}} {{.RestartCount}}" \
-                "$1" 2>/dev/null || echo "missing missing"
-            }
-            up() {
-              now=$(snap "$1")
-              if [ "$now" != "true ${2##* }" ]; then
-                echo "FAIL $1: was [$2], now [$now]"
-                exit 1
-              fi
-              echo "ok   $1"
-            }
-            was_cloudflared=$(snap cloudflared-vps00)
-            was_vector=$(snap vector)
-            sleep 75
-            up cloudflared-vps00 "$was_cloudflared"
-            up vector "$was_vector"
-          '
-
-  deploy-vps01:
-    needs: approve
-    runs-on: ubuntu-latest
-    env:
-      SSH_PORT: ${{ vars.VPS01_SSH_PORT || 22 }}
-      SSH_USER: ${{ vars.VPS01_SSH_USER || 'deploy' }}
-      SSH_HOST: ${{ secrets.SSH_HOST_VPS01 }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
-      - name: Install SSH key
-        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555  # v0.10.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY_VPS01 }}
-
-      - name: Add known hosts
-        env:
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Ensure remote stack dir
-        run: ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'mkdir -p /opt/stacks/vps01'
-
-      - name: Sync stack files
+      - name: Sync stack files (vps01)
+        if: matrix.node == 'vps01'
         run: |
           # backup/ and backup-booking/ hold the run logs, the
           # .last-success stamps the staleness check reads, and the local
@@ -388,7 +258,37 @@ jobs:
             --exclude '.r2.env' --exclude '.telegram.env' \
             stacks/vps01/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps01/"
 
-      - name: Write remote .env
+      # The three .env steps stay per-node: each node's stack reads a
+      # different key set, and the tunnel-token key name differs too.
+      - name: Write remote .env (vps00)
+        if: matrix.node == 'vps00'
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS00 }}
+          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
+          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
+          OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
+          OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
+          CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_ID }}
+          CF_ACCESS_SIEM_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_SECRET }}
+        run: |
+          # One remote write: these printfs are grouped and piped together
+          # into a single 'cat >', not '>>', so every value the stack needs
+          # has to be printed here or it is lost. Split into one printf per
+          # key (not one long format string) so no line exceeds yamllint's
+          # 120 chars. Same shape in the vps01/vps02 steps below.
+          {
+            printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$TUNNEL_TOKEN"
+            printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
+            printf 'NETDATA_CLAIM_ROOMS=%s\n' "$NETDATA_CLAIM_ROOMS"
+            printf 'OPENOBSERVE_INGEST_USER=%s\n' "$OPENOBSERVE_INGEST_USER"
+            printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
+            printf 'CF_ACCESS_SIEM_CLIENT_ID=%s\n' "$CF_ACCESS_SIEM_CLIENT_ID"
+            printf 'CF_ACCESS_SIEM_CLIENT_SECRET=%s\n' "$CF_ACCESS_SIEM_CLIENT_SECRET"
+          } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps00/.env'
+
+      - name: Write remote .env (vps01)
+        if: matrix.node == 'vps01'
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS01 }}
           NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
@@ -401,11 +301,6 @@ jobs:
           BOOKING_MYSQL_APP_PASSWORD: ${{ secrets.BOOKING_MYSQL_APP_PASSWORD }}
           BUDGET_SECRET_KEY: ${{ secrets.BUDGET_SECRET_KEY }}
         run: |
-          # One remote write: these printfs are grouped and piped together
-          # into a single 'cat >', not '>>', so every value the stack needs
-          # has to be printed here or it is lost. Split into one printf per
-          # key (not one long format string) so no line exceeds yamllint's
-          # 120 chars.
           {
             printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING=%s\n' "$TUNNEL_TOKEN"
             printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
@@ -420,6 +315,28 @@ jobs:
           } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps01/.env'
 
+      - name: Write remote .env (vps02)
+        if: matrix.node == 'vps02'
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02 }}
+          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
+          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
+          OPENOBSERVE_ROOT_EMAIL: ${{ secrets.OPENOBSERVE_ROOT_EMAIL }}
+          OPENOBSERVE_ROOT_PASSWORD: ${{ secrets.OPENOBSERVE_ROOT_PASSWORD }}
+          OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
+          OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
+        run: |
+          {
+            printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\n' "$TUNNEL_TOKEN"
+            printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
+            printf 'NETDATA_CLAIM_ROOMS=%s\n' "$NETDATA_CLAIM_ROOMS"
+            printf 'OPENOBSERVE_ROOT_EMAIL=%s\n' "$OPENOBSERVE_ROOT_EMAIL"
+            printf 'OPENOBSERVE_ROOT_PASSWORD=%s\n' "$OPENOBSERVE_ROOT_PASSWORD"
+            printf 'OPENOBSERVE_INGEST_USER=%s\n' "$OPENOBSERVE_INGEST_USER"
+            printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
+          } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            'umask 077 && cat > /opt/stacks/vps02/.env'
+
       - name: Write remote health_alarm_notify.conf
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -428,14 +345,15 @@ jobs:
           sed \
             -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
             -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" \
-            stacks/vps01/health_alarm_notify.conf.template | \
+            "stacks/$NODE/health_alarm_notify.conf.template" | \
             ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'docker run --rm -i -v vps01_netdataconfig:/etc/netdata alpine:3.21 \
-               sh -c "cat > /etc/netdata/health_alarm_notify.conf && \
+            "docker run --rm -i -v ${NODE}_netdataconfig:/etc/netdata alpine:3.21 \
+               sh -c 'cat > /etc/netdata/health_alarm_notify.conf && \
                       chown 201:201 /etc/netdata/health_alarm_notify.conf && \
-                      chmod 600 /etc/netdata/health_alarm_notify.conf"'
+                      chmod 600 /etc/netdata/health_alarm_notify.conf'"
 
       - name: Write remote R2 backup credentials
+        if: matrix.node == 'vps01'
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -446,6 +364,7 @@ jobs:
             'umask 077 && cat > /opt/stacks/vps01/.r2.env'
 
       - name: Write remote Telegram credentials
+        if: matrix.node == 'vps01'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -456,6 +375,7 @@ jobs:
             'umask 077 && cat > /opt/stacks/vps01/.telegram.env'
 
       - name: Install backup cron
+        if: matrix.node == 'vps01'
         run: |
           # Debian's cron ignores CRON_TZ, so these fire hourly in the node's
           # own zone; backup-ezbookkeeping.sh gates itself on 03:00 and
@@ -479,277 +399,24 @@ jobs:
             printf ' >> /opt/stacks/vps01/backup-booking/check.log 2>&1\n'
           } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'crontab -'
 
-      - name: Deploy vps01
+      - name: Deploy ${{ matrix.node }}
         run: |
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'cd /opt/stacks/vps01 && \
-             if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
+            "cd /opt/stacks/$NODE && \
+             if [ -n \"\$(docker compose config --services 2>/dev/null)\" ]; then \
                docker compose pull && docker compose up -d && docker image prune -f && \
                docker compose restart netdata vector; \
              else \
-               echo "no services defined, skipping compose pull/up"; \
-             fi'
+               echo 'no services defined, skipping compose pull/up'; \
+             fi"
 
-      - name: Verify vps01
-        run: |
-          # Probed from the node, not the runner: a zone-wide Cloudflare
-          # custom rule ("Block non-local traffic") blocks every request
-          # whose source country is not PH, so the public hostnames 403 from
-          # GitHub Actions while the service is perfectly healthy. Only the
-          # apex is exempt. The origin is what CI can honestly assert; the
-          # edge and tunnel path is covered by the status page and Netdata
-          # Cloud.
-          #
-          # Polls rather than asking once: the Deploy step above ends with
-          # 'docker compose restart netdata', and Netdata answers 503 for a
-          # few seconds while it initialises. Measured at ~5s on a real
-          # node; 60s of patience costs nothing when everything is healthy
-          # and still fails fast enough to be useful.
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" '
-            set -eu
-            probe() {
-              label=$1
-              url=$2
-              host=${3:-}
-              i=0
-              while [ $i -lt 30 ]; do
-                if [ -n "$host" ]; then
-                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
-                    -H "Host: $host" "$url" || true)
-                else
-                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
-                    || true)
-                fi
-                if [ "$code" = 200 ]; then
-                  echo "ok   $label"
-                  return 0
-                fi
-                i=$((i + 1))
-                sleep 2
-              done
-              echo "FAIL $label: last code $code"
-              return 1
-            }
-            probe netdata http://127.0.0.1:8150/api/v1/info
-            # 2>/dev/null || echo missing: unguarded, set -e kills the
-            # script at this assignment when the container does not
-            # exist, so the FAIL line below never prints and the log
-            # shows docker stderr instead. A rename is plausible --
-            # see the frozen-name entry in the stacks/vps01/CLAUDE.md failure log.
-            #
-            # Running alone is not aliveness. Under restart:
-            # unless-stopped a container that crashes on startup is
-            # Running for a moment out of every minute, and this check
-            # caught vector there and printed "ok" while it had never
-            # once started. Sample the restart counter across a wait
-            # instead: unchanged means it is genuinely staying up. An
-            # absolute count would not work -- a healthy container that
-            # restarted once weeks ago keeps that count until something
-            # recreates it.
-            #
-            # 75s, and one window shared by every container on the node:
-            # the Docker restart backoff caps at 60s, so a mature
-            # crashloop ticks its counter only once a minute and a
-            # shorter sample can sit entirely between two restarts and
-            # see no change. A 20s window did exactly that against a
-            # vector that had never started once.
-            snap() {
-              docker inspect -f "{{.State.Running}} {{.RestartCount}}" \
-                "$1" 2>/dev/null || echo "missing missing"
-            }
-            up() {
-              now=$(snap "$1")
-              if [ "$now" != "true ${2##* }" ]; then
-                echo "FAIL $1: was [$2], now [$now]"
-                exit 1
-              fi
-              echo "ok   $1"
-            }
-            was_cloudflared=$(snap cloudflared-vps01)
-            was_vector=$(snap vector)
-            was_mysql=$(snap booking-ptpwn8-mysql-1)
-            was_ezb=$(snap ezbookkeeping)
-            sleep 75
-            up cloudflared-vps01 "$was_cloudflared"
-            up vector "$was_vector"
-            up booking-ptpwn8-mysql-1 "$was_mysql"
-            up ezbookkeeping "$was_ezb"
-            # Each app owns one loopback port (stacks/vps01/docker-compose.yml),
-            # so no Host header: the port names the app. This tests the
-            # containers this deploy owns regardless of where the tunnel
-            # points, so a FAIL here is an app that is down, not a
-            # cutover-ordering artefact.
-            probe booking http://127.0.0.1:8101/
-            probe budget http://127.0.0.1:8102/
-          '
-
-  deploy-vps02:
-    needs: approve
-    runs-on: ubuntu-latest
-    env:
-      SSH_PORT: ${{ vars.VPS02_SSH_PORT || 22 }}
-      SSH_USER: ${{ vars.VPS02_SSH_USER || 'deploy' }}
-      SSH_HOST: ${{ secrets.SSH_HOST_VPS02 }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
-      - name: Install SSH key
-        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555  # v0.10.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY_VPS02 }}
-
-      - name: Add known hosts
+      - name: Verify ${{ matrix.node }}
         env:
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          VERIFY_ARGS: ${{ matrix.verify_args }}
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Ensure remote stack dir
-        run: ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'mkdir -p /opt/stacks/vps02'
-
-      - name: Sync stack files
-        run: |
-          rsync -az --delete -e "ssh -p $SSH_PORT" \
-            stacks/vps02/ "$SSH_USER@$SSH_HOST:/opt/stacks/vps02/"
-
-      - name: Write remote .env
-        env:
-          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02 }}
-          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
-          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
-          OPENOBSERVE_ROOT_EMAIL: ${{ secrets.OPENOBSERVE_ROOT_EMAIL }}
-          OPENOBSERVE_ROOT_PASSWORD: ${{ secrets.OPENOBSERVE_ROOT_PASSWORD }}
-          OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
-          OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
-        run: |
-          # One remote write: these printfs are grouped and piped together
-          # into a single 'cat >', not '>>', so every value the stack needs
-          # has to be printed here or it is lost. Split into one printf per
-          # key (not one long format string) so no line exceeds yamllint's
-          # 120 chars.
-          {
-            printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\n' "$TUNNEL_TOKEN"
-            printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
-            printf 'NETDATA_CLAIM_ROOMS=%s\n' "$NETDATA_CLAIM_ROOMS"
-            printf 'OPENOBSERVE_ROOT_EMAIL=%s\n' "$OPENOBSERVE_ROOT_EMAIL"
-            printf 'OPENOBSERVE_ROOT_PASSWORD=%s\n' "$OPENOBSERVE_ROOT_PASSWORD"
-            printf 'OPENOBSERVE_INGEST_USER=%s\n' "$OPENOBSERVE_INGEST_USER"
-            printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
-          } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'umask 077 && cat > /opt/stacks/vps02/.env'
-
-      - name: Write remote health_alarm_notify.conf
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          sed \
-            -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
-            -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" \
-            stacks/vps02/health_alarm_notify.conf.template | \
-            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'docker run --rm -i -v vps02_netdataconfig:/etc/netdata alpine:3.21 \
-               sh -c "cat > /etc/netdata/health_alarm_notify.conf && \
-                      chown 201:201 /etc/netdata/health_alarm_notify.conf && \
-                      chmod 600 /etc/netdata/health_alarm_notify.conf"'
-
-      - name: Deploy vps02
-        run: |
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            'cd /opt/stacks/vps02 && \
-             if [ -n "$(docker compose config --services 2>/dev/null)" ]; then \
-               docker compose pull && docker compose up -d && docker image prune -f && \
-               docker compose restart netdata vector; \
-             else \
-               echo "no services defined, skipping compose pull/up"; \
-             fi'
-
-      - name: Verify vps02
-        run: |
-          # Probed from the node, not the runner: a zone-wide Cloudflare
-          # custom rule ("Block non-local traffic") blocks every request
-          # whose source country is not PH, so the public hostnames 403 from
-          # GitHub Actions while the service is perfectly healthy. Only the
-          # apex is exempt. The origin is what CI can honestly assert; the
-          # edge and tunnel path is covered by the status page and Netdata
-          # Cloud.
-          #
-          # Polls rather than asking once: the Deploy step above ends with
-          # 'docker compose restart netdata', and Netdata answers 503 for a
-          # few seconds while it initialises. Measured at ~5s on a real
-          # node; 60s of patience costs nothing when everything is healthy
-          # and still fails fast enough to be useful.
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" '
-            set -eu
-            probe() {
-              label=$1
-              url=$2
-              host=${3:-}
-              i=0
-              while [ $i -lt 30 ]; do
-                if [ -n "$host" ]; then
-                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
-                    -H "Host: $host" "$url" || true)
-                else
-                  code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$url" \
-                    || true)
-                fi
-                if [ "$code" = 200 ]; then
-                  echo "ok   $label"
-                  return 0
-                fi
-                i=$((i + 1))
-                sleep 2
-              done
-              echo "FAIL $label: last code $code"
-              return 1
-            }
-            probe netdata http://127.0.0.1:8250/api/v1/info
-            # 2>/dev/null || echo missing: unguarded, set -e kills the
-            # script at this assignment when the container does not
-            # exist, so the FAIL line below never prints and the log
-            # shows docker stderr instead. A rename is plausible --
-            # see the frozen-name entry in the stacks/vps01/CLAUDE.md failure log.
-            #
-            # Running alone is not aliveness. Under restart:
-            # unless-stopped a container that crashes on startup is
-            # Running for a moment out of every minute, and this check
-            # caught vector there and printed "ok" while it had never
-            # once started. Sample the restart counter across a wait
-            # instead: unchanged means it is genuinely staying up. An
-            # absolute count would not work -- a healthy container that
-            # restarted once weeks ago keeps that count until something
-            # recreates it.
-            #
-            # 75s, and one window shared by every container on the node:
-            # the Docker restart backoff caps at 60s, so a mature
-            # crashloop ticks its counter only once a minute and a
-            # shorter sample can sit entirely between two restarts and
-            # see no change. A 20s window did exactly that against a
-            # vector that had never started once.
-            snap() {
-              docker inspect -f "{{.State.Running}} {{.RestartCount}}" \
-                "$1" 2>/dev/null || echo "missing missing"
-            }
-            up() {
-              now=$(snap "$1")
-              if [ "$now" != "true ${2##* }" ]; then
-                echo "FAIL $1: was [$2], now [$now]"
-                exit 1
-              fi
-              echo "ok   $1"
-            }
-            was_cloudflared=$(snap cloudflared-vps02)
-            was_openobserve=$(snap openobserve)
-            was_vector=$(snap vector)
-            sleep 75
-            up cloudflared-vps02 "$was_cloudflared"
-            # Both, not either: /healthz proves it answers, the restart
-            # counter proves it is not answering from inside a loop.
-            probe openobserve http://127.0.0.1:8251/healthz
-            up openobserve "$was_openobserve"
-            up vector "$was_vector"
-          '
+          # The checks themselves -- and the incident comments behind them
+          # (country-rule 403s, the 503 restart race, restart-counter
+          # aliveness, the 75s window) -- live in scripts/verify-node.sh,
+          # which runs on the node over the SSH connection this job holds.
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "sh -s -- $VERIFY_ARGS" \
+            < scripts/verify-node.sh
