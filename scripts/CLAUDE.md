@@ -60,7 +60,10 @@ someone next touches them.
   partially (source-level only — that the `DOCKER-USER` drop and the
   `daemon.json` loopback bind still exist in `harden-node.sh`; only an
   off-node sweep proves the nodes), plus a markup-sink grep over the public
-  status page. It is listed here because this repo's most-repeated failure
+  status page, that `vector.yaml` is byte-identical across all three
+  nodes, and that `setup-maintenance.sh` still sets Docker's journald log
+  driver (Vector reads container logs from the journal). It is listed
+  here because this repo's most-repeated failure
   is a rail with no enforcement point, and an enforcement point missing from
   its own directory file is the next best way to lose one.
 
@@ -130,11 +133,13 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
   `iptables -t nat -S DOCKER` shows `-d 127.0.0.1/32` scoping on 80/443 and
   `ss` shows `127.0.0.1:80`/`127.0.0.1:443`. Don't re-derive that from
   scratch; do re-check it after a reinstall.
-- **`"ip"` misses Swarm host-mode publishes, so vps00's 3000 rests on the
-  `DOCKER-USER` rule alone** — proven, not inferred: 3000's DNAT is unscoped
-  (`-A DOCKER ! -i docker_gwbridge -p tcp --dport 3000 -j DNAT`, no `-d`),
-  and the DROP counter moved 25 → 34 under three external SYNs to it. UFW
-  never sees those packets — DNAT'd in PREROUTING, routed via FORWARD. Check
+- **`"ip"` misses Swarm host-mode publishes** — while Dokploy ran, vps00's
+  3000 rested on the `DOCKER-USER` rule alone, proven, not inferred: 3000's
+  DNAT was unscoped (`-A DOCKER ! -i docker_gwbridge -p tcp --dport 3000 -j
+  DNAT`, no `-d`), and the DROP counter moved 25 → 34 under three external
+  SYNs to it. UFW never sees those packets — DNAT'd in PREROUTING, routed
+  via FORWARD. That listener was retired with Dokploy 2026-08-23 and the
+  daily port sweep asserts 3000 closed, but the lesson stands: check
   `systemctl is-active docker-wan-drop` before trusting a sweep taken from
   inside the node.
 - **Rewrite `daemon.json` whole when changing the log driver, never

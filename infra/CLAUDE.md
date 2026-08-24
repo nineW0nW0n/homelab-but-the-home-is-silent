@@ -6,7 +6,7 @@ Two files: `inventory.yaml` (gitignored, the only place real node IPs live,
 local and CI use) and the tracked, redacted `inventory.example.yaml` — never
 hand-edit a real value into it (rail 5). Tracked files reference the hostname
 or `inventory_ref` key, never a bare IP; CI resolves the host from the
-`VPS0N_HOST` secret, not from here.
+`SSH_HOST_VPS0N` secret, not from here.
 
 The old declarative layer (`common/base.yaml`, `nodes/*/node.yaml`:
 OS/firewall/resource/dokploy config) was deleted, not wired up — nothing in
@@ -31,9 +31,10 @@ supersession below: `docs/superpowers/failure-log-archive.md`.)
 
 **These hostnames have no DNS records** (verified 2026-08-16): inventory
 labels, not resolvable names. Never substitute one for an IP in a script or an
-ssh command; it fails confusingly. Use `inventory.yaml` locally, `VPS0N_HOST`
-in CI. Each node runs its own independent single-node Swarm (root map), which
-is why UFW blocking 2377/7946 between nodes breaks nothing.
+ssh command; it fails confusingly. Use `inventory.yaml` locally,
+`SSH_HOST_VPS0N` in CI. Swarm is inactive on all three nodes since
+2026-08-23 (it existed only for Dokploy), so nothing needs 2377/7946 open
+between them.
 
 ## Human SSH access
 

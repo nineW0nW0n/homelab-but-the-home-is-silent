@@ -2,7 +2,9 @@
 # Mechanical enforcement for the hard rails in .claude/CLAUDE.md. This repo's
 # most-repeated failure is a rail that exists on paper with nothing running it
 # (rail 5, rail 9, pre-commit itself, the CLAUDE.md budget check). Four rails
-# are checkable from the files in this repo; this checks them.
+# are checkable from the files in this repo; this checks them, plus two
+# non-rail invariants: vector.yaml byte-identical across the three nodes,
+# and setup-maintenance.sh still setting Docker's journald log driver.
 #
 # Never skips: a missing file or an empty glob is a failure, because a check
 # that scans nothing is the exact bug this script exists to prevent.
@@ -174,4 +176,4 @@ else
 fi
 
 [ "$fail" -eq 0 ] || { echo "check-rails: FAILED" >&2; exit 1; }
-echo "check-rails: rails 1 (partial), 2, 3, 4, 7 + markup sinks OK across $found compose files"
+echo "check-rails: rails 1 (partial), 2, 3, 4, 7 + markup sinks, vector.yaml identity, journald driver OK across $found compose files"

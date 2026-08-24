@@ -124,12 +124,12 @@ password manager) gets the books back but invalidates every session.
 
 ## booking MySQL backups
 
-Nightly at **04:00 Asia/Manila**, scheduled — first unattended run still
-pending as of 2026-08-20 (crontab verified on the node: `backup-booking.sh` at
-`10 * * * *` self-gating to 04:00, `check-backup-age.sh booking
-/opt/stacks/vps01/backup-booking` at `40 * * * *`). Cron went in after that
-day's 04:00 slot had passed, so `.last-success` still holds the `FORCE_BACKUP`
-smoke test. Say "live" once a stamp lands that no one forced.
+Nightly at **04:00 Asia/Manila**, scheduled (crontab verified on the node:
+`backup-booking.sh` at `10 * * * *` self-gating to 04:00,
+`check-backup-age.sh booking /opt/stacks/vps01/backup-booking` at
+`40 * * * *`). A forced end-to-end run is proven; whether an unattended run
+has landed is answered by `.last-success` in that work dir on the node, not
+by this file. Say "live" once a stamp lands there that no one forced.
 Staggered an hour off ezBookkeeping so two backups never run at once on a 2GB
 node; same bucket, same hourly-cron + in-script hour gate, same `FORCE_BACKUP=1`
 escape hatch. Two files in `stacks/vps01/`: `backup-booking.sh` and the shared

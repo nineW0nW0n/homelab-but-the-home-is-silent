@@ -18,8 +18,8 @@ freed ~800 MB on the primary node.
 > been ingesting the systemd journal and every container's output from
 > all three nodes since 2026-08-23. ezBookkeeping is
 > backed up nightly off-site to Cloudflare R2; the booking database is
-> scheduled the same way, with its first unattended run due 2026-08-21 —
-> until one lands, only a forced end-to-end run has been proven.
+> scheduled the same way — a forced end-to-end run has been proven, and
+> the latest unattended stamp lives in `.last-success` on vps01.
 > Expect rough edges. `main` is protected
 > against force-push and deletion, so fixes land as new commits, not
 > rewrites.
@@ -56,7 +56,7 @@ flowchart LR
     internet(("Public traffic")) --> tunnel["Cloudflare Tunnel\n(outbound-only)"]
     tunnel --> vps00["vps00, primary\nmetrics"]
     tunnel --> vps01["vps01, secondary\napps"]
-    tunnel --> vps02["vps02, secondary\nmetrics"]
+    tunnel --> vps02["vps02, secondary\nlogs (OpenObserve)"]
 
     subgraph ci["GitHub Actions"]
         validate["validate.yml\nlint gate"] --> deploy["deploy.yml"]
@@ -90,7 +90,9 @@ what `ufw status` says. Two layers close it, both applied by
 Neither layer covers ingress-mode Swarm publishes, which traverse a
 different chain (`DOCKER-INGRESS`); Swarm is inactive on every node since
 2026-08-23, so that chain no longer exists. That is precisely why the check that matters is a port sweep from off-node,
-not `ufw status`.
+not `ufw status`. That sweep now runs daily in CI
+(`.github/workflows/port-sweep.yml`), failing on any open port but 22; a
+manual sweep remains the post-provisioning check after any hardening run.
 
 Public hostnames that should not be public are behind **Cloudflare
 Access**: all three Netdata endpoints, the OpenObserve UI, and
@@ -136,10 +138,11 @@ worth naming next to a zero-inbound-ports posture.
     validate.yml                     pre-commit over the whole repo, reusable via workflow_call
     deploy.yml                       one approval, then all three nodes in parallel
     deploy-worker.yml                tests + deploys the status Worker (same production approval)
+    port-sweep.yml                   daily off-node port sweep of all three nodes
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
 stacks/
-  vps0N/docker-compose.yml           per-node cloudflared connector + Netdata + Vector
+  vps0N/docker-compose.yml           per-node cloudflared connector + Netdata + Vector (vps01 adds the two apps, vps02 OpenObserve)
   vps0N/vector.yaml                  journal shipper config, byte-identical on all three nodes
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
@@ -190,7 +193,8 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   services defined makes plain `compose pull` error out otherwise.
 - Each deploy job ends by verifying the node it just touched: Netdata
   answers on loopback, that node's `cloudflared` is running, and on vps01
-  both apps answer through Traefik. The check runs on the node over the SSH
+  both apps answer directly on their loopback ports (127.0.0.1:8101 and
+  :8102) — there is no reverse proxy. The check runs on the node over the SSH
   connection the deploy already holds, because a zone-wide Cloudflare rule
   blocks every request from outside the Philippines, so probing the public
   hostnames fails from CI while the site is perfectly healthy. The edge and tunnel

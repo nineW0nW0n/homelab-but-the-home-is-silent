@@ -6,7 +6,7 @@ Parent: ../../.claude/CLAUDE.md
 nodes), `deploy-worker.yml` (the `maybeit.work` status Worker: `npm test`
 then `wrangler deploy`, entirely separate from the node deploy path; see
 `worker/status/CLAUDE.md`), `port-sweep.yml` (daily off-node sweep of the
-`VPS0N_HOST` addresses -- rail 1's enforcement point; prints only
+`SSH_HOST_VPS0N` addresses -- rail 1's enforcement point; prints only
 `port N: OPEN/closed`, never an address, and fails on any open port but
 22 or on 22 closed. No approval gate: it deploys nothing, and
 check-rails' rail 7 check keys on ssh/rsync/wrangler, which it uses none
@@ -70,7 +70,8 @@ never re-run until green).
 5. Each deploy job ends with `Verify vps0N`, checking the node's own origin
    over the SSH connection it already holds: Netdata answers 200 on
    loopback, `cloudflared-vps0N` is running, and on vps01 both apps answer
-   200 through Traefik with a `Host:` header. Every HTTP probe polls, 30
+   200 directly on their loopback ports (127.0.0.1:8101 and :8102) -- no
+   proxy, no `Host:` header. Every HTTP probe polls, 30
    tries 2s apart. It reports and fails; it never reverts.
 6. `deploy-worker.yml`: push to `main` (paths: `worker/status/**`, itself)
    or dispatch, `concurrency: deploy-worker`. One deploy job, so it
@@ -99,6 +100,14 @@ rail 2), `CLOUDFLARE_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
 the empty-secret guard treats as optional),
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (Netdata alert config on all 3
 nodes, and vps01's `.telegram.env` for `check-backup-age.sh`),
+`BOOKING_MYSQL_APP_PASSWORD`, `BOOKING_MYSQL_ROOT_PASSWORD` (the booking
+app's MySQL credentials, vps01 `.env`), `BUDGET_SECRET_KEY`
+(ezBookkeeping's session secret, vps01 `.env`; a restore without it
+invalidates every session), `OPENOBSERVE_ROOT_EMAIL`,
+`OPENOBSERVE_ROOT_PASSWORD` (OpenObserve's root login, vps02 `.env`;
+both passwords must satisfy its startup policy, see the `approve` job),
+`OPENOBSERVE_INGEST_USER`, `OPENOBSERVE_INGEST_PASSWORD` (the ingest
+credential Vector authenticates with, written to all three nodes),
 `CLOUDFLARE_ACCESS_SIEM_CLIENT_ID`/`_SECRET` (Vector's ingest token,
 written to vps00/vps01 `.env` under the old `CF_ACCESS_SIEM_*` keys),
 `CLOUDFLARE_ACCESS_STATUS_CLIENT_ID`/`_SECRET` (status Worker's

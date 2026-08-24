@@ -1,6 +1,6 @@
 ---
 name: failure-log
-description: Incident histories behind the one-line rules in this repo's CLAUDE.md failure logs — what was believed, what was true, how it was found, what it cost. Load before changing node hardening (sshd, UFW, DOCKER-USER, Docker daemon.json), the backups on vps01 (R2, rclone, restore drills, cron), Netdata alarms or alert delivery, a deploy workflow (rsync excludes, cron install, post-deploy probes, tunnel tokens), the status Worker or its poller, Dokploy compose apps or resource caps, or tooling config (Biome, yamllint, rtk, pre-commit, gitleaks) — and when a rule in a failure log looks redundant and you are tempted to drop it.
+description: Incident histories behind the one-line rules in this repo's CLAUDE.md failure logs — what was believed, what was true, how it was found, what it cost. Load before changing node hardening (sshd, UFW, DOCKER-USER, Docker daemon.json), the backups on vps01 (R2, rclone, restore drills, cron), Netdata alarms or alert delivery, a deploy workflow (rsync excludes, cron install, post-deploy probes, tunnel tokens), the status Worker or its poller, or tooling config (Biome, yamllint, rtk, pre-commit, gitleaks) — and when a rule in a failure log looks redundant and you are tempted to drop it.
 ---
 
 # Failure log: the incidents
@@ -184,7 +184,8 @@ boolean. Fix `.yamllint` (`check-keys: false`), never the workflow file.
 
 **New control-plane-style services get an explicit memory cap from the
 start.** Dokploy's was uncapped and ate a disproportionate share of a 2GB
-node; fix is `cap-dokploy-resources.sh`, detail in `scripts/CLAUDE.md`.
+node; it was bounded by `cap-dokploy-resources.sh` until Dokploy was
+removed 2026-08-23, and the script was deleted with it.
 
 ### Pointer: Fail2Ban and empty-stack pull
 
@@ -389,10 +390,11 @@ before it changed: watch this step if a new node is ever built.
 
 ### `bootstrap-dokploy.sh`'s sha256 is a record, not a check
 
-`bootstrap-dokploy.sh` still runs a vendor installer; Dokploy has no apt
-repo. It downloads to a file and prints the sha256 before executing. That
-is a *record*, not a verification: no published checksum exists to
-compare a first run against. Don't upgrade the claim.
+`bootstrap-dokploy.sh` ran a vendor installer; Dokploy had no apt repo.
+It downloaded to a file and printed the sha256 before executing. That was
+a *record*, not a verification: no published checksum existed to compare
+a first run against. The script was deleted with Dokploy's removal
+(2026-08-23); the lesson about sha256-as-record stands.
 
 ## `stacks/`: Netdata, alert delivery, tunnel tokens
 
@@ -725,7 +727,7 @@ three nodes" was recorded 2026-08-18 after testing `~/.ssh/id_ed25519_vps`
 as `deploy@` only; it is the root key and works as `root@` everywhere. A key
 is rejected *for a user*, never in general.
 
-## `dokploy/`: compose apps Dokploy pulls from git
+## `dokploy/`: compose apps Dokploy pulled from git (directory deleted with Dokploy, 2026-08-23)
 
 ### ezBookkeeping's upload path was never mounted
 
