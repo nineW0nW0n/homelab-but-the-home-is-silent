@@ -98,8 +98,64 @@ services:
     mem_limit: 128m
     mem_reservation: 64m
 
+  # wiki-kit (nineW0nW0n/wiki-kit): private wiki serving the brain-work
+  # bundle at wiki.maybeit.work, behind Access (owner-only). Three
+  # services from the upstream compose file, minus its cloudflared
+  # (vps00's host-mode one dials 127.0.0.1:8001 instead, rails 2/3) and
+  # minus its runner (mounts docker.sock — banned on these nodes). These
+  # three run on the default bridge network: wiki-web dials wiki-mcp by
+  # service name, and only wiki-web publishes a port, loopback-only
+  # (rail 1). bundles.yml and Caddyfile ship with this stack via rsync.
+  wiki-builder:
+    image: ghcr.io/ninew0nw0n/wiki-kit:0.1.0
+    container_name: wiki-builder
+    restart: unless-stopped
+    environment:
+      # Fine-grained PAT, read-only Contents on brain-work only.
+      GIT_TOKEN: ${WIKI_GIT_TOKEN}
+    volumes:
+      - ./bundles.yml:/etc/wiki/bundles.yml:ro
+      - wiki-bundles:/bundles
+      - wiki-site:/site
+      - wiki-state:/state
+    # Rail 4, hedged not measured: the Quartz/Node site build is the
+    # heavy step. Measure after a week and replace.
+    mem_limit: 768m
+    mem_reservation: 256m
+
+  wiki-web:
+    image: caddy:2.11.4-alpine
+    container_name: wiki-web
+    restart: unless-stopped
+    ports:
+      # :8090 is the tunnel listener (Access headers trusted); the
+      # image's :8080 LAN listener stays unpublished.
+      - "127.0.0.1:8001:8090"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - wiki-bundles:/bundles:ro
+      - wiki-site:/site:ro
+      - wiki-state:/state:ro
+    mem_limit: 64m
+    mem_reservation: 32m
+
+  wiki-mcp:
+    image: ghcr.io/ninew0nw0n/wiki-kit:0.1.0
+    container_name: wiki-mcp
+    restart: unless-stopped
+    command: ["python3", "mcp/server.py"]
+    volumes:
+      - ./bundles.yml:/etc/wiki/bundles.yml:ro
+      - wiki-bundles:/bundles:ro
+      - wiki-state:/state:ro
+    mem_limit: 128m
+    mem_reservation: 64m
+
 volumes:
   netdataconfig:
   netdatalib:
   netdatacache:
   vector-data:
+  wiki-bundles:
+  wiki-site:
+  wiki-state:
