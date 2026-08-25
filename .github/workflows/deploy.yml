@@ -79,6 +79,7 @@ jobs:
           BOOKING_MYSQL_ROOT_PASSWORD: ${{ secrets.BOOKING_MYSQL_ROOT_PASSWORD }}
           BOOKING_MYSQL_APP_PASSWORD: ${{ secrets.BOOKING_MYSQL_APP_PASSWORD }}
           BUDGET_SECRET_KEY: ${{ secrets.BUDGET_SECRET_KEY }}
+          WIKI_GIT_TOKEN: ${{ secrets.WIKI_GIT_TOKEN }}
         run: |
           # Compose truncates an unquoted .env value at '#' and
           # interpolates '$'; the shell scripts that source .r2.env and
@@ -107,6 +108,7 @@ jobs:
             BOOKING_MYSQL_ROOT_PASSWORD \
             BOOKING_MYSQL_APP_PASSWORD \
             BUDGET_SECRET_KEY \
+            WIKI_GIT_TOKEN \
             ; do
             value=$(printenv "$name" || true)
             if [ -z "$value" ]; then
@@ -197,7 +199,9 @@ jobs:
         include:
           - node: vps00
             suffix: VPS00
-            verify_args: 8050 - - cloudflared-vps00 vector
+            verify_args: >-
+              8050 - - cloudflared-vps00 vector
+              wiki-builder wiki-web wiki-mcp
           - node: vps01
             suffix: VPS01
             verify_args: >-
@@ -270,6 +274,7 @@ jobs:
           OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
           CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_ID }}
           CF_ACCESS_SIEM_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_SECRET }}
+          WIKI_GIT_TOKEN: ${{ secrets.WIKI_GIT_TOKEN }}
         run: |
           # One remote write: these printfs are grouped and piped together
           # into a single 'cat >', not '>>', so every value the stack needs
@@ -284,6 +289,7 @@ jobs:
             printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
             printf 'CF_ACCESS_SIEM_CLIENT_ID=%s\n' "$CF_ACCESS_SIEM_CLIENT_ID"
             printf 'CF_ACCESS_SIEM_CLIENT_SECRET=%s\n' "$CF_ACCESS_SIEM_CLIENT_SECRET"
+            printf 'WIKI_GIT_TOKEN=%s\n' "$WIKI_GIT_TOKEN"
           } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps00/.env'
 

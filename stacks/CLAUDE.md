@@ -20,13 +20,16 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Seven routes, all live -- read back from the API 2026-08-23 after the
+Eight routes, all live -- seven read back from the API 2026-08-23 after the
 Dokploy removal (`dokploy.maybeit.work`, its Access apps, its CNAME and
 its WAF bypass were deleted that day). Across three tunnels:
 
 - `vps00-metrics.maybeit.work` → `http://localhost:8050` on vps00, token
-  `CLOUDFLARE_TUNNEL_TOKEN`. Behind its own Access app. The only route on
-  that tunnel now.
+  `CLOUDFLARE_TUNNEL_TOKEN`. Behind its own Access app.
+- `wiki.maybeit.work` → `http://localhost:8001` on vps00, same tunnel
+  (created via API 2026-08-26): wiki-kit, see `stacks/vps00/CLAUDE.md`.
+  Access application `wiki`, one policy, `owner email allow`.
+  **Test deployment** — expected to be torn down if not kept.
 - `booking.maybeit.work` → `http://localhost:8101` on vps01
   (EasyAppointments, its own published loopback port), token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
@@ -108,7 +111,8 @@ rail 1, but only `ss` on the node sees loopback listeners and UDP.
   (cloudflared's built-in metrics endpoint -- it has no off switch, and
   loopback-only is the accepted state; the design spec's "disable it"
   item closes as not-doable, 2026-08-24)
-- vps00: `127.0.0.1:8050` (Netdata)
+- vps00: `127.0.0.1:8050` (Netdata), `:8001` (wiki-kit Caddy, since
+  2026-08-26)
 - vps01: `127.0.0.1:8101` (booking), `:8102` (budget), `:8150` (Netdata)
 - vps02: `127.0.0.1:8250` (Netdata), `:8251` (OpenObserve)
 

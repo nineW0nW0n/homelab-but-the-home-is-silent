@@ -1,0 +1,52 @@
+# wiki-kit web tier (HANDOFF §8). Same URL, two representations:
+#   path ends .md  -> raw file from /bundles (agents)
+#   otherwise      -> Quartz-built HTML from /site (humans)
+# Copied from nineW0nW0n/wiki-kit@main with one local change: the MCP
+# upstream is wiki-mcp (this stack's service name), not mcp. Here :8090 is
+# published on loopback only (127.0.0.1:8001) and the host-mode cloudflared
+# dials it; :8080 stays unpublished (rail 1). Loopback can forge
+# Cf-Access-* headers — accepted, same trust as every other loopback
+# origin on the node.
+
+(wiki) {
+	@git path_regexp \.git(/|$)
+	respond @git 404
+
+	handle /status {
+		root * /state
+		rewrite * /status.json
+		file_server
+	}
+
+	@markdown path *.md
+	handle @markdown {
+		root * /bundles
+		file_server
+	}
+
+	handle {
+		root * /site
+		try_files {path} {path}/index.html {path}.html
+		file_server
+	}
+}
+
+# LAN/local: a client here could forge Cf-Access headers, so MCP is refused.
+:8080 {
+	handle /mcp* {
+		respond "MCP is served through the tunnel only" 403
+	}
+	import wiki
+}
+
+# Tunnel-only: X-Wiki-User is only ever what Cloudflare Access
+# authenticated; any client-supplied value is dropped, then rewritten.
+:8090 {
+	handle /mcp* {
+		reverse_proxy wiki-mcp:8081 {
+			header_up -X-Wiki-User
+			header_up X-Wiki-User {header.Cf-Access-Authenticated-User-Email}
+		}
+	}
+	import wiki
+}

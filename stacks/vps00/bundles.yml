@@ -1,0 +1,15 @@
+---
+# wiki-kit bundle config (schema: bundles.example.yml in nineW0nW0n/wiki-kit).
+# No secrets here: the read-only git token arrives via WIKI_GIT_TOKEN in
+# .env, never in this file. No readers: key on purpose — the Cloudflare
+# Access app in front of wiki.maybeit.work is owner-only, so every
+# authenticated caller may read.
+site_host: wiki.maybeit.work
+interval_seconds: 900
+bundles:
+  - id: work
+    repo: https://github.com/nineW0nW0n/brain-work.git
+    path: /work
+    branch: main
+    groups: [sysadmin]
+    ticket_regex: '^[A-Z]+-[0-9]+$'

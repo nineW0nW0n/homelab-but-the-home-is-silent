@@ -41,6 +41,7 @@ in `.claude/skills/`.
 |---|---|---|
 | `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml`: cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
+| `stacks/vps00/` | wiki-kit test deployment (brain-work bundle) on the metrics node | exists → `stacks/vps00/CLAUDE.md` |
 | `stacks/vps01/` | The two apps (booking, ezBookkeeping) and their backups, R2 retention, drills, staleness alerting | exists → `stacks/vps01/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
