@@ -107,7 +107,7 @@ services:
   # service name, and only wiki-web publishes a port, loopback-only
   # (rail 1). bundles.yml and Caddyfile ship with this stack via rsync.
   wiki-builder:
-    image: ghcr.io/ninew0nw0n/wiki-kit:0.1.0
+    image: ghcr.io/ninew0nw0n/wiki-kit:0.1.2
     container_name: wiki-builder
     restart: unless-stopped
     environment:
@@ -140,7 +140,7 @@ services:
     mem_reservation: 32m
 
   wiki-mcp:
-    image: ghcr.io/ninew0nw0n/wiki-kit:0.1.0
+    image: ghcr.io/ninew0nw0n/wiki-kit:0.1.2
     container_name: wiki-mcp
     restart: unless-stopped
     command: ["python3", "mcp/server.py"]
