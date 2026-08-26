@@ -200,7 +200,7 @@ jobs:
           - node: vps00
             suffix: VPS00
             verify_args: >-
-              8050 - - cloudflared-vps00 vector
+              8050 - wiki:8001 cloudflared-vps00 vector
               wiki-builder wiki-web wiki-mcp
           - node: vps01
             suffix: VPS01

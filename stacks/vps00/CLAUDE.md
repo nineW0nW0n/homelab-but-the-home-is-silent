@@ -26,12 +26,14 @@ Baseline services (cloudflared, Netdata, Vector) are documented in
   owner-only. The `:8090` listener trusts `Cf-Access-*` headers;
   publishing it on loopback means a node-local process could forge them
   to MCP — accepted, same trust as every other loopback origin here.
-- `/` answers 404 until the first builder cycle finishes; liveness is
-  `curl http://127.0.0.1:8001/status` (builder-written `status.json`) or
-  `https://wiki.maybeit.work/work/` in a browser. CI's verify step
-  samples the three containers' restart counters but has **no HTTP probe**
-  for wiki: the probe helper requires 200 on `/`, which is only true
-  after content exists.
+- Since 0.1.2 the builder writes a root index, so `/` answers 200 once
+  the first cycle has run and CI's verify step probes `wiki:8001` on `/`
+  (plus the three containers' restart counters). The `wiki-site` volume
+  persists across deploys, so the probe only races the builder on a
+  brand-new node/volume — if that first-ever deploy FAILs on the wiki
+  probe, wait a cycle and re-run verify before diagnosing. Deeper check
+  by hand: `curl http://127.0.0.1:8001/status` (builder-written
+  `status.json` with per-bundle sha/lint/build).
 
 ## Teardown checklist (if the test is discarded)
 
