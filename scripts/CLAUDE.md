@@ -66,10 +66,13 @@ someone next touches them.
 - `check-rails.sh`: **not a provisioning script** — no node, no ssh, no
   arguments; a repo-wide check that runs on every commit via
   `.pre-commit-config.yaml` and again under `pre-commit run --all-files` in
-  `validate.yml`. It enforces rails 2, 3, 4 and 7 mechanically, rail 1
-  partially (source-level only — that the `DOCKER-USER` drop and the
-  `daemon.json` loopback bind still exist in `harden-node.sh`; only an
-  off-node sweep proves the nodes), plus a markup-sink grep over the public
+  `validate.yml`. It enforces rails 2, 3, 4, 7 and 8 mechanically, rails 1
+  and 6 partially (source-level only — for rail 1 that the `DOCKER-USER`
+  drop, the `daemon.json` loopback bind and the `docker-wan-drop.service`
+  unit plus its `enable`/`restart` still exist in `harden-node.sh`; for
+  rail 6 that `provision-deploy-user.sh` keeps `passwd -d` and grants no
+  sudo. Only an off-node sweep proves the nodes, and only `sudo -n true`
+  over SSH proves the account), plus a markup-sink grep over the public
   status page, that `vector.yaml` is byte-identical across all three
   nodes, and that `setup-maintenance.sh` still sets Docker's journald log
   driver (Vector reads container logs from the journal). It is listed
@@ -97,6 +100,18 @@ someone next touches them.
   the script was supposed to leave (`/var/lib/aide/aide.db`,
   `/usr/local/sbin/aide-daily`, `/etc/cron.d/aide-daily`) before concluding
   anything, and re-run -- it is idempotent.
+
+- **A grep can match text inside the very heredoc it is meant to guard.**
+  `check-rails.sh`'s rail 1 check looked for `-I DOCKER-USER .*-j DROP` in
+  `harden-node.sh`, but that line lives *inside* the `WANDROP` payload
+  heredoc -- so deleting the `docker-wan-drop.service` unit block and its
+  `systemctl enable`/`restart` left the grep satisfied and the check green
+  with rail 1's boot-persistence layer gone. Found 2026-08-28 by tracing
+  the graph edge claiming the service implements the network model; the
+  unit and its enablement are asserted separately now, and the deletion
+  was watched failing before the fix was trusted. Assert the thing that
+  *runs* the payload, never only the payload -- a heredoc is data, not
+  behaviour.
 
 Incident histories behind these rules: `failure-log` skill (`scripts/`).
 

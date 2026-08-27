@@ -19,9 +19,12 @@ never re-run until green).
    --all-files --show-diff-on-failure` (yamllint --strict, actionlint,
    gitleaks, shellcheck, trailing-whitespace, large-file/private-key
    checks, plus three local hooks: `no-real-ips`, `check-rails` — which
-   mechanically asserts rail 7, this directory's own rail, by requiring
-   every deploying job to carry `environment: production` or `needs:` a job
-   that does — and `biome ci`). Also
+   mechanically asserts this directory's own two rails: rail 7, by
+   requiring every deploying job to carry `environment: production` or
+   `needs:` a job that does, and rail 8, by requiring both deploy workflows
+   to call the reusable `validate.yml` with the `production` job
+   transitively `needs:`-ing that call (it covers rails 2, 3, 4, 7 and 8,
+   plus 1 and 6 at source level) — and `biome ci`). Also
    callable via `workflow_call`; both deploy workflows call it first (rail
    8).
 2. `deploy.yml` runs on push to `main` (paths: `stacks/**`, itself) or
