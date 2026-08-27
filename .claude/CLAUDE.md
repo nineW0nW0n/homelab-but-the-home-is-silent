@@ -79,7 +79,9 @@ Never silently pick one.
    bind, and the `docker-wan-drop.service` unit plus its
    `systemctl enable`/`restart` that carry the drop across a reboot).
    Source is not node state: only the off-node sweep proves a node is
-   closed, run daily by `.github/workflows/port-sweep.yml` (PR #71).
+   closed, run twice daily by `.github/workflows/port-sweep.yml` (PR
+   #71; second cron added 2026-08-27 because GitHub drops scheduled runs
+   silently -- see that directory's failure log).
    A manual sweep is still the post-provisioning check after any
    provisioning run — `nc -z -w 3 <ip> <port>` over
    22/80/443/8050/8101/8102/8150/8250/8251 must answer on 22 and nothing

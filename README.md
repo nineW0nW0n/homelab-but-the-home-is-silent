@@ -99,7 +99,7 @@ host-mode service still bound `0.0.0.0` with the setting active. Swarm is
 inactive on every node since 2026-08-23, so neither case is live today.
 
 That is precisely why the check that matters is a port sweep from
-off-node, not `ufw status`. That sweep now runs daily in CI
+off-node, not `ufw status`. That sweep now runs twice daily in CI
 (`.github/workflows/port-sweep.yml`), failing on any open port but 22; a
 manual sweep remains the post-provisioning check after any hardening run.
 
@@ -147,7 +147,7 @@ worth naming next to a zero-inbound-ports posture.
     validate.yml                     pre-commit over the whole repo, reusable via workflow_call
     deploy.yml                       one approval, then all three nodes in parallel
     deploy-worker.yml                tests + deploys the status Worker (same production approval)
-    port-sweep.yml                   daily off-node port sweep of all three nodes
+    port-sweep.yml                   twice-daily off-node port sweep of all three nodes
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
 stacks/

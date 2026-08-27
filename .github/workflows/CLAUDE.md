@@ -5,7 +5,7 @@ Parent: ../../.claude/CLAUDE.md
 `validate.yml` (lint gate), `deploy.yml` (parallel deploy to the three
 nodes), `deploy-worker.yml` (the `maybeit.work` status Worker: `npm test`
 then `wrangler deploy`, entirely separate from the node deploy path; see
-`worker/status/CLAUDE.md`), `port-sweep.yml` (daily off-node sweep of the
+`worker/status/CLAUDE.md`), `port-sweep.yml` (twice-daily off-node sweep of the
 `SSH_HOST_VPS0N` addresses -- rail 1's enforcement point; prints only
 `port N: OPEN/closed`, never an address, and fails on any open port but
 22 or on 22 closed. No approval gate: it deploys nothing, and
@@ -197,7 +197,10 @@ rules guard human error, not CI.
   1's enforcement point can be off for a day and every run in the list is
   still green. Judge a scheduled check by its newest `created_at`, not by
   its conclusions, and re-dispatch by hand when that timestamp is older
-  than the interval.
+  than the interval. Mitigated 2026-08-27 with a second cron ~12h off the
+  first: two chances a day for one to land, not a guarantee. If both
+  windows ever go quiet, that is the drop this entry is about, not a
+  broken workflow -- check `state` on the workflow before touching it.
 
 Incident histories behind these rules: `failure-log` skill
 (`.github/workflows/`).
