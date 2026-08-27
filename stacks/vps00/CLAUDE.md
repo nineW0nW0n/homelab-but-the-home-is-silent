@@ -1,15 +1,23 @@
 Parent: ../CLAUDE.md
 
-# stacks/vps00/: metrics node + wiki-kit test deployment
+# stacks/vps00/: metrics node + wiki-kit
 
 Baseline services (cloudflared, Netdata, Vector) are documented in
 `stacks/CLAUDE.md`; this file exists for the wiki-kit workload added
 2026-08-26.
 
-## wiki-kit (TEST — likely torn down after verification)
+## wiki-kit (kept)
 
+- Deployed 2026-08-26 as a test, **kept 2026-08-27**. It is a normal
+  workload now, not a trial: it deploys, is probed and is reasoned about
+  like every other stack here.
+- `wiki-builder`'s `mem_limit: 768m` is a hedge, not a measurement — it
+  was set before the service had ever run a Quartz build. Measure real
+  usage (`docker stats --no-stream wiki-builder`) once it has a week of
+  cycles behind it and replace the number. Every other cap in this file
+  came from observed usage + 50%; this one did not.
 - Upstream: `nineW0nW0n/wiki-kit`, pinned image
-  `ghcr.io/ninew0nw0n/wiki-kit:0.1.0`. Three services: `wiki-builder`
+  `ghcr.io/ninew0nw0n/wiki-kit:0.1.2`. Three services: `wiki-builder`
   (clones + lints + Quartz-builds bundles every `interval_seconds`),
   `wiki-web` (Caddy, the only published port: `127.0.0.1:8001` → its
   `:8090` tunnel listener), `wiki-mcp` (read-only MCP behind `/mcp`).
@@ -35,7 +43,7 @@ Baseline services (cloudflared, Netdata, Vector) are documented in
   by hand: `curl http://127.0.0.1:8001/status` (builder-written
   `status.json` with per-bundle sha/lint/build).
 
-## Teardown checklist (if the test is discarded)
+## Teardown checklist (not scheduled; kept here for whenever it is)
 
 Compose services + volumes (`wiki-*`), `bundles.yml`, `Caddyfile`, the
 `WIKI_GIT_TOKEN` secret and its deploy.yml wiring, the `wiki.maybeit.work`
