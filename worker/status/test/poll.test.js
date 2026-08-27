@@ -158,3 +158,15 @@ test('pollAll never requests the Dokploy host, so the Access token cannot reach 
   )
   assert.equal(snapshot.dokploy, undefined)
 })
+
+test('pollAll marks a node down when Netdata answers non-2xx', async () => {
+  const env = { NODE_HOSTS: 'vps00-metrics.maybeit.work' }
+  const snapshot = await pollAll(env, async () => jsonResponse(['cpu'], [10], 503))
+  assert.equal(snapshot.nodes.vps00.up, false)
+})
+
+test('pollAll marks a node down on malformed upstream JSON', async () => {
+  const env = { NODE_HOSTS: 'vps00-metrics.maybeit.work' }
+  const snapshot = await pollAll(env, async () => new Response('not json', { status: 200 }))
+  assert.equal(snapshot.nodes.vps00.up, false)
+})

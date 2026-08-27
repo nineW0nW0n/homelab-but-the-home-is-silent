@@ -81,11 +81,15 @@ Never silently pick one.
    A manual sweep is still the post-provisioning check after any
    provisioning run — `nc -z -w 3 <ip> <port>` over
    22/80/443/8050/8101/8102/8150/8250/8251 must answer on 22 and nothing
-   else (2377/3000/19999 retired with Dokploy and the port-scheme moves). **No
-   `-G 3`**: that is BSD/macOS source-routing, and Debian's
-   netcat-traditional exits 1 with "invalid hop pointer" without opening a
-   socket — sweep from a node and every port reads closed (verified
-   2026-08-20). `-w 3` alone works on both.
+   else (2377/3000/19999 retired with Dokploy and the port-scheme moves).
+   **`-G` is platform-dependent, and is read backwards in both directions
+   if you guess.** On Debian, netcat-traditional reads `-G` as source-routing
+   hop pointer and exits 1 with "invalid hop pointer" without opening a
+   socket, so `-G 3` makes every port read closed (verified 2026-08-20). On
+   macOS, BSD `nc` reads `-G` as the *connect* timeout and `-w` as the *idle*
+   timeout, so `-w 3` alone never bounds the connect and hangs on the first
+   filtered port. Use `-w 3` from a node, `-G 3 -w 3` from the laptop; both
+   checked against `man nc` on 2026-08-28.
 2. **One tunnel token per node, never shared.** A shared token means
    requests can land on the wrong node and 502. Checked by
    `scripts/check-rails.sh`; off-node, each tunnel must show exactly one

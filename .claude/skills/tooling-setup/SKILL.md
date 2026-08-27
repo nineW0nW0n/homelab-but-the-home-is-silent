@@ -280,7 +280,8 @@ wrong. Cloudflare sees only egress-initiated tunnel connections and has
 zero view of what listens on a VPS. The one Cloudflare-side signal is
 negative: no DNS record routes to a node IP, which proves there is no
 public DNS path, *not* that a port is closed. The off-node
-`nc -z -G 3 -w 3 <ip> <port>` sweep stays the only real check. Same
+`nc -z <ip> <port>` sweep stays the only real check -- `-G 3 -w 3` from
+macOS, `-w 3` on Debian, never `-G` there (rail 1). Same
 shape as the old `README.md` claim that UFW enforced zero inbound while
 three ports answered.
 
