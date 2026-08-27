@@ -1,6 +1,7 @@
 import { isDebugAuthorized } from './debug-auth.js'
 import page from './page.html'
 import { isFresh, POLL_TTL_MS, pollAll } from './poll.js'
+import { toStatusJson } from './status-json.js'
 
 const SNAPSHOT_KEY = 'snapshot'
 
@@ -39,27 +40,6 @@ const PAGE_HEADERS = {
   // The page is a static vendored file that only changes on deploy, so a
   // browser refresh has no reason to re-invoke the Worker for it.
   'cache-control': 'public, max-age=300',
-}
-
-// Page's own DATA CONTRACT (see src/page.html): array of up to 3
-// { name, load, cpu, mem, swap, disk }, raw 0-100 percents --
-// the page hardcodes exactly 3 status-dot slots, mapped by ARRAY INDEX,
-// not by name. Order must come from NODE_HOSTS, not Object.entries(nodes)
-// -- pollAll fills that object from concurrent promises, so insertion
-// order isn't guaranteed to match NODE_HOSTS's order.
-function toStatusJson(snapshot, nodeHosts) {
-  return nodeHosts.map((host) => {
-    const name = host.split('-metrics.')[0]
-    const n = snapshot.nodes[name]
-    return {
-      name: name.toUpperCase(),
-      load: n.load,
-      cpu: n.cpu,
-      mem: n.mem,
-      swap: n.swap,
-      disk: n.disk,
-    }
-  })
 }
 
 // No Cron Trigger: cron-triggered subrequests to this account's own
