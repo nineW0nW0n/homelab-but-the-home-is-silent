@@ -8,8 +8,17 @@ name: port sweep
 
 "on":
   schedule:
-    # 19:17 UTC = 03:17 Asia/Manila daily.
+    # Twice daily, ~12h apart, because GitHub queues scheduled runs
+    # best-effort and drops them silently under load: 2026-08-27's
+    # window never fired at all, and the three before it started 28min,
+    # 28min and 2h50 late. Nothing fails when a run never starts, so one
+    # cron line means rail 1's only real enforcement point can be dark
+    # for a day with every run in the list still green. Two lines are not
+    # a guarantee -- they are two chances a day for one to land.
+    # 19:17 UTC = 03:17 Asia/Manila.
     - cron: "17 19 * * *"
+    # 07:17 UTC = 15:17 Asia/Manila.
+    - cron: "17 7 * * *"
   workflow_dispatch: {}
 
 permissions:
