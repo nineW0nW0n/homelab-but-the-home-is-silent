@@ -20,10 +20,12 @@ in `.claude/skills/`.
   default. Plain Docker Engine, Swarm inactive on all three (it existed
   only for Dokploy; left 2026-08-23), so nothing needs 2377/7946 open
   between them. All three run `cloudflared`, Netdata and Vector; vps01
-  carries the two apps, vps02 OpenObserve.
+  carries the two apps, vps02 OpenObserve, vps00 wiki-kit.
 - **When**: work in progress. Provisioning/hardening done and
-  CI-deployable; three workloads live, the third being centralised logging
-  (OpenObserve on vps02, ingesting from all three nodes since 2026-08-23).
+  CI-deployable; four workloads live -- the two vps01 apps, centralised
+  logging (OpenObserve on vps02, ingesting from all three nodes since
+  2026-08-23) and wiki-kit on vps00 (deployed as a test 2026-08-26, kept
+  2026-08-27).
   A GitHub ruleset protects `main`
   against deletion and force-pushes (verified by attempting a rewind and
   being rejected), so a rewrite is deliberate: disable the ruleset,
@@ -41,7 +43,7 @@ in `.claude/skills/`.
 |---|---|---|
 | `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml`: cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
-| `stacks/vps00/` | wiki-kit test deployment (brain-work bundle) on the metrics node | exists → `stacks/vps00/CLAUDE.md` |
+| `stacks/vps00/` | wiki-kit (brain-work bundle) on the metrics node | exists → `stacks/vps00/CLAUDE.md` |
 | `stacks/vps01/` | The two apps (booking, ezBookkeeping) and their backups, R2 retention, drills, staleness alerting | exists → `stacks/vps01/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |

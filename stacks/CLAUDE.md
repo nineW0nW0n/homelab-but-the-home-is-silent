@@ -29,10 +29,27 @@ its WAF bypass were deleted that day). Across three tunnels:
 - `wiki.maybeit.work` → `http://localhost:8001` on vps00, same tunnel
   (created via API 2026-08-26): wiki-kit, see `stacks/vps00/CLAUDE.md`.
   Access application `wiki`, one policy, `owner email allow`.
-  **Test deployment** — expected to be torn down if not kept.
+  Deployed as a test 2026-08-26, **kept 2026-08-27**.
 - `booking.maybeit.work` → `http://localhost:8101` on vps01
   (EasyAppointments, its own published loopback port), token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
+  **No Access app, by decision (2026-08-27).** It is the one public-facing
+  workload here: clients book appointments without an account, so an
+  Access login in front of it would break the thing it exists to do. What
+  guards it is the zone geo rule (PH only), EasyAppointments' own login
+  for the admin side, and **the zone's single rate-limit rule**, which
+  was retargeted here 2026-08-27 from the deleted
+  `dokploy.maybeit.work`: `http.host eq "booking.maybeit.work" and
+  http.request.method ne "GET"`, block, 20 requests / 10s per
+  `ip.src`+`cf.colo.id`, 10s timeout (read back from the API, version 2).
+  Non-GET only on purpose — every page load pulls dozens of GET assets
+  from this same host, so a host-wide limit would block real visitors;
+  form posts and the booking AJAX are what an attacker floods. The
+  threshold is deliberately generous: blocking a real client mid-booking
+  costs more here than slowing a brute-forcer, and the free plan allows
+  exactly one rule, so this is the only slot. Do not "fix" the missing
+  Access app — every other hostname having one is not an oversight, it is
+  the difference between an ops surface and a public one.
 - `budget.maybeit.work` → `http://localhost:8102` on vps01, same tunnel:
   ezBookkeeping, the SQLite dataset `vps01/CLAUDE.md` backs up. Behind its
   own Access application (`budget`, 24h session) since 2026-08-20, **two**
@@ -286,6 +303,17 @@ Backups, R2 retention and locks, restore/alarm drills and the backup
 staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
 
 ## Failure log
+
+- **Deleting a hostname does not delete the Cloudflare rules aimed at
+  it.** The zone's one rate-limit rule still matched
+  `dokploy.maybeit.work` on 2026-08-27, four days after that hostname,
+  its tunnel route and its Access apps were removed — enabled, counted as
+  a control in two documents, matching nothing. The free plan allows one
+  rate-limit rule, so the cost was the whole capability (retargeted to
+  `booking.maybeit.work` the same day). After removing a hostname,
+  re-read every zone ruleset expression for its name; a rule that
+  survives its target is worse than no rule, because it reads as
+  coverage.
 
 Incident histories behind these rules: `failure-log` skill (`stacks/`).
 

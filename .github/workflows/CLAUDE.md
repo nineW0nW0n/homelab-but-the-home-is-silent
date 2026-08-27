@@ -189,6 +189,16 @@ rules guard human error, not CI.
 
 ## Failure log
 
+- **A green `schedule` history does not mean the workflow ran last
+  night.** GitHub queues scheduled runs best-effort and drops them under
+  load, silently — `port-sweep.yml` (cron `17 19 * * *`) landed 28 min
+  late, 28 min late, then 2h50 late, then nothing for the next window
+  (measured 2026-08-27). Nothing fails when a run never starts, so rail
+  1's enforcement point can be off for a day and every run in the list is
+  still green. Judge a scheduled check by its newest `created_at`, not by
+  its conclusions, and re-dispatch by hand when that timestamp is older
+  than the interval.
+
 Incident histories behind these rules: `failure-log` skill
 (`.github/workflows/`).
 
