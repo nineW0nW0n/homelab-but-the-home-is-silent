@@ -67,14 +67,15 @@ repos:
         types: [text]
         exclude: ^worker/status/(node_modules/|package-lock\.json$)
 
-      # Rails 1 (partial), 2, 3, 4 and 7. pass_filenames is false on purpose
+      # Rails 1 and 6 (partial), 2, 3, 4, 7 and 8. pass_filenames is false
+      # on purpose
       # and is NOT the gitleaks trap: rail 2 (token unique ACROSS nodes) and
       # rail 7 (job needs an approving job) are cross-file properties, so the
       # script always reads the whole set, and it exits non-zero if the set
       # is empty instead of passing on nothing. `files` only decides when it
       # runs at commit time; under --all-files it always runs.
       - id: check-rails
-        name: hard rails (1 partial, 2, 3, 4, 7)
+        name: hard rails (1 partial, 2, 3, 4, 6 partial, 7, 8)
         entry: scripts/check-rails.sh
         language: system
         files: ^(stacks/.*docker-compose\.yml|\.github/workflows/|scripts/)

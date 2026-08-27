@@ -1,10 +1,11 @@
 #!/bin/sh
 # Mechanical enforcement for the hard rails in .claude/CLAUDE.md. This repo's
 # most-repeated failure is a rail that exists on paper with nothing running it
-# (rail 5, rail 9, pre-commit itself, the CLAUDE.md budget check). Four rails
-# are checkable from the files in this repo; this checks them, plus two
-# non-rail invariants: vector.yaml byte-identical across the three nodes,
-# and setup-maintenance.sh still setting Docker's journald log driver.
+# (rail 5, rail 9, pre-commit itself, the CLAUDE.md budget check). Seven rails
+# are checkable from the files in this repo -- rails 1 and 6 only at source
+# level, see their stanzas; this checks them, plus two non-rail invariants:
+# vector.yaml byte-identical across the three nodes, and
+# setup-maintenance.sh still setting Docker's journald log driver.
 #
 # Never skips: a missing file or an empty glob is a failure, because a check
 # that scans nothing is the exact bug this script exists to prevent.
@@ -81,10 +82,13 @@ done
 shared=$(printf '%s' "$tokens" | sort | uniq -d)
 [ -z "$shared" ] || err "rail 2: tunnel token shared by more than one node: $shared"
 
-# --- rail 7: one approval gates production ------------------------------
-# A deploying job must either carry environment: production itself or need a
-# job that does. ponytail: one level of needs, inline needs/environment only;
-# anything else is reported as unsupported rather than silently passing.
+# --- rails 7 and 8: one approval, and it sits behind validate.yml -------
+# Rail 7: a deploying job must either carry environment: production itself or
+# need a job that does. ponytail: one level of needs, inline needs/environment
+# only; anything else is reported as unsupported rather than silently passing.
+# Rail 8: the job carrying that approval must need a job that calls the
+# reusable validate.yml, or a red lint gate never blocks a deploy. Same parse,
+# not a second one: rail 7 already collects needs/environment per job.
 for f in .github/workflows/*.yml; do
   [ -f "$f" ] || { err "no workflows found under .github/workflows/"; break; }
   awk -v f="$f" '
@@ -100,12 +104,15 @@ for f in .github/workflows/*.yml; do
       if (n ~ /^[ \t]*$/) { printf "FAIL %s:%d rail 7: job \"%s\" uses a block-form needs: this check cannot read\n", f, NR, job > "/dev/stderr"; bad = 1 }
       needs[job] = n
     }
+    job != "" && /^    uses:[ \t]*\.\/\.github\/workflows\/validate\.yml[ \t]*$/ { val[job] = 1 }
     job != "" && ($0 ~ /(^|[^a-zA-Z-])ssh / || $0 ~ /wrangler-action/ || $0 ~ /(^|[^a-zA-Z-])rsync /) { deploys[job] = 1 }
     END {
       for (j in deploys) {
-        ok = env[j]
-        if (!ok) { m = split(needs[j], a, /[ \t]+/); for (i = 1; i <= m; i++) if (env[a[i]]) ok = 1 }
-        if (!ok) { printf "FAIL %s:%d rail 7: deploying job \"%s\" reaches no environment: production approval\n", f, line[j], j > "/dev/stderr"; bad = 1 }
+        ok = env[j]; gate = j
+        if (!ok) { m = split(needs[j], a, /[ \t]+/); for (i = 1; i <= m; i++) if (env[a[i]]) { ok = 1; gate = a[i] } }
+        if (!ok) { printf "FAIL %s:%d rail 7: deploying job \"%s\" reaches no environment: production approval\n", f, line[j], j > "/dev/stderr"; bad = 1; continue }
+        v = 0; m = split(needs[gate], a, /[ \t]+/); for (i = 1; i <= m; i++) if (val[a[i]]) v = 1
+        if (!v) { printf "FAIL %s:%d rail 8: approval job \"%s\" does not need a job calling ./.github/workflows/validate.yml\n", f, line[gate], gate > "/dev/stderr"; bad = 1 }
       }
       exit bad
     }
@@ -122,6 +129,17 @@ if [ -f "$h" ]; then
   # pattern matched that instead, passing with the insert deleted.
   grep -qE '\-I DOCKER-USER .*-j DROP' "$h" || err "$h rail 1: DOCKER-USER drop rule is gone"
   grep -qF '"ip": "127.0.0.1"' "$h" || err "$h rail 1: daemon.json loopback bind (\"ip\": \"127.0.0.1\") is gone"
+  # The -I line above lives inside the WANDROP payload heredoc, so it stays
+  # matched even with the unit that runs that payload at boot deleted. Assert
+  # the unit and its enablement separately, or rail 1 survives one reboot.
+  grep -qF 'ExecStart=/usr/local/sbin/docker-wan-drop.sh' "$h" ||
+    err "$h rail 1: docker-wan-drop.service unit block is gone -- the drop rules would not survive a reboot"
+  # enable and restart both: 'enable --now' re-runs nothing on an already-
+  # active RemainAfterExit=yes unit, so an updated payload never applies.
+  grep -qF 'systemctl enable docker-wan-drop.service' "$h" ||
+    err "$h rail 1: 'systemctl enable docker-wan-drop.service' is gone -- the unit would not start at boot"
+  grep -qF 'systemctl restart docker-wan-drop.service' "$h" ||
+    err "$h rail 1: 'systemctl restart docker-wan-drop.service' is gone -- the drops are not applied on this run"
 else
   err "$h rail 1: missing -- rail 1 has no enforcement at all"
 fi
@@ -129,6 +147,21 @@ fi
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
 echo "        are closed: nc -z -w 3 <ip> 22 80 443 8050 8101 8102 8150 8250 8251"
 echo "        (no -G: BSD-only, Debian nc exits 1 without connecting)"
+
+# --- rail 6 (partial): the CI deploy user stays key-only, no sudo -------
+# Same honesty as rail 1: this catches deletion in the script that creates the
+# user, not drift on a node -- only 'ssh deploy@node sudo -n true' does that.
+p=scripts/provision-deploy-user.sh
+if [ -f "$p" ]; then
+  # passwd -d, never -l: under UsePAM no, sshd's own shadow check rejects
+  # pubkey auth on a locked account, which broke every CI deploy once.
+  grep -qF 'passwd -d deploy' "$p" || err "$p rail 6: 'passwd -d deploy' is gone -- the deploy account's password field must be emptied"
+  ! grep -qF 'passwd -l' "$p" || err "$p rail 6: 'passwd -l' locks the account and breaks pubkey auth under UsePAM no; use passwd -d"
+  # Any sudo grant at all, not a specific one: the script grants none today.
+  ! grep -qE 'sudoers|NOPASSWD|usermod[^|]*sudo' "$p" || err "$p rail 6: the deploy user is being granted sudo"
+else
+  err "$p rail 6: missing -- nothing creates the key-only deploy user"
+fi
 
 # --- Docker's journald log driver still set --------------------------------
 # Not part of rail 1 above: vector.yaml (all nodes) reads container stdout
@@ -176,4 +209,4 @@ else
 fi
 
 [ "$fail" -eq 0 ] || { echo "check-rails: FAILED" >&2; exit 1; }
-echo "check-rails: rails 1 (partial), 2, 3, 4, 7 + markup sinks, vector.yaml identity, journald driver OK across $found compose files"
+echo "check-rails: rails 1 (partial), 2, 3, 4, 6 (partial), 7, 8 + markup sinks, vector.yaml identity, journald driver OK across $found compose files"

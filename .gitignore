@@ -43,3 +43,7 @@ node_modules/
 # Claude Code local permission state -- machine-specific, never shared.
 # Also keeps Biome from linting a file it does not own (vcs.useIgnoreFile).
 .claude/settings.local.json
+
+# graphify generated knowledge graph -- rebuild with /graphify, never committed.
+# Also keeps Biome off its generated graph.html (vcs.useIgnoreFile).
+graphify-out/

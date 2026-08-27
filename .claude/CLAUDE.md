@@ -46,7 +46,7 @@ in `.claude/skills/`.
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
 | `worker/status/` | Cloudflare Worker: status page + health poller | exists → `worker/status/CLAUDE.md` |
-| `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`), plus the failure-log archive the propagation protocol writes to; nothing deploys from here | none: no rails of its own |
+| `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`), the failure-log archive the propagation protocol writes to, and agent-skill config (`agents/`); nothing deploys from here | none: no rails of its own |
 
 Keep this column current the same commit you add or remove a directory
 file.
@@ -73,8 +73,11 @@ Never silently pick one.
    (`DOCKER-USER` drops + `daemon.json` loopback bind). Neither covers
    ingress-mode Swarm publishes, which traverse `DOCKER-INGRESS` --
    see `scripts/CLAUDE.md`. Partially checked by `scripts/check-rails.sh`
-   (source-level only); enforced daily off-node by
-   `.github/workflows/port-sweep.yml` (PR #71) — the rail has its check.
+   (source-level only: the `DOCKER-USER` drop, the `daemon.json` loopback
+   bind, and the `docker-wan-drop.service` unit plus its
+   `systemctl enable`/`restart` that carry the drop across a reboot).
+   Source is not node state: only the off-node sweep proves a node is
+   closed, run daily by `.github/workflows/port-sweep.yml` (PR #71).
    A manual sweep is still the post-provisioning check after any
    provisioning run — `nc -z -w 3 <ip> <port>` over
    22/80/443/8050/8101/8102/8150/8250/8251 must answer on 22 and nothing
@@ -96,7 +99,10 @@ Never silently pick one.
 5. **Real IPs are never committed.** Use the inventory key/hostname;
    `infra/inventory.example.yaml` stays redacted.
 6. **CI deploy user: key-only, no sudo, no password login.** Provisioning
-   scripts use root over SSH, a separate credential.
+   scripts use root over SSH, a separate credential. Partially checked by
+   `scripts/check-rails.sh` (source-level only: `provision-deploy-user.sh`
+   keeps `passwd -d` — never `passwd -l`, which leaves a lockable password
+   — and grants no sudo). What the account is on the node still needs SSH.
 7. **One approval gates production, in every workflow that reaches it** —
    `deploy.yml` via a single `approve` job the three parallel node deploys
    hang off, `deploy-worker.yml` via `environment: production` on its lone
@@ -106,7 +112,9 @@ Never silently pick one.
    reaching one node before the others. What remains is `validate.yml`, the
    single approval, and `git revert` (rail 12). Never drop the gate too.
 8. **`validate.yml` passes before `deploy.yml` runs.** Fix lint failures;
-   never bypass them.
+   never bypass them. Checked by `scripts/check-rails.sh`: both deploy
+   workflows must call the reusable `validate.yml`, and the job holding
+   `environment: production` must transitively `needs:` that call.
 9. **Biome lints/formats all JS, TS, JSON, JSONC, CSS.** No ESLint, no
    Prettier. Config: `biome.json`, see the `tooling-setup` skill.
 10. **`yamllint` lints every `.yml`/`.yaml`** until Biome ships YAML support
@@ -115,9 +123,14 @@ Never silently pick one.
 11. **Never print secret material in full** — tunnel tokens, key contents,
     `.env` values — in chat output, not just commits. Redact
     (`TUNNEL_TOKEN=***redacted***`). Do not lean on gitleaks for this; see
-    the failure log for what it actually scans.
+    the failure log for what it actually scans. **Judgement: no mechanical
+    check.** Nothing can see your chat output, so this one holds only if
+    you hold it.
 12. **Rollback is `git revert` + push, not manual node surgery.** Let
-    `deploy.yml` redeploy the last-known-good stack.
+    `deploy.yml` redeploy the last-known-good stack. **Judgement: no
+    mechanical check.** Nothing detects hand-edits on a node, and the
+    moment this rail matters is an incident, when it is least likely to be
+    read — so read it then.
 
 ## The loop
 
@@ -129,7 +142,8 @@ pre-commit run --all-files   # every hook in .pre-commit-config.yaml:
                              # shellcheck -s sh, the pre-commit-hooks
                              # basics, and three local hooks --
                              # no-real-ips (rail 5), check-rails (rails 2,
-                             # 3, 4, 7 + rail 1 partial), biome ci (rail 9)
+                             # 3, 4, 7, 8 + rails 1 and 6 partial),
+                             # biome ci (rail 9)
 shellcheck scripts/*.sh      # every script stays shellcheck-clean
 git ls-files '*CLAUDE.md' | xargs wc -l
 ```
@@ -172,6 +186,27 @@ need it — a tool check fails, a config is missing, or setup is the task —
 not routinely at session start. It is a skill precisely so it stays out of
 context until needed. Never inline it here or in a directory file.
 
+## Agent skills
+
+Config the mattpocock engineering skills read. Written by
+`setup-matt-pocock-skills`; edit the files directly, don't re-run the skill.
+
+### Issue tracker
+
+GitHub Issues on `nineW0nW0n/homelab-but-the-home-is-silent`, via `gh`. PRs
+are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, label string equal to role name. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root, neither
+created yet — skills proceed silently when absent. See
+`docs/agents/domain.md`.
+
 ## Failure log (cross-cutting only)
 
 Directory-specific mistakes go in that directory's `CLAUDE.md`. The
@@ -189,7 +224,11 @@ incident history behind every one-line rule in every failure log here:
   (`language: node`, `additional_dependencies: ["@biomejs/biome@2.5.8"]`,
   matching `biome.json`'s `$schema`; bump both together). Same class as
   rail 5's hook, the uninstalled `pre-commit`, and the budget check. Give
-  every new rail a check that runs.
+  every new rail a check that runs. Measured 2026-08-28: rails 6, 8, 11 and
+  12 had none -- not in `check-rails.sh`, not in `.pre-commit-config.yaml`,
+  not in any workflow. 6 and 8 gained checks the same day (6 partial,
+  source-level); **11 and 12 still have none** and hold by habit, which is
+  exactly what this entry says is not enough.
 - **`pre-commit` was configured but never installed as a git hook** (no
   `.git/hooks/pre-commit`), so `git commit` ran nothing locally; only
   `validate.yml` caught anything, after a push. Run `pre-commit install` in
@@ -273,6 +312,14 @@ incident history behind every one-line rule in every failure log here:
   Swarm was torn down in between and broke container DNS, and the next
   deploy's verify step found the 500 instead (2026-08-23). A check that
   passed before a change says nothing about after it.
+- **A stale worktree is a stale copy of every file, not just the ones its
+  branch changed.** `git branch -v` says "ahead 1"; it does not say "behind
+  50". Three parked worktrees under `.claude/worktrees/` each read as
+  unmerged work, and all three turned out to be pure regressions -- their
+  substance had reached `main` by another route (a drift sweep), while they
+  still carried an rtk config path, secret names and a deleted Dokploy
+  script that `main` had already corrected. Check `git merge-base` before
+  judging a parked branch, and prune worktrees once their work lands.
 - Fail2Ban and `docker compose pull`-on-empty-stack live in
   `scripts/CLAUDE.md` and `.github/workflows/CLAUDE.md`: one script, one
   workflow, not cross-cutting.

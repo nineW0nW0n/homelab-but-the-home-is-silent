@@ -82,15 +82,24 @@ what `ufw status` says. Two layers close it, both applied by
 `harden-node.sh`:
 
 - a drop for all new inbound traffic on the WAN interface in
-  `DOCKER-USER`, the one chain Docker will not rewrite, IPv4 and IPv6,
-  reapplied at boot by a systemd unit ordered after `docker.service`;
+  `DOCKER-USER`, the one chain Docker will not rewrite, reapplied at boot
+  by a systemd unit ordered after `docker.service`. IPv4 is mandatory --
+  a missing chain fails the unit loudly; IPv6 is best-effort, skipped with
+  a warning wherever `ip6tables` has no `DOCKER-USER` chain;
 - `"ip": "127.0.0.1"` in `/etc/docker/daemon.json`, so newly published
-  ports do not land on `0.0.0.0` by default.
+  ports do not land on `0.0.0.0` by default. `harden-node.sh` writes that
+  file but never restarts Docker, so this layer is inert until the next
+  Docker restart or reboot -- the `DOCKER-USER` drop is what holds the
+  node until then.
 
 Neither layer covers ingress-mode Swarm publishes, which traverse a
-different chain (`DOCKER-INGRESS`); Swarm is inactive on every node since
-2026-08-23, so that chain no longer exists. That is precisely why the check that matters is a port sweep from off-node,
-not `ufw status`. That sweep now runs daily in CI
+different chain (`DOCKER-INGRESS`), and `daemon.json`'s `"ip"` does not
+apply to Swarm *host-mode* publishes either: measured on vps00, a
+host-mode service still bound `0.0.0.0` with the setting active. Swarm is
+inactive on every node since 2026-08-23, so neither case is live today.
+
+That is precisely why the check that matters is a port sweep from
+off-node, not `ufw status`. That sweep now runs daily in CI
 (`.github/workflows/port-sweep.yml`), failing on any open port but 22; a
 manual sweep remains the post-provisioning check after any hardening run.
 
