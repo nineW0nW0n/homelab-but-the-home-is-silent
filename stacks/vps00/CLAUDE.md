@@ -52,3 +52,15 @@ repo, and this file's wiki sections + the route/listener lines in
 `stacks/CLAUDE.md`.
 
 ## Failure log
+
+- **A bundle that fails wiki-kit's lint freezes the served site, silently.**
+  `wiki-builder` runs lint before the Quartz build and skips the build on any
+  ERROR, so `/` and every existing page keep answering 200 with stale content
+  while new pages never appear. Found 2026-08-28: the 2026-08-27 ingest landed
+  two `recommended field \`tags\` is absent` errors, and the site had been
+  stale for a day. `brain-work`'s own `lint.yml` did not catch it -- it runs
+  `on: pull_request` on a `[self-hosted, wiki]` runner that does not exist
+  here, so it never ran. Judge the wiki by
+  `curl http://127.0.0.1:8001/status` (`lint_exit` and `build` per bundle),
+  never by an HTTP 200 on `/`; CI's verify step probes `/` and cannot see
+  this.
