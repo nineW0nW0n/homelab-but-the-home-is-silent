@@ -11,12 +11,15 @@ freed ~800 MB on the primary node.
 
 > [!NOTE]
 > **Status: work in progress.** Nodes are provisioned, hardened, and
-> deployable via CI. Cloudflare Tunnel and three workloads are
+> deployable via CI. Cloudflare Tunnel and four workloads are
 > live: `booking.maybeit.work` (EasyAppointments) and
 > `budget.maybeit.work` (ezBookkeeping), both on vps01. A third,
 > centralised logging (OpenObserve on vps02, `siem.maybeit.work`), has
 > been ingesting the systemd journal and every container's output from
-> all three nodes since 2026-08-23. ezBookkeeping is
+> all three nodes since 2026-08-23. The fourth is wiki-kit on vps00
+> (`wiki.maybeit.work`), a private wiki built from a git bundle every 15
+> minutes — deployed as a test 2026-08-26 and kept 2026-08-27.
+> ezBookkeeping is
 > backed up nightly off-site to Cloudflare R2; the booking database is
 > scheduled the same way — a forced end-to-end run has been proven, and
 > the latest unattended stamp lives in `.last-success` on vps01.
@@ -28,7 +31,7 @@ freed ~800 MB on the primary node.
 
 | Node  | Role      | Notes                                                     |
 |-------|-----------|-----------------------------------------------------------|
-| vps00 | primary   | own `cloudflared`; the tunnel for the status page and its metrics |
+| vps00 | primary   | wiki-kit + own `cloudflared`; the tunnel for the status page and its metrics |
 | vps01 | secondary | both apps + own `cloudflared`                              |
 | vps02 | secondary | OpenObserve logs + own `cloudflared`                       |
 
@@ -54,7 +57,7 @@ them.
 ```mermaid
 flowchart LR
     internet(("Public traffic")) --> tunnel["Cloudflare Tunnel\n(outbound-only)"]
-    tunnel --> vps00["vps00, primary\nmetrics"]
+    tunnel --> vps00["vps00, primary\nmetrics + wiki"]
     tunnel --> vps01["vps01, secondary\napps"]
     tunnel --> vps02["vps02, secondary\nlogs (OpenObserve)"]
 
@@ -104,9 +107,9 @@ off-node, not `ufw status`. That sweep now runs twice daily in CI
 manual sweep remains the post-provisioning check after any hardening run.
 
 Public hostnames that should not be public are behind **Cloudflare
-Access**: all three Netdata endpoints, the OpenObserve UI, and
-`budget.maybeit.work` require authentication at the edge, before the
-tunnel. `booking.maybeit.work` is deliberately **not** — it is the public
+Access**: all three Netdata endpoints, the OpenObserve UI,
+`wiki.maybeit.work` and `budget.maybeit.work` require authentication at
+the edge, before the tunnel. `booking.maybeit.work` is deliberately **not** — it is the public
 booking page clients use, and locking it behind Access would defeat its
 purpose. Do not "fix" that.
 
@@ -151,12 +154,13 @@ worth naming next to a zero-inbound-ports posture.
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
 stacks/
-  vps0N/docker-compose.yml           per-node cloudflared connector + Netdata + Vector (vps01 adds the two apps, vps02 OpenObserve)
+  vps0N/docker-compose.yml           per-node cloudflared connector + Netdata + Vector (vps00 adds wiki-kit, vps01 the two apps, vps02 OpenObserve)
   vps0N/vector.yaml                  journal shipper config, byte-identical on all three nodes
   vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
   vps01/backup-booking.sh            nightly MySQL dump to Cloudflare R2
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
+  vps00/bundles.yml, Caddyfile       wiki-kit: which git bundles to build, and how they are served
 worker/status/                       Cloudflare Worker: maybeit.work status page + health poller
 docs/superpowers/                    handoffs, plans and specs from past sessions
 scripts/
@@ -231,8 +235,8 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   without rsyslog, so the default file-based jail backend has nothing to
   tail).
 - Cloudflare Access in front of every Netdata endpoint, the OpenObserve
-  UI, and `budget`. The status Worker holds a service token that opens
-  the three Netdata endpoints **and nothing else**. `booking` stays open
+  UI, `wiki` (owner-only) and `budget`. The status Worker holds a service
+  token that opens the three Netdata endpoints **and nothing else**. `booking` stays open
   on purpose — it is the public booking page.
 - One CI key **per node**, so a leaked Actions secret reaches one node
   rather than three, and deploys require a human approval.

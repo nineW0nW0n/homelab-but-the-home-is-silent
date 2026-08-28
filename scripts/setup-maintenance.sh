@@ -6,8 +6,8 @@
 #
 # This script never restarts Docker. The daemon.json rewrite below takes
 # effect at the next Docker restart or reboot, which the operator
-# schedules -- restarting Docker on vps00 restarts the Swarm control
-# plane and every container on it. journald is restarted immediately;
+# schedules -- restarting Docker on a node restarts every
+# container on it. journald is restarted immediately;
 # that only rotates logs, no container impact.
 #
 # Usage: scripts/setup-maintenance.sh <host>

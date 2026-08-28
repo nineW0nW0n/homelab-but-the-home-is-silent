@@ -15,8 +15,8 @@
 #
 # This script never restarts Docker. The /etc/docker/daemon.json default-bind
 # it writes takes effect at the next Docker restart or reboot, which the
-# operator schedules -- restarting Docker on vps00 restarts the Swarm control
-# plane and every container on it.
+# operator schedules -- restarting Docker on a node restarts every
+# container on it.
 #
 # Usage: scripts/harden-node.sh <host>
 #   scripts/harden-node.sh 203.0.113.10
