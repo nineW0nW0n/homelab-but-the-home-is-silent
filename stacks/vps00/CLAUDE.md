@@ -53,9 +53,24 @@ since: wiki-kit (2026-08-26) and google-workspace-mcp (2026-08-29).
   though the git tag does — `v1.25.2` 404s on the registry).
 - One service, `gws-mcp`, `127.0.0.1:8051` → container `:8000`. Runs
   `--transport streamable-http --single-user --tool-tier complete`, so
-  every tool acts as `USER_GOOGLE_EMAIL` and the full Gmail / Calendar /
-  Drive / Docs / Sheets / Slides / Forms / Tasks / Chat / Contacts /
-  Apps Script tool set is loaded.
+  the full Gmail / Calendar / Drive / Docs / Sheets / Slides / Forms /
+  Tasks / Chat / Contacts / Apps Script tool set is loaded and every
+  tool call defaults to `USER_GOOGLE_EMAIL`.
+- **Three Google accounts are granted, and `--single-user` does not stop
+  that.** `abcollado.28@gmail.com` (the `USER_GOOGLE_EMAIL` default),
+  `excollado@gmail.com` and `feeder.kantooter@gmail.com` (both added
+  2026-08-29) each hold a refresh token in the `gws-mcp-creds` volume,
+  one file per address. The External app's OAuth user cap is 100, so
+  headroom is not the constraint. Pass
+  `user_google_email` explicitly to reach either of the others; omit it and
+  you get the default. No compose change and no redeploy were needed --
+  the grant is browser-side state, not configuration. Read the compose
+  comment on `USER_GOOGLE_EMAIL` for the two mechanisms this rests on.
+  All three scope sets are identical: scopes come from `--tool-tier`,
+  which is server-wide, so every account is as privileged as the first.
+  A first-ever consent for a new address shows the full checkbox list --
+  hit **Select all**, since a partial grant silently breaks whichever
+  tools lost their scope.
 - **`WORKSPACE_MCP_HOST: 0.0.0.0` is load-bearing.** Verified in
   `main.py@1.25.2`, `resolve_bind_host_for_transport`: legacy
   streamable-http binds `127.0.0.1` *inside the container* when this is
@@ -157,6 +172,15 @@ repo, and this file's wiki sections + the route/listener lines in
 
 ## Failure log
 
+- **`--single-user` does not mean one account; `USER_GOOGLE_EMAIL` means
+  one default.** This file and the compose comment both said every tool
+  call acts as `USER_GOOGLE_EMAIL` and no second grant could exist.
+  Wrong on both counts, found 2026-08-29 while adding a second address:
+  the flag only skips FastMCP session mapping, and an explicit
+  `user_google_email` argument is passed straight through to that
+  address's own credential file. Adding an account needs no redeploy.
+  Do not infer an upstream flag's blast radius from its name -- read the
+  code that reads the flag.
 - **A bundle that fails wiki-kit's lint freezes the served site, silently.**
   `wiki-builder` runs lint before the Quartz build and skips the build on any
   ERROR, so `/` and every existing page keep answering 200 with stale content
