@@ -23,9 +23,8 @@ dashboard having drifted from the docs, not the reverse.
 Nine routes. Eight are live -- seven read back from the API 2026-08-23
 after the Dokploy removal (`dokploy.maybeit.work`, its Access apps, its
 CNAME and its WAF bypass were deleted that day), plus `wiki`. The ninth,
-`gws.maybeit.work`, is committed here but has no CNAME, tunnel entry or
-Access app yet -- read the API before believing either state.
-Across three tunnels:
+`gws.maybeit.work`, was created 2026-08-29 and read back from the API the
+same day. Across three tunnels:
 
 - `vps00-metrics.maybeit.work` → `http://localhost:8050` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. Behind its own Access app.
@@ -36,10 +35,10 @@ Across three tunnels:
 - `gws.maybeit.work` → `http://localhost:8051` on vps00, same tunnel:
   google-workspace-mcp, see `stacks/vps00/CLAUDE.md`. Access application
   `gws-mcp`, two policies — `owner email allow` (the browser leg of
-  Google's consent redirect) and a `Service Auth` policy for the Claude
-  Code service token. Both are needed: drop the email policy and the
-  OAuth callback 403s, drop the service-token policy and Claude Code
-  cannot connect.
+  Google's consent redirect) and `claude-code service auth`, which reuses
+  the **same** `claude-code` service token as `wiki`, not a new one. Both
+  policies are needed: drop the email policy and the OAuth callback 403s,
+  drop the service-token policy and Claude Code cannot connect.
 - `booking.maybeit.work` → `http://localhost:8101` on vps01
   (EasyAppointments, its own published loopback port), token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.

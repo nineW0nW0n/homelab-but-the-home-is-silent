@@ -75,6 +75,11 @@ since: wiki-kit (2026-08-26) and google-workspace-mcp (2026-08-29).
   Code presents `CF-Access-Client-Id`/`CF-Access-Client-Secret` headers.
   `GOOGLE_OAUTH_REDIRECT_URI` must match the Authorized redirect URI on
   the Google OAuth client character for character.
+- Cloudflare side, created and read back from the API 2026-08-29: the
+  `gws` CNAME (proxied), the tunnel ingress entry, and Access app
+  `gws-mcp` (session 24h) with its two policies. The service-token policy
+  reuses the existing `claude-code` token that `wiki` already uses, so
+  Claude Code needs no new credential for this endpoint.
 - Secrets: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
   `USER_GOOGLE_EMAIL` in GitHub secrets → vps00 `.env` (deploy.yml).
   All three are in the reject-mangle list, so a deploy fails loudly if
@@ -112,8 +117,9 @@ google-workspace-mcp: the `gws-mcp` service and `gws-mcp-creds` volume,
 the three `GOOGLE_OAUTH_*`/`USER_GOOGLE_EMAIL` secrets and their
 deploy.yml wiring (reject list, `.env` writer, `verify_args`), port 8051
 in `port-sweep.yml` and root's manual sweep list, the `gws.maybeit.work`
-CNAME, tunnel ingress entry and Access app `gws-mcp` with its service
-token, the Google Cloud OAuth client, and this file's section plus the
+CNAME, tunnel ingress entry and Access app `gws-mcp` (but NOT the
+`claude-code` service token -- `wiki` uses it too), the Google Cloud
+OAuth client, and this file's section plus the
 route/listener lines in `stacks/CLAUDE.md`.
 
 wiki-kit: compose services + volumes (`wiki-*`), `bundles.yml`, `Caddyfile`, the
