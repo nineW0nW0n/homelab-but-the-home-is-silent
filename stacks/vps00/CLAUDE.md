@@ -104,12 +104,18 @@ since: wiki-kit (2026-08-26) and google-workspace-mcp (2026-08-29).
   `USER_GOOGLE_EMAIL` in GitHub secrets → vps00 `.env` (deploy.yml).
   All three are in the reject-mangle list, so a deploy fails loudly if
   one is unset rather than starting a container that cannot authenticate.
-- `mem_limit` is `512m`, **measured** 2026-08-29 minutes after the first
-  deploy: cgroup `memory.peak` 347 MiB, steady state 258 MiB, complete
-  tool tier, before any Google grant existed. It replaces a `384m`
-  estimate that was already sitting at 90% of peak on day one. The peak
-  is a *startup* peak — the process imports every tool in the tier — so
-  re-measure after real traffic rather than treating 347 as the ceiling.
+- `mem_limit` is `512m`, **measured twice** (issue #88). 2026-08-29
+  minutes after the first deploy: `memory.peak` 347 MiB, before any grant
+  or tool call existed. 2026-08-29 again, 6.4h later, over a window
+  carrying the first real inbox reorganisation (125 `search_gmail_messages`,
+  121 `manage_gmail_label`, 61 `batch_modify_gmail_message_labels`):
+  `memory.peak` **354 MiB**, steady state 235 MiB, no restarts, no OOM.
+  **Real traffic moved the peak 7 MiB.** The startup import of the
+  complete tool tier is what this process costs; per-call payloads are
+  noise beside it. 512m is kept rather than recomputed — peak + 50% is
+  531m, and the 158 MiB of headroom is worth more than the 19m.
+  One tool has never run: `get_gmail_threads_content_batch` fetches 25
+  thread bodies at once. Read the peak again if that becomes routine.
 - CI verify probes `gws-mcp:8051` on `/`, which the image serves as its
   health JSON (`core/server.py` registers `/` and `/health` on the same
   handler). That proves the process is up and bound; it proves nothing
