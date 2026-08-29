@@ -118,9 +118,12 @@ services:
       - wiki-bundles:/bundles
       - wiki-site:/site
       - wiki-state:/state
-    # Rail 4, hedged not measured: the Quartz/Node site build is the
-    # heavy step. Measure after a week and replace.
-    mem_limit: 768m
+    # Rail 4, measured 2026-08-29: cgroup memory.peak over a window
+    # containing a real Quartz build was 344 MiB (idle poll ~19 MiB).
+    # 512m is that peak + ~50%, matching every other cap here. Read the
+    # peak, not docker stats -- interval_seconds is 900, so a snapshot
+    # almost always catches the idle poll. See issue #82.
+    mem_limit: 512m
     mem_reservation: 256m
 
   wiki-web:

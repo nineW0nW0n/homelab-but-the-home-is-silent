@@ -11,11 +11,13 @@ Baseline services (cloudflared, Netdata, Vector) are documented in
 - Deployed 2026-08-26 as a test, **kept 2026-08-27**. It is a normal
   workload now, not a trial: it deploys, is probed and is reasoned about
   like every other stack here.
-- `wiki-builder`'s `mem_limit: 768m` is a hedge, not a measurement — it
-  was set before the service had ever run a Quartz build. Measure real
-  usage (`docker stats --no-stream wiki-builder`) once it has a week of
-  cycles behind it and replace the number. Every other cap in this file
-  came from observed usage + 50%; this one did not.
+- `wiki-builder`'s `mem_limit` is `512m`, measured 2026-08-29 (issue
+  #82): cgroup `memory.peak` over a window containing a real Quartz build
+  was 344 MiB, idle poll ~19 MiB. 512m is peak + ~50%, so every cap in
+  this file now comes from observed usage + 50%. It replaced a `768m`
+  hedge set before the service had ever built. Re-measure once
+  `brain-work` has grown a lot, or if `bundles.yml` gains a second
+  bundle — build peak scales with content volume.
 - Upstream: `nineW0nW0n/wiki-kit`, pinned image
   `ghcr.io/ninew0nw0n/wiki-kit:0.1.2`. Three services: `wiki-builder`
   (clones + lints + Quartz-builds bundles every `interval_seconds`),
@@ -42,6 +44,22 @@ Baseline services (cloudflared, Netdata, Vector) are documented in
   probe, wait a cycle and re-run verify before diagnosing. Deeper check
   by hand: `curl http://127.0.0.1:8001/status` (builder-written
   `status.json` with per-bundle sha/lint/build).
+
+## vps00 is the MCP node
+
+New MCP servers land here, not on vps01 or vps02. `wiki-mcp` is already
+here and it is the only MCP in the repo, so this keeps the MCP surface on
+one node instead of scattering it.
+
+Why this node and not the others: vps01 is the tightest (two apps plus
+MySQL), and vps02 is the log sink, whose OpenObserve footprint grows with
+ingest volume and retention — a neighbour whose memory moves on its own.
+vps00 runs no user-facing app, and its one heavy service bursts only when
+`brain-work` changes.
+
+Check the committed total before adding one. Caps here sum to well under
+the 2 GB the node has, but there is no swap, so the ceiling is real:
+`grep -E 'mem_limit' docker-compose.yml`.
 
 ## Teardown checklist (not scheduled; kept here for whenever it is)
 
