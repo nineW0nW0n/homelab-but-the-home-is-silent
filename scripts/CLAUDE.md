@@ -74,7 +74,10 @@ someone next touches them.
   sudo. Only an off-node sweep proves the nodes, and only `sudo -n true`
   over SSH proves the account), plus a markup-sink grep over the public
   status page, that `vector.yaml` is byte-identical across all three
-  nodes, and that `setup-maintenance.sh` still sets Docker's journald log
+  nodes and free of three settings that fail silently
+  (`current_boot_only: false`, a pinned `journal_directory`, and `${...}`
+  on a node that never sets `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION`),
+  and that `setup-maintenance.sh` still sets Docker's journald log
   driver (Vector reads container logs from the journal). It is listed
   here because this repo's most-repeated failure
   is a rail with no enforcement point, and an enforcement point missing from

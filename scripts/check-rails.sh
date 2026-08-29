@@ -4,8 +4,9 @@
 # (rail 5, rail 9, pre-commit itself, the CLAUDE.md budget check). Seven rails
 # are checkable from the files in this repo -- rails 1 and 6 only at source
 # level, see their stanzas; this checks them, plus two non-rail invariants:
-# vector.yaml byte-identical across the three nodes, and
-# setup-maintenance.sh still setting Docker's journald log driver.
+# vector.yaml byte-identical across the three nodes and free of three
+# settings that fail silently, and setup-maintenance.sh still setting
+# Docker's journald log driver.
 #
 # Never skips: a missing file or an empty glob is a failure, because a check
 # that scans nothing is the exact bug this script exists to prevent.
@@ -208,5 +209,43 @@ else
   err "vector.yaml missing on a node -- expected $v0 $v1 $v2"
 fi
 
+# --- vector.yaml: three settings that fail silently or fail everywhere ---
+# All three are in stacks/CLAUDE.md's failure log with a real incident behind
+# them, and none was catchable by any tool that already ran here -- yamllint
+# sees valid YAML and `vector validate` says Validated for all three.
+#
+# current_boot_only: false -- Vector refuses to start for systemd 250-257.
+# Debian 12 runs 252 and the vector:*-debian image ships journalctl 257, so
+# no node here can ever accept it; it crashlooped all three while the
+# deploy's Verify step called them green.
+#
+# journal_directory -- pinning the journald source ships nothing on a node
+# with volatile journal storage, and still reports healthy.
+#
+# ${...} without VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION -- Vector
+# 0.57.0 disabled interpolation by default, so the placeholder text becomes
+# the literal URI and the literal credentials. An uninterpolated ${...} is
+# perfectly good YAML, which is why validate passes on a config that cannot
+# send one request.
+if [ -f "$v0" ]; then
+  ! grep -qE '^[[:space:]]*current_boot_only:[[:space:]]*false' "$v0" ||
+    err "$v0: current_boot_only: false -- Vector refuses to start on Debian 12's systemd"
+  # The key, not the path: vector.yaml names /var/log/journal in a comment
+  # explaining why it is not pinned, and the first cut of this check failed
+  # on that comment.
+  ! grep -qE '^[[:space:]]*journal_directory:' "$v0" ||
+    err "$v0: journald source pins journal_directory -- ships nothing on volatile storage, reports healthy"
+  # shellcheck disable=SC2016  # '${' is the literal Vector placeholder
+  if grep -qF '${' "$v0"; then
+    for c in stacks/vps00/docker-compose.yml stacks/vps01/docker-compose.yml stacks/vps02/docker-compose.yml; do
+      [ -f "$c" ] || { err "$c: missing -- the Vector interpolation check scanned nothing"; continue; }
+      grep -qF 'VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION' "$c" ||
+        err "$c: vector.yaml uses \${...} but this node never sets VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION"
+    done
+  fi
+else
+  err "$v0: missing -- the Vector settings checks scanned nothing"
+fi
+
 [ "$fail" -eq 0 ] || { echo "check-rails: FAILED" >&2; exit 1; }
-echo "check-rails: rails 1 (partial), 2, 3, 4, 6 (partial), 7, 8 + markup sinks, vector.yaml identity, journald driver OK across $found compose files"
+echo "check-rails: rails 1 (partial), 2, 3, 4, 6 (partial), 7, 8 + markup sinks, vector.yaml identity and settings, journald driver OK across $found compose files"

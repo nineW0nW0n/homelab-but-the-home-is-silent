@@ -447,6 +447,154 @@ on that origin port, so ~2/3 of requests 502'd. Fixed by giving vps01 its own
 tunnel + token (rail 2). Never reuse another node's token when adding a
 service here.
 
+### A comment-only change leaves the container running
+
+Working PR #89 (`gws-mcp`'s cap re-measurement), the prediction was that the
+deploy would recreate the container and reset `memory.peak`, so the
+measurement window would start over. It did not. The deploy went green on all
+three nodes with `gws-mcp` still `Up 7 hours`, `StartedAt
+2026-08-29T05:29:36Z`, `RestartCount 0` — while `netdata` and `vector` on that
+same node *were* recreated. #89 changed only comments in the cap block, and
+Compose recreates a service on a config delta; comments are not config.
+
+Nothing was lost that time — the surviving peak was the better outcome — but
+it misleads in both directions, which is what makes it a trap rather than
+trivia. A peak read after a comment-only deploy is still the old window and
+looks fresher than it is; a peak read after a real change has no history and
+looks lower than the service's true high-water mark. Either way the number is
+trusted for the wrong reason. One `docker inspect -f '{{.State.StartedAt}}'`
+settles it.
+
+
+### The rate-limit rule that outlived its hostname
+
+The zone's one rate-limit rule still matched `dokploy.maybeit.work` on
+2026-08-27 — four days after that hostname, its tunnel route and its Access
+apps were removed. It was enabled, it was counted as a control in two
+documents, and it matched nothing. The free plan allows exactly one
+rate-limit rule, so the cost was not a degraded control but the whole
+capability, for four days. Retargeted to `booking.maybeit.work` (non-GET, 20
+per 10s) the same day. After removing a hostname, re-read every zone ruleset
+expression for its name.
+
+
+### The image's own healthcheck kept curling the old port
+
+The 2026-08-24 Netdata port move (19999 → 8050/8150/8250) left the image's
+baked-in healthcheck curling 19999, so Docker reported `unhealthy` on all
+three nodes while Netdata answered 200 on the real port. Fixed with a compose
+`healthcheck:` override per node. Nothing was keyed on Docker health status
+at the time, which is the only reason this was cosmetic rather than an
+outage — anything that had been would have false-alarmed on three healthy
+nodes.
+
+
+### A new Access app 404s before it 302s
+
+Creating the `budget` app on 2026-08-20, the hostname 404'd at the edge for
+seconds before it began `302`ing to the login page. That is short enough to
+be missed and long enough to send you unpicking a tunnel that is fine. Check
+the ingress and the origin, then re-probe. The control that settles it is
+curling the *other* Access-protected hosts: when they all answer the same,
+propagation is done.
+
+
+### OpenObserve crashloops on a weak root password
+
+OpenObserve panics at startup if the root password fails its own strength
+rules (8-128 characters with a lowercase, an uppercase, a digit and a special
+character), so the symptom is a crashloop with no message about credentials.
+This collides with the dotenv rule — `#` truncates and `$` interpolates — and
+the surviving overlap is narrow: `!`, `@`, `%`, `-` and `_` are
+measured-accepted by v0.92.2 as special *and* survive the parser.
+
+`ZO_ROOT_USER_EMAIL`/`ZO_ROOT_USER_PASSWORD` apply only at first boot, so
+changing the secret afterwards does nothing until the `openobserve-data`
+volume is wiped. That is safe here — the volume is explicitly not backed up —
+but it is not obvious from the variable names, and a session spent editing a
+secret that the running instance will never read is the failure this records.
+
+
+### An NXDOMAIN cached for 30 minutes looks like a flaky hostname
+
+A newly created hostname stays unresolvable for up to 30 minutes if anything
+asked for it first: the zone's SOA minimum is 1800s, so the negative answer
+is cached for that long. The nodes list Google's public resolver first in
+`/etc/resolv.conf` and run no local caching daemon, so there is nothing to
+flush, and Google's anycast pool expires it unevenly — which presents as a
+hostname that resolves on one query and not the next, i.e. exactly like an
+intermittent DNS fault worth debugging. It is not. Wait it out; Vector
+retries on its own. Create the DNS record before pointing anything at it and
+the window never opens.
+
+
+### `vector validate` said Validated on a config that could not send a request
+
+Vector 0.57.0 disabled config env-var interpolation by default, so every
+`${...}` in `vector.yaml` was a literal string — the sink's URI was the
+placeholder text, spaces and all, and the credentials were the literal text
+of their own placeholders. It surfaced as `invalid uri character` from the
+sink.
+
+The part worth keeping: **`vector validate` cannot catch this.** An
+uninterpolated `${...}` is a perfectly good YAML string, so validate reported
+`Validated` for a config that could not send a single request. Validate
+proves syntax; only a real request proves interpolation. The fix is
+`VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true` in the container.
+
+
+### `current_boot_only: false` no node can ever take
+
+Vector rejects `current_boot_only: false` on the journald source outright for
+systemd 250-257 and refuses to start. Debian 12 runs systemd 252 and the
+`vector:*-debian` image ships journalctl 257 — both ends are inside the
+range, so no node here can ever accept it. It crashlooped all three nodes,
+and the deploy's `Verify` step called them green.
+
+Related, same source: never pin the journald source to `/var/log/journal`. A
+node with volatile journal storage has nothing there, so Vector ships nothing
+and still reports healthy. Assert `Storage=persistent` in
+`setup-maintenance.sh` and let Vector follow `journalctl`'s own resolution.
+
+
+### Removing Dokploy freed ~810 MB
+
+Measured 2026-08-23: vps00 was using 1400 MB before and 593 MB of 1966 MB
+after. The control plane alone was 749.7 MiB of that node. Its Traefik on
+vps00 and vps02 routed nothing — cloudflared went straight to
+`localhost:3000`, `:19999` and `:5080` — so two of the three installs were
+pure overhead carrying no traffic at all. vps01 settled at 1100 MB, vps02 at
+969 MB.
+
+A control plane is a workload: measure it and cap it like one, or do not run
+it.
+
+
+### Docker's embedded DNS forgot every container name, on two nodes at once
+
+2026-08-23, Docker 29.7.2. Symptom: `booking` returning 500 with `getaddrinfo
+for mysql failed` while the `mysql` container was `Up` and reachable by IP;
+`openobserve` on vps02 could not resolve its own name either, unnoticed
+because nothing there uses it.
+
+`127.0.0.11` still resolved *external* names throughout, so a `wget
+google.com` from inside the container proves nothing — query a **container**
+name from inside the container's netns instead.
+
+It happened in the window that held `docker swarm leave --force` and `docker
+system prune -af` on both nodes. Replaying every `deploy.yml` action on vps02
+(`pull`, `up -d`, `image prune`, `restart`, a `docker run --rm`) reproduced
+nothing, so the Swarm teardown is the suspect and **is not proven**.
+
+Fix per container: `docker network disconnect <net> <c>` then `docker network
+connect --alias <service> --alias <container> <net> <c>`. A plain `connect`
+restores the container name and **drops the Compose service alias**, which is
+the name the app actually dials — so the obvious repair leaves the original
+symptom in place. Or `docker compose up -d --force-recreate`. After any
+change to Docker networking on a node, probe the app on its loopback port
+before calling the node done.
+
+
 ## `stacks/vps01/`: backups, R2, drills, staleness alarms
 
 ### A restore drill is a workload, not an inspection
