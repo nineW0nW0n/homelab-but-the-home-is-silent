@@ -62,8 +62,8 @@ services:
       # stacks/CLAUDE.md, alerting section.
       - ./health.d/ram.conf:/etc/netdata/health.d/ram.conf:ro
       - ./health.d/disks.conf:/etc/netdata/health.d/disks.conf:ro
-    mem_limit: 200m
-    mem_reservation: 100m
+    mem_limit: 256m
+    mem_reservation: 128m
 
   vector:
     # Ships this node's journal to OpenObserve on vps02 over vps02's
