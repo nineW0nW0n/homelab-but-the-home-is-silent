@@ -43,8 +43,8 @@ jobs:
             if [ -z "$host" ]; then
               echo "$node: host secret is EMPTY"; fail=1; continue
             fi
-            for port in 22 80 443 2377 3000 5080 8050 8101 8102 \
-                        8150 8250 8251 19999 20241; do
+            for port in 22 80 443 2377 3000 5080 8050 8051 8101 \
+                        8102 8150 8250 8251 19999 20241; do
               if timeout 3 bash -c "exec 3<>/dev/tcp/$host/$port" \
                   2>/dev/null; then
                 state=OPEN

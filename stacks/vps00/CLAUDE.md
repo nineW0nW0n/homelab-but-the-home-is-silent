@@ -1,10 +1,10 @@
 Parent: ../CLAUDE.md
 
-# stacks/vps00/: metrics node + wiki-kit
+# stacks/vps00/: metrics node + wiki-kit + google-workspace-mcp
 
 Baseline services (cloudflared, Netdata, Vector) are documented in
-`stacks/CLAUDE.md`; this file exists for the wiki-kit workload added
-2026-08-26.
+`stacks/CLAUDE.md`; this file exists for the workloads added
+since: wiki-kit (2026-08-26) and google-workspace-mcp (2026-08-29).
 
 ## wiki-kit (kept)
 
@@ -45,6 +45,51 @@ Baseline services (cloudflared, Netdata, Vector) are documented in
   by hand: `curl http://127.0.0.1:8001/status` (builder-written
   `status.json` with per-bundle sha/lint/build).
 
+## google-workspace-mcp
+
+- Upstream `taylorwilsdon/google_workspace_mcp`, pinned image
+  `ghcr.io/taylorwilsdon/google_workspace_mcp:1.25.2` (published by the
+  repo's own `docker-publish.yml`; the GHCR tag has no `v` prefix even
+  though the git tag does — `v1.25.2` 404s on the registry).
+- One service, `gws-mcp`, `127.0.0.1:8051` → container `:8000`. Runs
+  `--transport streamable-http --single-user --tool-tier complete`, so
+  every tool acts as `USER_GOOGLE_EMAIL` and the full Gmail / Calendar /
+  Drive / Docs / Sheets / Slides / Forms / Tasks / Chat / Contacts /
+  Apps Script tool set is loaded.
+- **`WORKSPACE_MCP_HOST: 0.0.0.0` is load-bearing.** Verified in
+  `main.py@1.25.2`, `resolve_bind_host_for_transport`: legacy
+  streamable-http binds `127.0.0.1` *inside the container* when this is
+  unset, and `docker-proxy` dials the container's IP, not its loopback —
+  so the published port would accept and then answer nothing. It does not
+  widen rail 1: the host side of the publish is still `127.0.0.1`.
+- **No MCP-level auth in this mode.** The server itself checks nothing;
+  the locks are the loopback publish and the Cloudflare Access app on
+  `gws.maybeit.work`. Same trust as wiki-mcp's `:8090` listener. Turning
+  on the server's own OAuth 2.1 (`MCP_ENABLE_OAUTH21`) is the upgrade
+  path if a second client or a non-browser consumer ever needs it.
+- Two auth flows, don't confuse them. **Google's** OAuth (which Google
+  account the tools act as) runs once in a browser: a tool returns a
+  consent URL, Google redirects to `https://gws.maybeit.work/oauth2callback`,
+  and the refresh token lands in the `gws-mcp-creds` volume. **Access's**
+  auth (who may reach the endpoint at all) is per-request, and Claude
+  Code presents `CF-Access-Client-Id`/`CF-Access-Client-Secret` headers.
+  `GOOGLE_OAUTH_REDIRECT_URI` must match the Authorized redirect URI on
+  the Google OAuth client character for character.
+- Secrets: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+  `USER_GOOGLE_EMAIL` in GitHub secrets → vps00 `.env` (deploy.yml).
+  All three are in the reject-mangle list, so a deploy fails loudly if
+  one is unset rather than starting a container that cannot authenticate.
+- `mem_limit: 384m` is an **estimate, not a measurement** — the first
+  cap this node has ever carried that was not read off a running
+  container. Read `memory.peak` after a few days of real use and replace
+  it with peak + ~50%, the way `wiki-builder`'s 768m hedge was replaced
+  (issue #82). Until then, treat the number as unproven.
+- CI verify probes `gws-mcp:8051` on `/`, which the image serves as its
+  health JSON (`core/server.py` registers `/` and `/health` on the same
+  handler). That proves the process is up and bound; it proves nothing
+  about the Google grant — a container with no valid refresh token still
+  answers 200 there. Check the grant by calling a tool.
+
 ## vps00 is the MCP node
 
 New MCP servers land here, not on vps01 or vps02. `wiki-mcp` is already
@@ -63,7 +108,15 @@ the 2 GB the node has, but there is no swap, so the ceiling is real:
 
 ## Teardown checklist (not scheduled; kept here for whenever it is)
 
-Compose services + volumes (`wiki-*`), `bundles.yml`, `Caddyfile`, the
+google-workspace-mcp: the `gws-mcp` service and `gws-mcp-creds` volume,
+the three `GOOGLE_OAUTH_*`/`USER_GOOGLE_EMAIL` secrets and their
+deploy.yml wiring (reject list, `.env` writer, `verify_args`), port 8051
+in `port-sweep.yml` and root's manual sweep list, the `gws.maybeit.work`
+CNAME, tunnel ingress entry and Access app `gws-mcp` with its service
+token, the Google Cloud OAuth client, and this file's section plus the
+route/listener lines in `stacks/CLAUDE.md`.
+
+wiki-kit: compose services + volumes (`wiki-*`), `bundles.yml`, `Caddyfile`, the
 `WIKI_GIT_TOKEN` secret and its deploy.yml wiring, the `wiki.maybeit.work`
 DNS CNAME, tunnel ingress entry and Access app `wiki`, the `brain-work`
 repo, and this file's wiki sections + the route/listener lines in

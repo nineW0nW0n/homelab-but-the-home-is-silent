@@ -80,6 +80,9 @@ jobs:
           BOOKING_MYSQL_APP_PASSWORD: ${{ secrets.BOOKING_MYSQL_APP_PASSWORD }}
           BUDGET_SECRET_KEY: ${{ secrets.BUDGET_SECRET_KEY }}
           WIKI_GIT_TOKEN: ${{ secrets.WIKI_GIT_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          USER_GOOGLE_EMAIL: ${{ secrets.USER_GOOGLE_EMAIL }}
         run: |
           # Compose truncates an unquoted .env value at '#' and
           # interpolates '$'; the shell scripts that source .r2.env and
@@ -109,6 +112,9 @@ jobs:
             BOOKING_MYSQL_APP_PASSWORD \
             BUDGET_SECRET_KEY \
             WIKI_GIT_TOKEN \
+            GOOGLE_OAUTH_CLIENT_ID \
+            GOOGLE_OAUTH_CLIENT_SECRET \
+            USER_GOOGLE_EMAIL \
             ; do
             value=$(printenv "$name" || true)
             if [ -z "$value" ]; then
@@ -200,8 +206,8 @@ jobs:
           - node: vps00
             suffix: VPS00
             verify_args: >-
-              8050 - wiki:8001 cloudflared-vps00 vector
-              wiki-builder wiki-web wiki-mcp
+              8050 - wiki:8001,gws-mcp:8051 cloudflared-vps00 vector
+              wiki-builder wiki-web wiki-mcp gws-mcp
           - node: vps01
             suffix: VPS01
             verify_args: >-
@@ -275,6 +281,9 @@ jobs:
           CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_ID }}
           CF_ACCESS_SIEM_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_SECRET }}
           WIKI_GIT_TOKEN: ${{ secrets.WIKI_GIT_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          USER_GOOGLE_EMAIL: ${{ secrets.USER_GOOGLE_EMAIL }}
         run: |
           # One remote write: these printfs are grouped and piped together
           # into a single 'cat >', not '>>', so every value the stack needs
@@ -290,6 +299,9 @@ jobs:
             printf 'CF_ACCESS_SIEM_CLIENT_ID=%s\n' "$CF_ACCESS_SIEM_CLIENT_ID"
             printf 'CF_ACCESS_SIEM_CLIENT_SECRET=%s\n' "$CF_ACCESS_SIEM_CLIENT_SECRET"
             printf 'WIKI_GIT_TOKEN=%s\n' "$WIKI_GIT_TOKEN"
+            printf 'GOOGLE_OAUTH_CLIENT_ID=%s\n' "$GOOGLE_OAUTH_CLIENT_ID"
+            printf 'GOOGLE_OAUTH_CLIENT_SECRET=%s\n' "$GOOGLE_OAUTH_CLIENT_SECRET"
+            printf 'USER_GOOGLE_EMAIL=%s\n' "$USER_GOOGLE_EMAIL"
           } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps00/.env'
 
