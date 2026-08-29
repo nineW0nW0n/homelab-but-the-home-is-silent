@@ -198,15 +198,20 @@ services:
       # The Google refresh token lives here. Losing this volume means
       # re-running the consent flow, nothing worse.
       - gws-mcp-creds:/app/store_creds
-    # Rail 4, measured 2026-08-29 on the node: cgroup memory.peak was
-    # 347 MiB and steady state 258 MiB, five minutes after first start,
-    # with the complete tool tier loaded and before any Google grant or
-    # tool call existed. 512m is that peak + ~50%, the same arithmetic as
-    # wiki-builder's. The 384m it replaces was an estimate and sat at 90%
-    # of peak on day one -- close enough to OOM that it would have been
-    # found the hard way. Re-measure once real traffic has run: the peak
-    # here is a startup peak (importing every tool), so a busy day may
-    # move it. Committed total on this node is 1664m of 2 GB, no swap.
+    # Rail 4, re-measured 2026-08-29 after real traffic (issue #88):
+    # cgroup memory.peak 354 MiB over a 6.4h window carrying the whole
+    # first inbox reorganisation -- 125 search_gmail_messages, 121
+    # manage_gmail_label, 61 batch_modify_gmail_message_labels -- against
+    # 347 MiB measured before any grant or tool call existed. Real work
+    # moved the peak 7 MiB: the startup import of the complete tool tier
+    # dominates, and per-call payloads do not come close. 512m is kept,
+    # not recomputed: peak + 50% would be 531m, and trimming 158 MiB of
+    # headroom to chase 19m is not worth a redeploy. Steady state 235 MiB
+    # (docker stats), RestartCount 0, OOMKilled false.
+    # Still unexercised: get_gmail_threads_content_batch, which pulls 25
+    # thread bodies at once and is the heaviest tool here. If that becomes
+    # routine, read the peak again.
+    # Committed total on this node is 1664m of 2 GB, no swap.
     mem_limit: 512m
     mem_reservation: 256m
 
