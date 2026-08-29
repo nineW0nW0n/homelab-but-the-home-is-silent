@@ -294,9 +294,9 @@ Netdata is metrics; this is logs, deliberately a separate tool.
   justified the OpenObserve raise six days earlier. No OOM kill yet
   (`RestartCount` 0, `State.OOMKilled` false on all three), so nothing
   ever surfaced it. Raised to 256m/128m and retention trimmed 7d -> 3d
-  the same day. **The new figure is not measured yet:** re-read
-  `docker stats` and `netdata.memory` a few days after the deploy and
-  replace this sentence with the number.
+  the same day. **The new figure is not measured yet (issue #84):**
+  re-read `docker stats` and `netdata.memory` a few days after the deploy
+  and replace this sentence with the number.
 - **Netdata's memory is dbengine, and retention is the only lever.** Its
   own `netdata.memory` chart on vps01 (2026-08-29) accounts for 104 MB,
   of which `dbengine` is 93.4 MB; everything else is under 5 MB each.
