@@ -338,54 +338,34 @@ staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
 
 ## Failure log
 
-- **A change that touches only comments does not recreate the container,
-  so `memory.peak` survives the deploy.** The #89 deploy (a comment-only
-  edit to `gws-mcp`'s cap block) went green on all three nodes while
-  `gws-mcp` kept running -- `netdata` and `vector` restarted, it did not,
-  because Compose recreates a service only on a config delta and comments
-  are not config. Predicting the reset the wrong way round costs a
-  measurement either way: a peak read after such a deploy is still the
-  *old* window, and a peak read after a real change is a fresh one with
-  no history. Check `docker inspect -f '{{.State.StartedAt}}'` before
-  trusting any high-water mark as fresh or stale.
-- **Deleting a hostname does not delete the Cloudflare rules aimed at
-  it.** The zone's one rate-limit rule still matched
-  `dokploy.maybeit.work` on 2026-08-27, four days after that hostname,
-  its tunnel route and its Access apps were removed — enabled, counted as
-  a control in two documents, matching nothing. The free plan allows one
-  rate-limit rule, so the cost was the whole capability (retargeted to
-  `booking.maybeit.work` the same day). After removing a hostname,
-  re-read every zone ruleset expression for its name; a rule that
-  survives its target is worse than no rule, because it reads as
-  coverage.
+Incident histories behind every rule here: `failure-log` skill (`stacks/`).
 
-Incident histories behind these rules: `failure-log` skill (`stacks/`).
-
+- **Check `docker inspect -f '{{.State.StartedAt}}'` before trusting a
+  `memory.peak`.** A comment-only change is not a config delta, so Compose
+  leaves the container running and its peak keeps the *old* window; a real
+  change recreates it and the peak has no history. Both read as fresh.
+- **Deleting a hostname does not delete the Cloudflare rules aimed at it.**
+  Re-read every zone ruleset expression for the name afterwards. A rule
+  that survives its target reads as coverage while matching nothing, and
+  the free plan allows exactly one rate-limit rule.
 - **When a service's port moves, grep its image's baked-in healthcheck
-  too.** The 2026-08-24 Netdata port move (19999 to 8050/8150/8250)
-  left the image's own healthcheck curling 19999, so Docker reported
-  `unhealthy` on all three nodes while Netdata answered 200 on the real
-  port. Fixed with a compose `healthcheck:` override per node; anything
-  keyed on Docker health status would have false-alarmed.
+  too.** A stale healthcheck reports `unhealthy` while the service answers
+  fine on the real port, so anything keyed on Docker health status
+  false-alarms. Override `healthcheck:` per node in compose.
 - **A newly created Access application 404s at the edge before it starts
-  `302`ing** — seconds, not minutes (observed 2026-08-20 creating the
-  `budget` app). Do not read that 404 as a broken route and start unpicking
-  the tunnel: check the ingress and the origin, then re-probe. The control
-  that settles it is curling the *other* Access-protected hosts; when they
-  all answer the same, propagation is done.
-
+  `302`ing** — seconds, not minutes. Do not read it as a broken route and
+  start unpicking the tunnel: check the ingress and the origin, then
+  re-probe. Curling the *other* Access-protected hosts is the control that
+  settles it.
 - **When a container reads a secret file, check the *in-container* uid and
-  test as that user, not root.** `deploy.yml` wrote
-  `health_alarm_notify.conf` with `umask 077` — `600 deploy:deploy` (uid
-  1000), unreadable by the container's netdata user (uid 201) — so every
-  alarm on all three nodes failed to deliver from setup until 2026-08-18
-  while the config looked present and correct on the host. Write it into
-  the netdataconfig volume as uid 201 (Alert delivery above).
+  test as that user, not root.** Host-side `600 deploy:deploy` looks
+  correct and is unreadable by a container running as another uid (Alert
+  delivery above).
 - **Set `SEND_EMAIL="NO"` in the notify templates.** `alarm-notify.sh`
-  enables email **by default**, so with no MTA every alert also ran
-  sendmail (`account default not found`, error 78) — a steady error stream
-  that hid the broken config above. Check a notifier's real default before
-  writing that an unlisted method is disabled.
+  enables email **by default**, so with no MTA every alert also runs
+  sendmail — a steady error stream that hides real breakage. Check a
+  notifier's real default before writing that an unlisted method is
+  disabled.
 - **Never `sed -i` a bind-mounted single file:** it writes a new inode and
   the container keeps reading the old one. Use `cat new > file` for
   `netdata.conf` and `health.d/*.conf`.
@@ -396,74 +376,51 @@ Incident histories behind these rules: `failure-log` skill (`stacks/`).
   Access), which also records attempts that never reach the origin.
 - **Count Access policies by reading them back, never from what the last
   session added.** This file said `budget` carried one policy for three
-  days while the app carried two: `partner email allow` was added in the
-  dashboard and nothing here noticed. Ask
+  days while the app carried two. Ask
   `/accounts/{id}/access/apps/{app}/policies` before writing a count — an
   undocumented policy is an access grant nobody is reviewing.
-- **OpenObserve panics at startup on a root password it considers weak**
-  -- 8-128 characters with a lowercase, an uppercase, a digit and a
-  special character -- so the symptom is a crashloop, not a message about
-  credentials. This collides with the dotenv rule (`#` and `$` truncate or
-  interpolate), and the overlap is narrow: `!`, `@`, `%`, `-` and `_` are
-  measured-accepted by v0.92.2 as special *and* survive the parser. Use
-  those. `ZO_ROOT_USER_*` applies only at first boot, so changing the
-  secret afterwards does nothing until the `openobserve-data` volume is
-  wiped -- which is safe here, the volume is explicitly not backed up.
+- **OpenObserve panics at startup on a root password it considers weak**,
+  so the symptom is a crashloop, not a message about credentials. It
+  collides with the dotenv rule (`#` and `$` truncate or interpolate); the
+  overlap is narrow, and `!`, `@`, `%`, `-` and `_` satisfy both.
+  `ZO_ROOT_USER_*` applies only at first boot, so changing the secret
+  afterwards does nothing until the `openobserve-data` volume is wiped --
+  safe here, that volume is explicitly not backed up.
 - **A newly created hostname stays unresolvable for up to 30 minutes.**
-  The zone's SOA minimum is 1800s, so a resolver that was asked for
-  `siem-ingest.maybeit.work` *before* the record existed caches the
-  NXDOMAIN for that long. The nodes list Google's public resolver first in
-  `/etc/resolv.conf` and run no local caching daemon, so there is nothing
-  to flush -- and Google's anycast pool
-  expires it unevenly, which looks like a hostname that resolves on one
-  query and not the next. Wait it out; Vector retries on its own. Create
-  the DNS record before pointing anything at it if you want to skip this.
-- **Vector 0.57.0 disabled config env-var interpolation by default**, so
-  every `${...}` in `vector.yaml` is a literal string unless the container
-  sets `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true`. It surfaced
-  as `invalid uri character` from the sink -- the URI was the placeholder
-  text, spaces and all -- and the credentials were likewise the literal
-  text of their own placeholders. **`vector validate` cannot catch this**:
-  an uninterpolated `${...}` is a perfectly good YAML string, so validate
-  said `Validated` for a config that could not send a single request.
-  Validate proves syntax; only a real request proves interpolation.
+  The zone's SOA minimum is 1800s, so a resolver asked for the name
+  *before* the record existed caches the NXDOMAIN that long, and the nodes
+  run no local caching daemon -- there is nothing to flush. Wait it out;
+  create the DNS record before pointing anything at it to skip it.
+- **`vector validate` cannot prove interpolation.** Vector 0.57.0 disabled
+  config env-var interpolation by default, so every `${...}` in
+  `vector.yaml` is a literal string unless the container sets
+  `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true` -- and an
+  uninterpolated `${...}` is perfectly good YAML, so validate passes on a
+  config that cannot send a single request. Only a real request proves it.
+  Checked by `scripts/check-rails.sh` (the env var, not the request).
 - **Never set `current_boot_only: false` on the Vector journald source.**
-  Vector rejects it outright for systemd 250-257 and refuses to start;
-  Debian 12 runs systemd 252 and the `vector:*-debian` image ships
-  journalctl 257, so both ends are in the range and no node can ever take
-  it. It crashlooped all three, and `Verify` called them green. Losing the
-  pre-reboot backfill is the price of a Vector that starts.
+  Vector rejects it outright for systemd 250-257 and Debian 12 runs 252,
+  so no node can ever take it; it crashlooped all three while `Verify`
+  called them green. Losing the pre-reboot backfill is the price of a
+  Vector that starts. Checked by `scripts/check-rails.sh`.
 - **Never pin a journald source to `/var/log/journal`** — a node with
   volatile journal storage has nothing there, so Vector ships nothing and
-  still reports healthy; assert `Storage=persistent`
+  still reports healthy. Assert `Storage=persistent`
   (`setup-maintenance.sh`) and let Vector follow `journalctl`'s own
-  resolution.
-- **Never reuse another node's tunnel token** (rail 2). vps00 and vps01
-  once shared one, so Cloudflare load-balanced the control-plane hostname
-  across both connectors and ~2/3 of requests 502'd on the node with
-  nothing on that origin port.
-- **Removing Dokploy freed ~810 MB on vps00** (measured 2026-08-23:
-  1400 MB used before, 593 MB of 1966 MB after; vps01 1100 MB, vps02
-  969 MB after). The control plane alone was 749.7 MiB of a 1966 MB node.
-  Its Traefik on vps00 and vps02 routed nothing -- cloudflared went
-  straight to `localhost:3000`, `:19999` and `:5080` -- so two of the
-  three were pure overhead. A control plane is a workload: measure it
-  and cap it like one, or do not run it.
-- **Docker's embedded DNS forgot every container name on a user-defined
-  network, on two nodes at once** (2026-08-23, Docker 29.7.2). Symptom:
-  `booking` 500 with `getaddrinfo for mysql failed` while the container
-  was Up and `mysql` reachable by IP; `openobserve` on vps02 could not
-  resolve its own name either, unnoticed because nothing there uses it.
-  `127.0.0.11` still resolved external names, so "DNS works" from a
-  `wget google.com` proves nothing -- query a *container* name from
-  inside the container's netns. It happened in the window that held
-  `docker swarm leave --force` and `docker system prune -af` on both
-  nodes; replaying every `deploy.yml` action on vps02 (`pull`, `up -d`,
-  `image prune`, `restart`, a `docker run --rm`) reproduced nothing, so
-  the Swarm teardown is the suspect and is not proven. Fix per container:
-  `docker network disconnect <net> <c>` then `docker network connect
-  --alias <service> --alias <container> <net> <c>` -- a plain `connect`
-  restores the container name and **drops the Compose service alias**,
-  which is the name the app actually dials; or `docker compose up -d
-  --force-recreate`. After any change to Docker networking on a node,
-  probe the app on its loopback port before calling the node done.
+  resolution. Checked by `scripts/check-rails.sh` (the
+  `journal_directory` key).
+- **Never reuse another node's tunnel token** (rail 2). Cloudflare
+  load-balances the hostname across both connectors, so ~2/3 of requests
+  land on the node with nothing on that origin port and 502.
+- **A control plane is a workload: measure it and cap it like one, or do
+  not run it.** Dokploy's was 749.7 MiB of a 1966 MB node, and its Traefik
+  on two of the three nodes routed nothing at all.
+- **Query a *container* name from inside the container's netns before
+  calling Docker networking healthy.** Embedded DNS forgot every container
+  name on a user-defined network on two nodes at once while `127.0.0.11`
+  still resolved external names -- so `wget google.com` proves nothing.
+  Repair with `docker network disconnect <net> <c>` then `connect --alias
+  <service> --alias <container>`: a plain `connect` restores the container
+  name and **drops the Compose service alias**, which is the name the app
+  actually dials. Probe the app on its loopback port after any change to
+  Docker networking on a node.
