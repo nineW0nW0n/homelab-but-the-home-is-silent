@@ -189,6 +189,29 @@ rules guard human error, not CI.
 
 ## Failure log
 
+- **`gh secret list` proves a name exists, never that it has a value.**
+  `gh secret set NAME` with no `--body` reads the value from stdin; run
+  anywhere without a terminal attached (a wrapper, a hook, an agent's
+  shell) it reads nothing and stores an **empty string**, then reports
+  success. The name then appears in `gh secret list` with a fresh
+  timestamp and looks set. Found 2026-08-29: `GOOGLE_OAUTH_CLIENT_SECRET`
+  was created empty this way and `deploy.yml`'s reject-mangle step caught
+  it at the gate -- "FAIL ...: empty or unset", nothing written to any
+  node. Read the step's own `env:` echo when diagnosing: GitHub masks a
+  non-empty secret as `***`, so a name printing nothing after the colon
+  is an empty value, not a masked one. Set secrets in the web UI or from
+  a real terminal, and treat that empty-check as the thing standing
+  between an empty credential and three nodes.
+- **A once-shown credential dialog is state; do not navigate that tab.**
+  Google's "OAuth client created" dialog shows the client secret exactly
+  once, and any navigation in that tab destroys it (done 2026-08-29,
+  mid-verification of an unrelated URL). Not fatal for a Google OAuth
+  client -- the client detail page has **Add secret**, up to two, and the
+  new one has a copy-to-clipboard button, so the recovery is to add a
+  second secret and delete the old one after the new one is proven. Fatal
+  for credentials with no re-issue path, so move the value somewhere
+  durable before doing anything else in that tab.
+
 - **A green `schedule` history does not mean the workflow ran last
   night.** GitHub queues scheduled runs best-effort and drops them under
   load, silently — `port-sweep.yml` (cron `17 19 * * *`) landed 28 min
