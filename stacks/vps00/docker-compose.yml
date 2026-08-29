@@ -154,6 +154,58 @@ services:
     mem_limit: 128m
     mem_reservation: 64m
 
+  # google-workspace-mcp (taylorwilsdon/google_workspace_mcp): Gmail,
+  # Calendar, Drive, Docs, Sheets and the rest of Workspace as MCP tools,
+  # for Claude Code on the laptop. vps00 is the MCP node (this directory's
+  # CLAUDE.md), so it lands here next to wiki-mcp.
+  #
+  # Legacy streamable-http mode has NO MCP-level auth of its own: the only
+  # locks are this loopback-only publish (rail 1) and the Cloudflare Access
+  # app in front of the tunnel route. Same trust as wiki-mcp's :8090
+  # listener -- a node-local process could reach it directly.
+  gws-mcp:
+    image: ghcr.io/taylorwilsdon/google_workspace_mcp:1.25.2
+    container_name: gws-mcp
+    restart: unless-stopped
+    # One string, not a word list: the image's ENTRYPOINT is
+    # ["/bin/sh", "-c"], so a multi-item command would arrive as separate
+    # sh arguments and only the first would run.
+    command: ["uv run main.py --transport streamable-http --single-user --tool-tier complete"]
+    ports:
+      # 8N51, tools range (stacks/CLAUDE.md). Container-side 8000.
+      - "127.0.0.1:8051:8000"
+    environment:
+      # Verified in main.py@1.25.2 (resolve_bind_host_for_transport):
+      # legacy streamable-http binds 127.0.0.1 INSIDE the container unless
+      # this is set, and docker-proxy dials the container IP, not its
+      # loopback -- so without it the published port answers nothing. The
+      # host side stays 127.0.0.1 above; rail 1 is unaffected.
+      WORKSPACE_MCP_HOST: 0.0.0.0
+      # Google redirects the browser here after consent, so it must be the
+      # public HTTPS hostname, and it must match the Authorized redirect
+      # URI on the OAuth client exactly. WORKSPACE_EXTERNAL_URL is the
+      # reverse-proxy escape hatch: without it the server advertises
+      # base_uri + ":" + port, i.e. a URL with a port in it.
+      WORKSPACE_EXTERNAL_URL: https://gws.maybeit.work
+      GOOGLE_OAUTH_REDIRECT_URI: https://gws.maybeit.work/oauth2callback
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      # --single-user: every tool call uses this account, no per-call
+      # email argument and no second user's grant to confuse it with.
+      USER_GOOGLE_EMAIL: ${USER_GOOGLE_EMAIL}
+      WORKSPACE_MCP_CREDENTIALS_DIR: /app/store_creds
+    volumes:
+      # The Google refresh token lives here. Losing this volume means
+      # re-running the consent flow, nothing worse.
+      - gws-mcp-creds:/app/store_creds
+    # Rail 4, NOT yet measured -- an estimate for a Python/FastMCP process
+    # with the complete tool tier loaded, hedged on purpose. Replace it
+    # with cgroup memory.peak + ~50% after a few days of real use, the way
+    # wiki-builder's cap was fixed (issue #82). Committed total on this
+    # node stays under 1.6 GB of the 2 GB, and there is no swap.
+    mem_limit: 384m
+    mem_reservation: 192m
+
 volumes:
   netdataconfig:
   netdatalib:
@@ -162,3 +214,4 @@ volumes:
   wiki-bundles:
   wiki-site:
   wiki-state:
+  gws-mcp-creds:

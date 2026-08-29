@@ -20,9 +20,11 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Eight routes, all live -- seven read back from the API 2026-08-23 after the
-Dokploy removal (`dokploy.maybeit.work`, its Access apps, its CNAME and
-its WAF bypass were deleted that day). Across three tunnels:
+Nine routes. Eight are live -- seven read back from the API 2026-08-23
+after the Dokploy removal (`dokploy.maybeit.work`, its Access apps, its
+CNAME and its WAF bypass were deleted that day), plus `wiki`. The ninth,
+`gws.maybeit.work`, was created 2026-08-29 and read back from the API the
+same day. Across three tunnels:
 
 - `vps00-metrics.maybeit.work` → `http://localhost:8050` on vps00, token
   `CLOUDFLARE_TUNNEL_TOKEN`. Behind its own Access app.
@@ -30,6 +32,13 @@ its WAF bypass were deleted that day). Across three tunnels:
   (created via API 2026-08-26): wiki-kit, see `stacks/vps00/CLAUDE.md`.
   Access application `wiki`, one policy, `owner email allow`.
   Deployed as a test 2026-08-26, **kept 2026-08-27**.
+- `gws.maybeit.work` → `http://localhost:8051` on vps00, same tunnel:
+  google-workspace-mcp, see `stacks/vps00/CLAUDE.md`. Access application
+  `gws-mcp`, two policies — `owner email allow` (the browser leg of
+  Google's consent redirect) and `claude-code service auth`, which reuses
+  the **same** `claude-code` service token as `wiki`, not a new one. Both
+  policies are needed: drop the email policy and the OAuth callback 403s,
+  drop the service-token policy and Claude Code cannot connect.
 - `booking.maybeit.work` → `http://localhost:8101` on vps01
   (EasyAppointments, its own published loopback port), token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING`: its own dedicated tunnel.
@@ -129,7 +138,7 @@ rail 1, but only `ss` on the node sees loopback listeners and UDP.
   loopback-only is the accepted state; the design spec's "disable it"
   item closes as not-doable, 2026-08-24)
 - vps00: `127.0.0.1:8050` (Netdata), `:8001` (wiki-kit Caddy, since
-  2026-08-26)
+  2026-08-26), `:8051` (google-workspace-mcp, since 2026-08-29)
 - vps01: `127.0.0.1:8101` (booking), `:8102` (budget), `:8150` (Netdata)
 - vps02: `127.0.0.1:8250` (Netdata), `:8251` (OpenObserve)
 
