@@ -143,6 +143,12 @@ vps00/vps02, vps01 adds `[plugins] backup_age = yes`) and
 `health_alarm_notify.conf` (generated at deploy time, never committed —
 `docker compose config` doesn't need it to exist, `docker compose up` does).
 
+**Retention 3d, cap 256m, since 2026-08-29.** `dbengine tier 0 retention
+time = 3d` in `netdata.conf` and `mem_limit: 256m` / `mem_reservation: 128m`
+in each node's compose file. Both moved together: the agent had been sitting
+at 87-90% of the old 200m cap and dbengine is what fills it. See the failure
+log below for the measurements and for the number still owed.
+
 **Metrics only, since 2026-08-23.** `systemd-journal`, `systemd-units`,
 `otel`, `statsd` and `netflow` are `= no` in `[plugins]`: logs are
 OpenObserve's job, and the three receivers had no sender. Accepted cost:
@@ -281,6 +287,25 @@ Netdata is metrics; this is logs, deliberately a separate tool.
   `vector` 56 MiB, `netdata` 141 MiB, `cloudflared` 31 MiB; host 1061 MB
   of 1966 MB used. OpenObserve's cap was raised 384m -> 512m on the back
   of that, because 89% of a cap is not a working margin.
+- **Apply that margin rule to every cap in the file, not the one service
+  you are measuring.** The 2026-08-23 raise fixed OpenObserve and left
+  `netdata` at 200m; by 2026-08-29 it read 175/179/173 MiB on
+  vps00/vps01/vps02 -- 87-90% of its cap, the exact number that had
+  justified the OpenObserve raise six days earlier. No OOM kill yet
+  (`RestartCount` 0, `State.OOMKilled` false on all three), so nothing
+  ever surfaced it. Raised to 256m/128m and retention trimmed 7d -> 3d
+  the same day. **The new figure is not measured yet (issue #84):**
+  re-read `docker stats` and `netdata.memory` a few days after the deploy
+  and replace this sentence with the number.
+- **Netdata's memory is dbengine, and retention is the only lever.** Its
+  own `netdata.memory` chart on vps01 (2026-08-29) accounts for 104 MB,
+  of which `dbengine` is 93.4 MB; everything else is under 5 MB each.
+  `dbengine page cache size` was already at the stock 32MiB, so the cache
+  is not what grew -- the mmap'd journal v2 index files are, and those
+  scale with `dbengine tier 0 retention time`. RSS runs well above the
+  agent's own total (179 MiB vs 104 MB) because allocator and mapped
+  files are not in that chart; judge the cap by `docker stats`, tune with
+  the chart.
 - **`deploy.yml`'s verify step proves liveness, not ingestion** — only
   that the `vector` container is running. Prove ingestion by hand, once
   per node: `logger -t siem-test "hello from $(hostname)"`, then find
