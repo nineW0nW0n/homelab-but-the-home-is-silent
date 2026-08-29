@@ -190,8 +190,17 @@ services:
       GOOGLE_OAUTH_REDIRECT_URI: https://gws.maybeit.work/oauth2callback
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
-      # --single-user: every tool call uses this account, no per-call
-      # email argument and no second user's grant to confuse it with.
+      # The default account, not the only one. Verified in
+      # core/server.py@1.25.2: this variable makes the server drop
+      # user_google_email from every tool's required list and inject
+      # this value only when the caller omits the argument. A caller
+      # that passes a different address is left alone, and
+      # auth/google_auth.py's single-user path then loads that
+      # address's own credential file from the volume below -- with no
+      # fallback to this one. --single-user skips FastMCP session
+      # mapping; it does not pin calls to one account. Three grants live
+      # here since 2026-08-29 (abcollado.28, excollado,
+      # feeder.kantooter), one file each.
       USER_GOOGLE_EMAIL: ${USER_GOOGLE_EMAIL}
       WORKSPACE_MCP_CREDENTIALS_DIR: /app/store_creds
     volumes:
