@@ -1,7 +1,9 @@
 import { isDebugAuthorized } from './debug-auth.js'
 import page from './page.html'
 import { isFresh, POLL_TTL_MS, pollAll } from './poll.js'
+import privacy from './privacy.html'
 import { toStatusJson } from './status-json.js'
+import terms from './terms.html'
 
 const SNAPSHOT_KEY = 'snapshot'
 
@@ -51,6 +53,18 @@ const PAGE_HEADERS = {
 export default {
   async fetch(request, env, ctx) {
     const pathname = new URL(request.url).pathname
+
+    // Google's OAuth consent screen requires a reachable privacy policy
+    // and terms of service before an app can leave Testing status, and
+    // the zone-wide "Block non-local traffic" rule exempts only the apex
+    // -- so they have to be served from here, not from gws.maybeit.work.
+    // Static text, no data, same headers as the page.
+    if (pathname === '/privacy') {
+      return new Response(privacy, { headers: PAGE_HEADERS })
+    }
+    if (pathname === '/terms') {
+      return new Response(terms, { headers: PAGE_HEADERS })
+    }
 
     // The HTML shell needs no data at all -- the page fetches
     // /status.json itself on load. Serving `/`, /favicon.ico and every

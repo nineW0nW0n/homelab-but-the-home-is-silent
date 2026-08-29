@@ -30,6 +30,15 @@ VPS; the design spec says why
   from `NODE_HOSTS`, never from `Object.entries(snapshot.nodes)`, which
   `pollAll` fills from concurrent promises so insertion order isn't
   guaranteed to match. `/debug` is the raw snapshot, key-gated.
+- `src/privacy.html`, `src/terms.html`: static legal pages at `/privacy`
+  and `/terms`, served through the same Text module rule and the same
+  `PAGE_HEADERS`. They exist because Google's OAuth consent screen refuses
+  to leave Testing status without a reachable privacy policy and terms of
+  service, and the zone-wide "Block non-local traffic" rule exempts only
+  the apex -- so they cannot live on `gws.maybeit.work` (see
+  `stacks/vps00/CLAUDE.md`). Keep them true: they describe gws-mcp as a
+  single-user app whose Google data stays on the owner's own node, and
+  Google reads them if verification is ever triggered.
 - `src/debug-auth.js`: `isDebugAuthorized`, kept out of `index.js` so
   `node --test` can import it (`index.js` pulls `page.html` through the Text
   rule, which plain Node can't resolve). `npm test` is `node --test`, no
