@@ -75,6 +75,26 @@ since: wiki-kit (2026-08-26) and google-workspace-mcp (2026-08-29).
   Code presents `CF-Access-Client-Id`/`CF-Access-Client-Secret` headers.
   `GOOGLE_OAUTH_REDIRECT_URI` must match the Authorized redirect URI on
   the Google OAuth client character for character.
+- Google side, done 2026-08-29 under `abcollado.28@gmail.com`: Cloud
+  project **`gws-mcp-507002`**, consent screen app `gws-mcp`, OAuth client
+  `gws-mcp vps00`, and 11 enabled APIs (Gmail, Calendar, Drive, Docs,
+  Sheets, Slides, Forms, Tasks, Chat, People, Apps Script). Custom Search
+  is deliberately NOT enabled: the `gsearch` tools need a separate
+  Programmable Search key and engine ID, so enabling the API alone would
+  buy nothing.
+- **Publishing status is "In production", and that is load-bearing.** An
+  External app left in "Testing" has its Google refresh token expired
+  after 7 days, which would mean re-running the browser consent flow
+  every week. Production removes that. The app is unverified, so first
+  consent shows Google's "unverified app" screen -- expected, click
+  through it. Do not flip it back to Testing to silence anything.
+- Production status requires a reachable home page, privacy policy and
+  terms of service. They are served by the **status Worker on the apex**
+  (`/privacy`, `/terms` -- see `worker/status/CLAUDE.md`), not from
+  `gws.maybeit.work`, because the zone-wide "Block non-local traffic"
+  rule exempts only the apex and Google could not otherwise fetch them.
+  Changing what this MCP does means changing those pages: they claim
+  single-user use and that Google data stays on this node.
 - Cloudflare side, created and read back from the API 2026-08-29: the
   `gws` CNAME (proxied), the tunnel ingress entry, and Access app
   `gws-mcp` (session 24h) with its two policies. The service-token policy
