@@ -104,11 +104,12 @@ since: wiki-kit (2026-08-26) and google-workspace-mcp (2026-08-29).
   `USER_GOOGLE_EMAIL` in GitHub secrets → vps00 `.env` (deploy.yml).
   All three are in the reject-mangle list, so a deploy fails loudly if
   one is unset rather than starting a container that cannot authenticate.
-- `mem_limit: 384m` is an **estimate, not a measurement** — the first
-  cap this node has ever carried that was not read off a running
-  container. Read `memory.peak` after a few days of real use and replace
-  it with peak + ~50%, the way `wiki-builder`'s 768m hedge was replaced
-  (issue #82). Until then, treat the number as unproven.
+- `mem_limit` is `512m`, **measured** 2026-08-29 minutes after the first
+  deploy: cgroup `memory.peak` 347 MiB, steady state 258 MiB, complete
+  tool tier, before any Google grant existed. It replaces a `384m`
+  estimate that was already sitting at 90% of peak on day one. The peak
+  is a *startup* peak — the process imports every tool in the tier — so
+  re-measure after real traffic rather than treating 347 as the ceiling.
 - CI verify probes `gws-mcp:8051` on `/`, which the image serves as its
   health JSON (`core/server.py` registers `/` and `/health` on the same
   handler). That proves the process is up and bound; it proves nothing

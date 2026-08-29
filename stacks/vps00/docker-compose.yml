@@ -198,13 +198,17 @@ services:
       # The Google refresh token lives here. Losing this volume means
       # re-running the consent flow, nothing worse.
       - gws-mcp-creds:/app/store_creds
-    # Rail 4, NOT yet measured -- an estimate for a Python/FastMCP process
-    # with the complete tool tier loaded, hedged on purpose. Replace it
-    # with cgroup memory.peak + ~50% after a few days of real use, the way
-    # wiki-builder's cap was fixed (issue #82). Committed total on this
-    # node stays under 1.6 GB of the 2 GB, and there is no swap.
-    mem_limit: 384m
-    mem_reservation: 192m
+    # Rail 4, measured 2026-08-29 on the node: cgroup memory.peak was
+    # 347 MiB and steady state 258 MiB, five minutes after first start,
+    # with the complete tool tier loaded and before any Google grant or
+    # tool call existed. 512m is that peak + ~50%, the same arithmetic as
+    # wiki-builder's. The 384m it replaces was an estimate and sat at 90%
+    # of peak on day one -- close enough to OOM that it would have been
+    # found the hard way. Re-measure once real traffic has run: the peak
+    # here is a startup peak (importing every tool), so a busy day may
+    # move it. Committed total on this node is 1664m of 2 GB, no swap.
+    mem_limit: 512m
+    mem_reservation: 256m
 
 volumes:
   netdataconfig:
