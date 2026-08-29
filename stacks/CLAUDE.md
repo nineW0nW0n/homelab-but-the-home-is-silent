@@ -338,6 +338,16 @@ staleness alerting are vps01-only: `stacks/vps01/CLAUDE.md`.
 
 ## Failure log
 
+- **A change that touches only comments does not recreate the container,
+  so `memory.peak` survives the deploy.** The #89 deploy (a comment-only
+  edit to `gws-mcp`'s cap block) went green on all three nodes while
+  `gws-mcp` kept running -- `netdata` and `vector` restarted, it did not,
+  because Compose recreates a service only on a config delta and comments
+  are not config. Predicting the reset the wrong way round costs a
+  measurement either way: a peak read after such a deploy is still the
+  *old* window, and a peak read after a real change is a fresh one with
+  no history. Check `docker inspect -f '{{.State.StartedAt}}'` before
+  trusting any high-water mark as fresh or stale.
 - **Deleting a hostname does not delete the Cloudflare rules aimed at
   it.** The zone's one rate-limit rule still matched
   `dokploy.maybeit.work` on 2026-08-27, four days after that hostname,
