@@ -135,9 +135,54 @@ services:
     mem_limit: 128m
     mem_reservation: 64m
 
+  # Beszel agent: the hub on the Ashes node connects IN over SSH on
+  # tcp/45876 and pulls host CPU/memory/disk. The agent never dials out.
+  # HUB_URL/TOKEN would select the agent-dials-hub WebSocket path, and
+  # these nodes report source country US, which the zone firewall blocks
+  # ahead of Access -- an outbound agent would fail and read as an auth
+  # error. The hub dials in instead (phoenixlab ADR 0005). Additive:
+  # netdata keeps running, and retiring it is a later, separate decision.
+  #
+  # Rail 1: network_mode: host is load-bearing here, not cosmetic. A
+  # host-netns listener never traverses FORWARD, so DOCKER-USER and
+  # daemon.json's loopback bind do not apply to it -- ufw INPUT is the
+  # only layer in front, and harden-node.sh's `ufw default deny incoming`
+  # keeps 45876 shut until a source-restricted `ufw allow from <hub> to
+  # any port 45876 proto tcp` is added by hand on each node (never
+  # committed: rail 5). Converting this to bridge + ports: would move the
+  # traffic to a chain that rule does not govern, silently.
+  #
+  # No docker.sock, same reason as netdata and vector (stacks/CLAUDE.md):
+  # a :ro bind on it is still host root. Host-level CPU/memory/disk is all
+  # that is wanted. No healthcheck either -- measured on 0.18.8, the
+  # vendor's `/agent health` prints ok and exits 0 from a container with
+  # nothing running and with LISTEN pointing at a dead socket, so it would
+  # put a green light over a dead agent. The image is distroless, so there
+  # is no shell probe to fall back on.
+  beszel-agent:
+    image: henrygd/beszel-agent:0.18.8
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - beszel-agent-data:/var/lib/beszel-agent
+    environment:
+      LISTEN: "45876"
+      # The hub's SSH public key. Public half only, not secret material.
+      KEY: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhsAA+enUy8mR7+/mwhctM3PKNw9awWtIwhxLsfTBnU"
+    # Rail 4. HEDGED, NOT MEASURED: no reading exists for this image yet.
+    # 128m is deliberately generous rather than tight -- an unmeasured cap
+    # has been raised after the fact twice here (netdata sat at 87-90% of
+    # 200m, openobserve at 89% of 384m) and never once been too loose.
+    # Read cgroup memory.peak and docker stats after a week and replace
+    # this number with the measurement.
+    mem_limit: 128m
+    mem_reservation: 64m
+
 volumes:
   netdataconfig:
   netdatalib:
   netdatacache:
   openobserve-data:
   vector-data:
+  beszel-agent-data:

@@ -146,7 +146,7 @@ else
 fi
 
 echo "rail 1: source-level only. Only an off-node port sweep proves the nodes"
-echo "        are closed: nc -z -w 3 <ip> 22 80 443 8050 8101 8102 8150 8250 8251"
+echo "        are closed: nc -z -w 3 <ip> 22 80 443 8050 8101 8102 8150 8250 8251 45876"
 echo "        (no -G: BSD-only, Debian nc exits 1 without connecting)"
 
 # --- rail 6 (partial): the CI deploy user stays key-only, no sudo -------

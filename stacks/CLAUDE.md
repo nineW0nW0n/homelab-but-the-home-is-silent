@@ -126,7 +126,7 @@ every node ran a `dokploy-traefik` nothing in `stacks/` declared; since
 then every container on every node comes from its compose file, and a
 container that does not is drift to investigate.
 
-## Listener baseline (recorded 2026-08-24)
+## Listener baseline (recorded 2026-08-24, extended 2026-09-02)
 
 `ss -lntH` on each node, post port-scheme migration. Anything beyond this
 set is drift to investigate; the scheduled off-node sweep
@@ -136,7 +136,12 @@ rail 1, but only `ss` on the node sees loopback listeners and UDP.
 - all three: `0.0.0.0:22` + `[::]:22` (sshd), `127.0.0.1:20241`
   (cloudflared's built-in metrics endpoint -- it has no off switch, and
   loopback-only is the accepted state; the design spec's "disable it"
-  item closes as not-doable, 2026-08-24)
+  item closes as not-doable, 2026-08-24), and TCP 45876 (beszel-agent,
+  added 2026-09-02) -- **bind address not yet measured**: `ss -ltnp` on
+  all three (2026-09-02) showed nothing on 45876, because the service is
+  not deployed yet. Read it back after the first deploy: whether it binds
+  `0.0.0.0` only or `[::]` as well is what decides whether the IPv4-only
+  ufw rule below is sufficient.
 - vps00: `127.0.0.1:8050` (Netdata), `:8001` (wiki-kit Caddy, since
   2026-08-26), `:8051` (google-workspace-mcp, since 2026-08-29)
 - vps01: `127.0.0.1:8101` (booking), `:8102` (budget), `:8150` (Netdata)
@@ -243,6 +248,40 @@ a notification, so they sit in the "no prior `EXEC_RUN`" branch and will
 fire on their first real transition. The backup alarm's silence was specific
 to its own dedup state (`vps01/CLAUDE.md` failure log — that entry moved
 there with the backup sections), not a property of the recipient.
+
+## Beszel agents
+
+`henrygd/beszel-agent:0.18.8` on all three nodes, `network_mode: host`,
+TCP 45876 -- vendor-fixed, so it does **not** follow the `8NXX` scheme
+above, and unlike every other workload port it is not loopback-bound.
+The hub lives on the Ashes node, outside this repo, and dials **inward**
+over SSH; the agent never dials out, and `KEY` is the hub's SSH *public*
+key, not a secret. Nothing is published -- no DNS record, no Access app,
+no tunnel ingress rule. Rest of the detail: each node's compose comments.
+
+**Host mode makes ufw the only guard.** The listener never traverses
+FORWARD, so `DOCKER-USER` never sees it and `daemon.json`'s loopback
+bind does not apply; its traffic hits `filter INPUT`. `harden-node.sh:44`
+sets `ufw default deny incoming`, so 45876 is closed until a
+**hand-applied, per-node, source-restricted** rule opens it: `ufw allow
+from <hub-ip> to any port 45876 proto tcp`. **Applied on all three nodes
+2026-09-02**, source verified equal to the operator's `Host ashes` entry
+-- read `ufw status` before re-applying rather than assuming it is
+missing. `IPV6=yes` on all three with no v6 rule for 45876: not a hole,
+the default deny covers v6, but a hub dialling a node over IPv6 would be
+dropped. The rule is uncommitted on purpose (rail 5), so **no script
+creates it** and a node rebuilt from `scripts/` alone comes up without it
+while the hub silently loses that node. Bridge mode with `ports:` would
+move the traffic to FORWARD/`DOCKER-USER`, where the ufw source
+restriction does not apply. 45876 is in `port-sweep.yml`'s list, so the
+twice-daily off-node sweep, from GitHub-hosted runners and never the
+hub's address, asserts it reads closed from the internet.
+
+**128m/64m are hedged, not measured** -- rail 4 satisfied, the number not
+earned; re-read `docker stats` and replace them. **No `docker.sock`**
+(same reason as Netdata above) and no healthcheck: nothing to curl, and
+the hub's connection is the liveness signal. **Netdata is unaffected**;
+retiring it is a separate, later decision blocked on comparing alerts.
 
 ## Logs (OpenObserve + Vector)
 
@@ -424,3 +463,12 @@ Incident histories behind every rule here: `failure-log` skill (`stacks/`).
   name and **drops the Compose service alias**, which is the name the app
   actually dials. Probe the app on its loopback port after any change to
   Docker networking on a node.
+- **A `network_mode: host` listener sits behind ufw and nothing else, so
+  reason about it with `ufw`, not `DOCKER-USER`.** Host-mode traffic never
+  traverses FORWARD, so the `DOCKER-USER` drops never see it and
+  `daemon.json`'s loopback bind cannot constrain it; it arrives on `filter
+  INPUT`. The repo's usual Docker mental model therefore gives the wrong
+  answer twice over -- Netdata's `netflow` UDP listeners (Netdata section
+  above) and beszel-agent's TCP 45876. Check which chain a port lands in
+  before calling it closed, and note that moving such a service to bridge
+  mode silently swaps which layer is enforcing.

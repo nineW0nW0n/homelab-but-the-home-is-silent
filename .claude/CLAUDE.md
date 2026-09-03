@@ -84,7 +84,7 @@ Never silently pick one.
    silently -- see that directory's failure log).
    A manual sweep is still the post-provisioning check after any
    provisioning run — `nc -z -w 3 <ip> <port>` over
-   22/80/443/8050/8051/8101/8102/8150/8250/8251 must answer on 22 and
+   22/80/443/8050/8051/8101/8102/8150/8250/8251/45876 must answer on 22 and
    nothing else (2377/3000/19999 retired with Dokploy and the
    port-scheme moves).
    **`-G` is platform-dependent, and is read backwards in both directions
