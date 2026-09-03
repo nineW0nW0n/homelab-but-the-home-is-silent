@@ -136,12 +136,11 @@ rail 1, but only `ss` on the node sees loopback listeners and UDP.
 - all three: `0.0.0.0:22` + `[::]:22` (sshd), `127.0.0.1:20241`
   (cloudflared's built-in metrics endpoint -- it has no off switch, and
   loopback-only is the accepted state; the design spec's "disable it"
-  item closes as not-doable, 2026-08-24), and TCP 45876 (beszel-agent,
-  added 2026-09-02) -- **bind address not yet measured**: `ss -ltnp` on
-  all three (2026-09-02) showed nothing on 45876, because the service is
-  not deployed yet. Read it back after the first deploy: whether it binds
-  `0.0.0.0` only or `[::]` as well is what decides whether the IPv4-only
-  ufw rule below is sufficient.
+  item closes as not-doable, 2026-08-24), and `*:45876` (beszel-agent,
+  deployed 2026-09-03) -- **measured**, and note the form: one dual-stack
+  socket, not sshd's `0.0.0.0` + `[::]` pair, so the agent answers on IPv6
+  as well. The ufw rule is IPv4-only and v6 is held by the default deny, so
+  this is not exposure -- but a hub dialling a node over IPv6 is dropped.
 - vps00: `127.0.0.1:8050` (Netdata), `:8001` (wiki-kit Caddy, since
   2026-08-26), `:8051` (google-workspace-mcp, since 2026-08-29)
 - vps01: `127.0.0.1:8101` (booking), `:8102` (budget), `:8150` (Netdata)
@@ -277,10 +276,10 @@ restriction does not apply. 45876 is in `port-sweep.yml`'s list, so the
 twice-daily off-node sweep, from GitHub-hosted runners and never the
 hub's address, asserts it reads closed from the internet.
 
-**128m/32m are measured, on a different host** -- the same image on the
-hub's node used 11.85 MiB resident after 30 minutes, with a Docker socket
-these three do not get. Read `docker stats` here anyway once they have run
-a week. Note all three nodes carry 2047 MB of swap on `/swapfile`
+**128m/32m, measured here 2026-09-03**: 4.88 MiB on all three a few minutes
+after first start, 3.8% of the cap -- below the 11.85 MiB the hub's own node
+showed, which mounts a Docker socket these three do not get. That is a cold
+reading, so re-read after a week before treating it as steady state. Note all three nodes carry 2047 MB of swap on `/swapfile`
 (`scripts/add-swap.sh`), so root's "no swap by default" describes the
 provider image, not the nodes as they run today. **No `docker.sock`**
 (same reason as Netdata above) and no healthcheck: nothing to curl, and
