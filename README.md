@@ -31,7 +31,7 @@ freed ~800 MB on the primary node.
 
 | Node  | Role      | Notes                                                     |
 |-------|-----------|-----------------------------------------------------------|
-| vps00 | primary   | wiki-kit + own `cloudflared`; the tunnel for the status page and its metrics |
+| vps00 | primary   | wiki-kit + own `cloudflared`; the tunnel for its Netdata metrics hostname |
 | vps01 | secondary | both apps + own `cloudflared`                              |
 | vps02 | secondary | OpenObserve logs + own `cloudflared`                       |
 
@@ -149,7 +149,7 @@ worth naming next to a zero-inbound-ports posture.
   workflows/
     validate.yml                     pre-commit over the whole repo, reusable via workflow_call
     deploy.yml                       one approval, then all three nodes in parallel
-    deploy-worker.yml                tests + deploys the status Worker (same production approval)
+    deploy-worker.yml                deploys the status Worker (same production approval)
     port-sweep.yml                   twice-daily off-node port sweep of all three nodes
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
@@ -161,7 +161,7 @@ stacks/
   vps01/backup-booking.sh            nightly MySQL dump to Cloudflare R2
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
   vps00/bundles.yml, Caddyfile       wiki-kit: which git bundles to build, and how they are served
-worker/status/                       Cloudflare Worker: maybeit.work status page + health poller
+worker/status/                       Cloudflare Worker: maybeit.work status page, /privacy and /terms
 docs/superpowers/                    handoffs, plans and specs from past sessions
 scripts/
   provision-deploy-user.sh           create the CI deploy user, key-only, rsync installed
@@ -210,8 +210,10 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   :8102) — there is no reverse proxy. The check runs on the node over the SSH
   connection the deploy already holds, because a zone-wide Cloudflare rule
   blocks every request from outside the Philippines, so probing the public
-  hostnames fails from CI while the site is perfectly healthy. The edge and tunnel
-  path is covered by the status page and Netdata Cloud instead. The check
+  hostnames fails from CI while the site is perfectly healthy. Node health
+  is watched by the private Beszel hub and by Netdata Cloud instead; the
+  status Worker's poller, which used to probe the tunnel path, retired
+  2026-09-03. The check
   reports and fails; it never rolls back. A revert cannot undo node-side
   state, and an automated retry loop against three nodes with nobody awake
   is worse than an alert.
@@ -235,8 +237,8 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   without rsyslog, so the default file-based jail backend has nothing to
   tail).
 - Cloudflare Access in front of every Netdata endpoint, the OpenObserve
-  UI, `wiki` (owner-only) and `budget`. The status Worker holds a service
-  token that opens the three Netdata endpoints **and nothing else**. `booking` stays open
+  UI, `wiki` (owner-only) and `budget`. The status Worker holds **no
+  credentials at all** since its poller retired (2026-09-03). `booking` stays open
   on purpose — it is the public booking page.
 - One CI key **per node**, so a leaked Actions secret reaches one node
   rather than three, and deploys require a human approval.

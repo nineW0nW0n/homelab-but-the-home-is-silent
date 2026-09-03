@@ -19,12 +19,6 @@ globs = ["**/*.html"]
 [observability]
 enabled = true
 
-[[kv_namespaces]]
-binding = "STATUS_KV"
-id = "8fbd60e3276e4a40a63609f9ed56e1fd"
-
-[vars]
-NODE_HOSTS = "vps00-metrics.maybeit.work,vps01-metrics.maybeit.work,vps02-metrics.maybeit.work"
-# No DOKPLOY_HOST: the Worker deliberately does not poll Dokploy. See
-# src/poll.js and CLAUDE.md -- sending this public Worker's Access service
-# token to the deploy control plane bought an up/down flag only /debug showed.
+# No KV binding and no vars: the poller retired 2026-09-03 (phoenixlab
+# step 17). The Worker serves three static files and holds no state, no
+# hostnames and no secrets.

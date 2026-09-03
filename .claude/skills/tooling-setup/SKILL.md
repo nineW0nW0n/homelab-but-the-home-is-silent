@@ -254,9 +254,12 @@ measured against this account, not read off a doc page.
 
 **Never call `GET /cfd_tunnel/{id}/token`.** It returns secret material,
 which is rail 11. Worker settings is the rail-11-safe alternative: it
-lists secret bindings by name and type only — `CF_ACCESS_CLIENT_ID`,
-`CF_ACCESS_CLIENT_SECRET`, `DEBUG_KEY`, all `secret_text` — never values,
-so you can assert the expected secrets exist without printing one.
+lists secret bindings by name and type only, never values, so you can
+assert the expected secrets exist without printing one. (Since the
+2026-09-03 poller retirement the status Worker is expected to hold **no**
+secret bindings — a listed binding is drift to clean up, not config to
+preserve; `CF_ACCESS_CLIENT_ID`/`_SECRET`/`DEBUG_KEY` were the poller
+era's three.)
 
 **`execute` is write-capable**: arbitrary method, DELETE included,
 against an account that holds the only off-site backup bucket and the

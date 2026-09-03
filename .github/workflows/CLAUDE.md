@@ -3,9 +3,10 @@ Parent: ../../.claude/CLAUDE.md
 # .github/workflows/: CI/CD
 
 `validate.yml` (lint gate), `deploy.yml` (parallel deploy to the three
-nodes), `deploy-worker.yml` (the `maybeit.work` status Worker: `npm test`
-then `wrangler deploy`, entirely separate from the node deploy path; see
-`worker/status/CLAUDE.md`), `port-sweep.yml` (twice-daily off-node sweep of the
+nodes), `deploy-worker.yml` (the `maybeit.work` status Worker: `npm ci`
+then `wrangler deploy` — no test step since the poller retired 2026-09-03,
+nothing importable remains — entirely separate from the node deploy path;
+see `worker/status/CLAUDE.md`), `port-sweep.yml` (twice-daily off-node sweep of the
 `SSH_HOST_VPS0N` addresses -- rail 1's enforcement point; prints only
 `port N: OPEN/closed`, never an address, and fails on any open port but
 22 or on 22 closed. No approval gate: it deploys nothing, and
@@ -117,19 +118,17 @@ both passwords must satisfy its startup policy, see the `approve` job),
 `OPENOBSERVE_INGEST_USER`, `OPENOBSERVE_INGEST_PASSWORD` (the ingest
 credential Vector authenticates with, written to all three nodes),
 `CLOUDFLARE_ACCESS_SIEM_CLIENT_ID`/`_SECRET` (Vector's ingest token,
-written to vps00/vps01 `.env` under the old `CF_ACCESS_SIEM_*` keys),
-`CLOUDFLARE_ACCESS_STATUS_CLIENT_ID`/`_SECRET` (status Worker's
-Cloudflare Access service token, `deploy-worker.yml`; becomes wrangler
-secrets `CF_ACCESS_CLIENT_ID`/`_SECRET`), `WORKER_DEBUG_KEY` (gates
-`maybeit.work/debug` as wrangler secret `DEBUG_KEY`; unset, the route
-404s for everyone — it fails closed, which is why the worker's
-empty-secret guard leaves it out).
+written to vps00/vps01 `.env` under the old `CF_ACCESS_SIEM_*` keys).
 
 Present as a repo secret but **consumed by no workflow**:
-`CLOUDFLARE_TUNNEL_ID`, for manual dashboard/CLI work. Don't delete it
-assuming it is load-bearing, and don't reference it in a workflow assuming
-it is maintained. (`DOKPLOY_API_TOKEN` was the other; deleted 2026-08-23
-with Dokploy.)
+`CLOUDFLARE_TUNNEL_ID`, for manual dashboard/CLI work, plus
+`CLOUDFLARE_ACCESS_STATUS_CLIENT_ID`/`_SECRET` and `WORKER_DEBUG_KEY`,
+orphaned 2026-09-03 when the status Worker's poller and `/debug` retired
+(delete them once phoenixlab deletes the service token itself). Don't
+delete a listed name assuming it is dead weight without checking here
+first, and don't reference one in a workflow assuming it is maintained.
+(`DOKPLOY_API_TOKEN` was an earlier one; deleted 2026-08-23 with
+Dokploy.)
 
 Variables (optional, default in workflow): `VPS0N_SSH_USER`,
 `VPS0N_SSH_PORT`.
