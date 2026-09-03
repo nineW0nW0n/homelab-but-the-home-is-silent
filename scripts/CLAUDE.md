@@ -149,6 +149,13 @@ Incident histories behind these rules: `failure-log` skill (`scripts/`).
   it. Note `iptables -S DOCKER-INGRESS` errors with "chain is incompatible,
   use 'nft' tool" on all three, so that chain is not inspectable with the
   legacy tool.
+- **Never parse `ufw status` by column position** — with a source address
+  plain `ufw status` prints `45876/tcp  ALLOW  <ip>  # comment`, while
+  `ufw status verbose` prints `ALLOW IN` as two words. So a field index is
+  the address in one mode and `#` in the other, and `$NF` is the trailing
+  word of the comment in both. A column parse reported a false MISMATCH on
+  all three nodes (2026-09-02) and nearly sent someone re-applying rules
+  that were already correct. Match the address itself, never a field index.
 - **Never persist `DOCKER-USER` rules with `iptables-persistent`** — its
   boot restore races Docker creating the chain; use the
   `docker-wan-drop.service` oneshot, `After=docker.service`. Three things
