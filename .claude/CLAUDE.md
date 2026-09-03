@@ -47,7 +47,7 @@ in `.claude/skills/`.
 | `stacks/vps01/` | The two apps (booking, ezBookkeeping) and their backups, R2 retention, drills, staleness alerting | exists → `stacks/vps01/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |
-| `worker/status/` | Cloudflare Worker: status page + health poller | exists → `worker/status/CLAUDE.md` |
+| `worker/status/` | Cloudflare Worker: status page + `/privacy` + `/terms` (poller retired 2026-09-03) | exists → `worker/status/CLAUDE.md` |
 | `docs/` | Handoffs, plans and specs from past sessions (`superpowers/`), the failure-log archive the propagation protocol writes to, and agent-skill config (`agents/`); nothing deploys from here | none: no rails of its own |
 
 Keep this column current the same commit you add or remove a directory

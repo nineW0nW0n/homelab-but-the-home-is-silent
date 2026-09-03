@@ -177,7 +177,7 @@ fi
 
 # --- markup sinks in the public status page ----------------------------
 # page.html is served to anonymous visitors and is a vendored copy of a
-# designed front-end, re-copied by hand. It writes poll data with
+# designed front-end, re-copied by hand. It writes status data with
 # textContent and real elements, never innerHTML -- but nothing enforced
 # that, while a comment in index.js claimed this grep already existed. It
 # did not, for months. Now it does, and the claim is true.

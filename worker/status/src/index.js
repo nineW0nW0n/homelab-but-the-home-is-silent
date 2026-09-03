@@ -1,11 +1,6 @@
-import { isDebugAuthorized } from './debug-auth.js'
 import page from './page.html'
-import { isFresh, POLL_TTL_MS, pollAll } from './poll.js'
 import privacy from './privacy.html'
-import { toStatusJson } from './status-json.js'
 import terms from './terms.html'
-
-const SNAPSHOT_KEY = 'snapshot'
 
 // Defense in depth, not a fix for a live XSS: page.html takes no user
 // input and writes data with textContent and real elements, never
@@ -21,6 +16,10 @@ const SNAPSHOT_KEY = 'snapshot'
 // would be stricter but would silently break the page every time the
 // vendored file is re-copied, which is the worse failure. Fonts are
 // data: URIs, already inlined, so no external origin is needed anywhere.
+//
+// connect-src 'self' stays even with the poller gone: the vendored page
+// still fires its one GET /status.json on load, and blocking it at CSP
+// would turn a designed, silent fallback into a console error.
 //
 // HSTS is deliberately absent -- Cloudflare terminates TLS and should set
 // it at the edge, not this Worker.
@@ -44,14 +43,21 @@ const PAGE_HEADERS = {
   'cache-control': 'public, max-age=300',
 }
 
-// No Cron Trigger: cron-triggered subrequests to this account's own
-// Access-protected Netdata apps get a 403 from Cloudflare Access, even
-// with a verified-working CF-Access-Client-Id/Secret (confirmed
-// 2026-08-16, see worker/status/CLAUDE.md). Polling once per page load
-// instead sidesteps that entirely -- it always runs inside a real
-// fetch() invocation, which works every time.
+// The poller retired 2026-09-03 (phoenixlab step 17, section 0): Netdata's
+// replacement is the Beszel hub, which is private, so this Worker no
+// longer polls anything, reads no KV, and holds no secrets. /status.json
+// and /debug are gone with it.
+//
+// What the page shows with no data is deliberate, not accidental:
+// /status.json now falls through to the HTML shell below, the page's own
+// DATA CONTRACT (src/page.html) swallows the JSON parse failure silently,
+// and its hardcoded SERVICES fallback stands. Every fallback value
+// quantizes into the page's green 1-7 band, so no node ever renders as
+// down -- unlike the poller's fail-closed zeros, which rendered all three
+// dead the moment the origins went away. The fallback path is the one
+// visitors already hit whenever the old poll missed its 800ms budget.
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request) {
     const pathname = new URL(request.url).pathname
 
     // Google's OAuth consent screen requires a reachable privacy policy
@@ -66,57 +72,6 @@ export default {
       return new Response(terms, { headers: PAGE_HEADERS })
     }
 
-    // The HTML shell needs no data at all -- the page fetches
-    // /status.json itself on load. Serving `/`, /favicon.ico and every
-    // 404 path used to poll all three nodes and write KV first.
-    if (pathname !== '/status.json' && pathname !== '/debug') {
-      return new Response(page, { headers: PAGE_HEADERS })
-    }
-
-    // /debug returns the raw snapshot: per-node error strings (Netdata
-    // internals, HTTP status codes). No secrets, but it is a recon aid, so
-    // it takes a shared header.
-    //
-    // Fails closed: if DEBUG_KEY is unset the route is 404 for everyone,
-    // rather than open to everyone. 404 rather than 403 on a bad key too
-    // -- do not confirm the route exists.
-    if (pathname === '/debug' && !isDebugAuthorized(request, env)) {
-      return new Response('not found', { status: 404 })
-    }
-
-    const previousSnapshot = await env.STATUS_KV.get(SNAPSHOT_KEY, { type: 'json' })
-    let snapshot = previousSnapshot
-    if (!isFresh(previousSnapshot)) {
-      snapshot = await pollAll(env, fetch, previousSnapshot)
-      // waitUntil so the response isn't blocked on the KV write. The
-      // previous snapshot still threads through pollAll -- pollNode needs
-      // it to carry lastSeen forward on a node that's currently down.
-      ctx.waitUntil(env.STATUS_KV.put(SNAPSHOT_KEY, JSON.stringify(snapshot)))
-    }
-
-    // nosniff on the JSON routes too, not just the page. Without it a
-    // browser is free to content-sniff a response body; the page headers
-    // already carry it, these did not.
-    //
-    // max-age matches POLL_TTL_MS: the data genuinely cannot change more
-    // often than that, and without it every refresh of a public page is a
-    // Worker invocation plus a KV read. That is a free-tier quota someone
-    // can exhaust by holding down F5 -- the nodes themselves are already
-    // shielded by the poll TTL, this protects the Worker.
-    const JSON_HEADERS = {
-      'x-content-type-options': 'nosniff',
-      'cache-control': `public, max-age=${Math.floor(POLL_TTL_MS / 1000)}`,
-    }
-    // Raw snapshot (includes per-node `error` on down nodes) -- not linked
-    // from the page, just a diagnostic escape hatch.
-    if (pathname === '/debug') {
-      // Never cached: it is gated by a shared key, and a cached copy could
-      // outlive a rotated key or be served to the wrong client.
-      return Response.json(snapshot, {
-        headers: { ...JSON_HEADERS, 'cache-control': 'no-store' },
-      })
-    }
-    const nodeHosts = env.NODE_HOSTS ? env.NODE_HOSTS.split(',') : []
-    return Response.json(toStatusJson(snapshot, nodeHosts), { headers: JSON_HEADERS })
+    return new Response(page, { headers: PAGE_HEADERS })
   },
 }

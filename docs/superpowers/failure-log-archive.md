@@ -821,3 +821,29 @@ deleted. The situations cannot recur; each left a one-line generalised pointer.
 - **`bootstrap-dokploy.sh`'s printed sha256 is a record, not a
   verification** — Dokploy publishes no checksum to compare against, so
   don't upgrade the claim.
+
+## 8. `worker/status/CLAUDE.md` — four poller-only entries (archived 2026-09-03, poller retired)
+
+Moved in full when the status Worker's poller retired (phoenixlab step 17,
+section 0: `poll.js`, `status-json.js`, `debug-auth.js`, the KV snapshot,
+`NODE_HOSTS` and the Worker's Access service token wiring all deleted; the
+Beszel hub replaced Netdata monitoring). The situations cannot recur in
+this Worker; the live file keeps one pointer line naming all four.
+
+- **Verify Netdata chart ids and dimensions against a live node's
+  `/api/v1/charts` before wiring them** — two of `poll.js`'s were wrong
+  guesses. `system.cpu` has no `idle` dimension here, the root filesystem
+  chart keeps the literal `/`, and `system.load`'s dimensions are
+  absolute, so `options=percentage` is meaningless on it.
+- **No Cron Trigger in this Worker** — no `[triggers]`, no `scheduled()`.
+  Anything in a request chain rooted at a Cron Trigger gets 403'd by
+  Access however many hops deep, with credentials that work fine from a
+  real `fetch()`. Cost: the first `/status.json` after the TTL expires
+  waits on live Netdata calls.
+- **The status code tells you which layer failed** — vps02's 530s were
+  Cloudflare-level (a tunnel that had never connected), not an Access
+  403; fixed by rotating the tunnel token and re-running `deploy.yml`.
+- **Grep for order-sensitive output from a concurrently-filled object** —
+  `page.html` matches status dots to nodes by array index, so building
+  that array from `Object.entries(snapshot.nodes)` would have mislabeled
+  nodes under network jitter. Build from `NODE_HOSTS.split(',')`.
