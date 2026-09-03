@@ -277,8 +277,12 @@ restriction does not apply. 45876 is in `port-sweep.yml`'s list, so the
 twice-daily off-node sweep, from GitHub-hosted runners and never the
 hub's address, asserts it reads closed from the internet.
 
-**128m/64m are hedged, not measured** -- rail 4 satisfied, the number not
-earned; re-read `docker stats` and replace them. **No `docker.sock`**
+**128m/32m are measured, on a different host** -- the same image on the
+hub's node used 11.85 MiB resident after 30 minutes, with a Docker socket
+these three do not get. Read `docker stats` here anyway once they have run
+a week. Note all three nodes carry 2047 MB of swap on `/swapfile`
+(`scripts/add-swap.sh`), so root's "no swap by default" describes the
+provider image, not the nodes as they run today. **No `docker.sock`**
 (same reason as Netdata above) and no healthcheck: nothing to curl, and
 the hub's connection is the liveness signal. **Netdata is unaffected**;
 retiring it is a separate, later decision blocked on comparing alerts.

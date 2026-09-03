@@ -220,7 +220,7 @@ services:
     # Still unexercised: get_gmail_threads_content_batch, which pulls 25
     # thread bodies at once and is the heaviest tool here. If that becomes
     # routine, read the peak again.
-    # Committed total on this node is 1792m of 2 GB, no swap.
+    # Committed total on this node is 1792m of 2 GB, plus 2 GB swap.
     mem_limit: 512m
     mem_reservation: 256m
 
@@ -259,14 +259,14 @@ services:
       LISTEN: "45876"
       # The hub's SSH public key. Public half only, not secret material.
       KEY: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhsAA+enUy8mR7+/mwhctM3PKNw9awWtIwhxLsfTBnU"
-    # Rail 4. HEDGED, NOT MEASURED: no reading exists for this image yet.
-    # 128m is deliberately generous rather than tight -- an unmeasured cap
-    # has been raised after the fact twice here (netdata sat at 87-90% of
-    # 200m, openobserve at 89% of 384m) and never once been too loose.
-    # Read cgroup memory.peak and docker stats after a week and replace
-    # this number with the measurement.
+    # Rail 4. Measured, not guessed: the same image on the hub's own node
+    # used 11.85 MiB resident after 30 minutes -- and that one mounts the
+    # Docker socket, which these three deliberately do not, so they collect
+    # less. 128m is ~10x headroom; the cap exists to stop one service taking
+    # the node, not to make it slow. Re-read docker stats after a week even
+    # so: that figure came from a different host, not from these.
     mem_limit: 128m
-    mem_reservation: 64m
+    mem_reservation: 32m
 
 volumes:
   netdataconfig:
