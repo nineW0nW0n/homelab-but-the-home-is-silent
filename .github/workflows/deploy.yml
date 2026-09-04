@@ -383,7 +383,7 @@ jobs:
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             "cd /opt/stacks/$NODE && \
              if [ -n \"\$(docker compose config --services 2>/dev/null)\" ]; then \
-               docker compose pull && docker compose up -d && docker image prune -f && \
+               docker compose pull && docker compose up -d --remove-orphans && docker image prune -f && \
                docker compose restart vector; \
              else \
                echo 'no services defined, skipping compose pull/up'; \
