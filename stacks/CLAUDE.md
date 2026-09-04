@@ -6,8 +6,9 @@ One `docker-compose.yml` per node, deployed by `deploy.yml` to
 `/opt/stacks/<node>/`. Each runs that node's `cloudflared` connector (rails 2,
 3) plus every workload on that node. No reverse proxy: each app publishes
 one loopback port on the `8NXX` scheme (`N` = node, `01-49` apps, `50-99`
-tools; Netdata moved `19999`→`8N50` and OpenObserve `5080`→`8251` on
-2026-08-24) and `cloudflared` dials it directly.
+tools; OpenObserve moved `5080`→`8251` on 2026-08-24) and `cloudflared`
+dials it directly. Netdata held `8N50` on this scheme until it retired
+2026-09-04 (phoenixlab step 17); that slot is free.
 
 ## Tunnel mode and routes
 
@@ -20,14 +21,20 @@ this list — read it back (`cfd_tunnel/{id}/configurations`, `tooling-setup`)
 rather than trusting the routes below, and treat any mismatch as the
 dashboard having drifted from the docs, not the reverse.
 
-Nine routes. Eight are live -- seven read back from the API 2026-08-23
-after the Dokploy removal (`dokploy.maybeit.work`, its Access apps, its
-CNAME and its WAF bypass were deleted that day), plus `wiki`. The ninth,
-`gws.maybeit.work`, was created 2026-08-29 and read back from the API the
-same day. Across three tunnels:
+Nine routes existed as of 2026-08-29 (seven read back from the API
+2026-08-23 after the Dokploy removal -- `dokploy.maybeit.work`, its
+Access apps, its CNAME and its WAF bypass were deleted that day -- plus
+`wiki`, plus `gws.maybeit.work` created 2026-08-29). Three of them, the
+`*-metrics` hostnames, retire with Netdata (2026-09-04, phoenixlab step
+17): their origins no longer exist on this repo's side, but the DNS
+records, Access apps and ingress rules are phoenixlab's to delete
+(handoff §8), so they are marked RETIRED below rather than removed from
+this list -- treat a live 404/502 on one of them as the expected
+in-between state, not drift. Across three tunnels:
 
 - `vps00-metrics.maybeit.work` → `http://localhost:8050` on vps00, token
-  `CLOUDFLARE_TUNNEL_TOKEN`. Behind its own Access app.
+  `CLOUDFLARE_TUNNEL_TOKEN`. **RETIRED 2026-09-04**: no origin on vps00
+  anymore; DNS/Access/ingress teardown pending phoenixlab.
 - `wiki.maybeit.work` → `http://localhost:8001` on vps00, same tunnel
   (created via API 2026-08-26): wiki-kit, see `stacks/vps00/CLAUDE.md`.
   Access application `wiki`, one policy, `owner email allow`.
@@ -69,10 +76,11 @@ same day. Across three tunnels:
   ezBookkeeping clients**, which cannot complete the login flow; if a
   mobile or desktop client needs to sync, that is the trade-off to revisit.
 - `vps01-metrics.maybeit.work` → `http://localhost:8150` on vps01, same
-  tunnel, behind Access.
+  tunnel, behind Access. **RETIRED 2026-09-04**, same as above.
 - `vps02-metrics.maybeit.work` → `http://localhost:8250` on vps02, token
   `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`: its own dedicated tunnel, behind
-  Access, and vps02's first workload *from this repo*.
+  Access, and was vps02's first workload *from this repo*.
+  **RETIRED 2026-09-04**, same as above.
 - `siem.maybeit.work` → `http://localhost:8251` on vps02, same tunnel:
   the OpenObserve UI. Access application `siem`, one policy,
   `owner email allow`, PH-only like `budget`.
@@ -141,112 +149,13 @@ rail 1, but only `ss` on the node sees loopback listeners and UDP.
   socket, not sshd's `0.0.0.0` + `[::]` pair, so the agent answers on IPv6
   as well. The ufw rule is IPv4-only and v6 is held by the default deny, so
   this is not exposure -- but a hub dialling a node over IPv6 is dropped.
-- vps00: `127.0.0.1:8050` (Netdata), `:8001` (wiki-kit Caddy, since
-  2026-08-26), `:8051` (google-workspace-mcp, since 2026-08-29)
-- vps01: `127.0.0.1:8101` (booking), `:8102` (budget), `:8150` (Netdata)
-- vps02: `127.0.0.1:8250` (Netdata), `:8251` (OpenObserve)
+- vps00: `:8001` (wiki-kit Caddy, since 2026-08-26), `:8051`
+  (google-workspace-mcp, since 2026-08-29)
+- vps01: `127.0.0.1:8101` (booking), `:8102` (budget)
+- vps02: `127.0.0.1:8251` (OpenObserve)
 
-## Netdata
-
-All 3 nodes, `network_mode: host`, bound to `127.0.0.1:8N50` per node --
-8050/8150/8250, `[web] default port` + `bind to` in `netdata.conf`; public
-access only via that node's `cloudflared` route.
-Config splits two ways: `netdata.conf` (committed, no secrets; identical on
-vps00/vps02, vps01 adds `[plugins] backup_age = yes`) and
-`health_alarm_notify.conf` (generated at deploy time, never committed —
-`docker compose config` doesn't need it to exist, `docker compose up` does).
-
-**Retention 3d, cap 256m, since 2026-08-29.** `dbengine tier 0 retention
-time = 3d` in `netdata.conf` and `mem_limit: 256m` / `mem_reservation: 128m`
-in each node's compose file. Both moved together: the agent had been sitting
-at 87-90% of the old 200m cap and dbengine is what fills it. See the failure
-log below for the measurements and for the number still owed.
-
-**Metrics only, since 2026-08-23.** `systemd-journal`, `systemd-units`,
-`otel`, `statsd` and `netflow` are `= no` in `[plugins]`: logs are
-OpenObserve's job, and the three receivers had no sender. Accepted cost:
-while OpenObserve or Vector is down there is no dashboard view of a node's
-logs; recovery reading is `ssh` + `journalctl`. The plugin keys are the
-ones the agent prints at `http://127.0.0.1:8N50/netdata.conf`, not the
-binary names in `ps` (`sd-jrnl.plugin` is `systemd-journal`). Effective
-values were read back from that URL on vps02 before merging: assert there,
-never from the file you wrote. Note `netflow` had been listening on
-`0.0.0.0:2055`/`6343` UDP on every node -- Netdata is `network_mode: host`,
-so `daemon.json`'s loopback bind never applied to it and UFW was the only
-layer in front. The TCP sweep in rail 1 does not see UDP; `ss -lunp` on
-the node does.
-
-**No docker.sock.** A `:ro` bind on a socket restricts nothing: anything that
-can reach the Docker API can `docker run -v /:/host`, i.e. host root. Mounting
-it turned any Netdata RCE into instant root on all three nodes at once. Cost is
-cosmetic: the cgroup collector used the socket only to resolve container
-*names*, so per-container charts are labelled by cgroup ID; their CPU/memory/IO
-data comes from `/sys/fs/cgroup`, mounted separately, and none of the node-level
-metrics the status page consumes (`system.cpu`, `system.ram`, `disk_space./`,
-`system.load`, `mem.swap`) ever touched the socket. `/:/host/root:ro,rslave`
-**stays**: the disk collectors need it, it is read-only, it grants no write. Not
-the same thing; don't remove it "in the same spirit".
-
-**Netdata Cloud claim.** All three agents connect (free Community plan: 5 nodes
-max, 1 custom dashboard per Room). Declarative: `NETDATA_CLAIM_TOKEN` and
-`NETDATA_CLAIM_ROOMS` go from GitHub secrets into each node's `.env`, compose
-passes them to the agent, the agent claims itself on start. The **same token
-goes on every node** — unlike a tunnel token (rail 2) it identifies the Space,
-not the node; do not mint one per node. Identity lives in the `netdatalib`
-volume (`/var/lib/netdata/cloud.d`), so an agent stays claimed across restarts
-and redeploys even if the secret is unset later; removing a node is a Cloud-side
-action, not a repo change. Claiming is outbound HTTPS to `app.netdata.cloud`
-only: no inbound port, rail 1 untouched. Cloud is additive — per-node dashboards
-and local alarms are unaffected — but do not move the backup staleness alert
-onto it: never make an alarm the only delivery path for something that matters.
-
-## Alert delivery
-
-`health_alarm_notify.conf` carries the Telegram bot token, so it is generated
-at deploy time and never committed, and it is **not** bind-mounted: `deploy.yml`
-pipes it into the node's `<node>_netdataconfig` volume through a throwaway
-`alpine` container that also does `chown 201:201` and `chmod 600`. That
-indirection exists because in-container Netdata is uid 201 while the deploy user
-is uid 1000; a bind-mounted `600 deploy:deploy` file is unreadable to uid 201,
-and Netdata fails silently — logs "Failed to load config file", forgets Telegram
-entirely, falls back to emailing root on a box with no sendmail.
-
-Verify as the netdata user, never root (root reads the file regardless, so a
-root test passes on a broken setup):
-
-```sh
-docker exec -u netdata netdata /usr/libexec/netdata/plugins.d/alarm-notify.sh test sysadmin
-```
-
-That proves script, config and token — **not** that Netdata will ever run them:
-it passes on a setup where real alerts are silently dropped (failure log). Only
-a real transition reaching Telegram is evidence. One production alarm has it:
-`ezbookkeeping_backup_age`, via the 2026-08-19 drill recorded in
-`vps01/CLAUDE.md`. The `to: sysadmin` recipient path has its own separate proof
-below, from a throwaway alarm on vps02 — a different claim, and neither one
-makes the other redundant.
-
-## Alert thresholds
-
-`health.d/ram.conf` and `health.d/disks.conf` (identical across all 3
-nodes, mounted over Netdata's stock files of the same name (same
-directory, same override-by-filename as `netdata.conf`, not a merge), so
-each is a full copy with only the threshold lines changed) tighten
-`ram_in_use` and `disk_space_usage` warn/crit from Netdata's stock
-90%/98% to 80%/90%, per the design spec: a 2GB node fills fast. Inode
-usage and the other stock disk/ram alarms are untouched. No deploy.yml
-change needed: `rsync -az --delete stacks/vps0N/` already ships
-subdirectories, and the existing `docker compose restart netdata` step
-picks up the new mounts.
-
-**These alarms do deliver.** The `to: sysadmin` path is proven by positive
-control: a throwaway alarm with that same recipient on vps02 fired
-`UNINITIALIZED -> WARNING`, carried the `EXEC_RUN` flag and exited 0.
-`ram_in_use`, `disk_space_usage` and `disk_inode_usage` have never executed
-a notification, so they sit in the "no prior `EXEC_RUN`" branch and will
-fire on their first real transition. The backup alarm's silence was specific
-to its own dedup state (`vps01/CLAUDE.md` failure log — that entry moved
-there with the backup sections), not a property of the recipient.
+Netdata held `127.0.0.1:8050`/`:8150`/`:8250` on these three until it
+retired 2026-09-04; those loopback listeners are gone with it.
 
 ## Beszel agents
 
@@ -282,21 +191,28 @@ showed, which mounts a Docker socket these three do not get. That is a cold
 reading, so re-read after a week before treating it as steady state. Note all three nodes carry 2047 MB of swap on `/swapfile`
 (`scripts/add-swap.sh`), so root's "no swap by default" describes the
 provider image, not the nodes as they run today. **No `docker.sock`**
-(same reason as Netdata above) and no healthcheck: nothing to curl, and
-the hub's connection is the liveness signal. **Netdata is unaffected**;
-retiring it is a separate, later decision blocked on comparing alerts.
+(a `:ro` bind still grants host root -- see Logs below for the same
+reasoning against Netdata's old RCE exposure) and no healthcheck:
+nothing to curl, and the hub's connection is the liveness signal.
+**Netdata retired 2026-09-04** (phoenixlab step 17); it ran metrics on
+all three nodes until then, the comparison this section used to be
+blocked on is done, and the Beszel hub is what covers host metrics now.
 
 ## Logs (OpenObserve + Vector)
 
 Design: `docs/superpowers/specs/2026-08-22-siem-openobserve-design.md`.
-Netdata is metrics; this is logs, deliberately a separate tool.
+Metrics went through Netdata until it retired 2026-09-04 (the Beszel hub
+covers that now); this is logs, deliberately a separate tool.
 
 - vps02 runs `openobserve` (store + UI, `127.0.0.1:8251`, Parquet on the
   `openobserve-data` volume) and `vector`; vps00/vps01 run `vector`
   only. vps02's Vector posts to `http://127.0.0.1:8251`, the other two
   to `https://siem-ingest.maybeit.work` — outbound HTTPS, rail 1
   untouched.
-- **No `docker.sock`** (same reason as Netdata above). Container stdout
+- **No `docker.sock`.** A `:ro` bind on a socket restricts nothing:
+  anything that can reach the Docker API can `docker run -v /:/host`,
+  i.e. host root -- this is why Netdata never got one either, back when
+  it ran here. Container stdout
   reaches Vector because `scripts/setup-maintenance.sh` sets Docker's
   log driver to `journald` — once that script has been run by hand on the
   nodes (plan Task 9); it is not part of `deploy.yml`. The journal is
@@ -348,15 +264,6 @@ Netdata is metrics; this is logs, deliberately a separate tool.
   the same day. **The new figure is not measured yet (issue #84):**
   re-read `docker stats` and `netdata.memory` a few days after the deploy
   and replace this sentence with the number.
-- **Netdata's memory is dbengine, and retention is the only lever.** Its
-  own `netdata.memory` chart on vps01 (2026-08-29) accounts for 104 MB,
-  of which `dbengine` is 93.4 MB; everything else is under 5 MB each.
-  `dbengine page cache size` was already at the stock 32MiB, so the cache
-  is not what grew -- the mmap'd journal v2 index files are, and those
-  scale with `dbengine tier 0 retention time`. RSS runs well above the
-  agent's own total (179 MiB vs 104 MB) because allocator and mapped
-  files are not in that chart; judge the cap by `docker stats`, tune with
-  the chart.
 - **`deploy.yml`'s verify step proves liveness, not ingestion** — only
   that the `vector` container is running. Prove ingestion by hand, once
   per node: `logger -t siem-test "hello from $(hostname)"`, then find
@@ -401,16 +308,14 @@ Incident histories behind every rule here: `failure-log` skill (`stacks/`).
   settles it.
 - **When a container reads a secret file, check the *in-container* uid and
   test as that user, not root.** Host-side `600 deploy:deploy` looks
-  correct and is unreadable by a container running as another uid (Alert
-  delivery above).
-- **Set `SEND_EMAIL="NO"` in the notify templates.** `alarm-notify.sh`
-  enables email **by default**, so with no MTA every alert also runs
-  sendmail — a steady error stream that hides real breakage. Check a
-  notifier's real default before writing that an unlisted method is
-  disabled.
+  correct and is unreadable by a container running as another uid.
 - **Never `sed -i` a bind-mounted single file:** it writes a new inode and
-  the container keeps reading the old one. Use `cat new > file` for
-  `netdata.conf` and `health.d/*.conf`.
+  the container keeps reading the old one. Use `cat new > file` (e.g.
+  `vector.yaml`).
+- Netdata's `alarm-notify.sh` email-default entry ("Set `SEND_EMAIL="NO"`
+  in the notify templates") is archived in full in
+  `docs/superpowers/failure-log-archive.md` (2026-09-04) -- that script no
+  longer exists in this repo.
 - **A web control plane with no 2FA and no audit log is only as safe as
   the Access app in front of it** (Dokploy v0.29.14 had neither, verified
   empirically; removed 2026-08-23). Authentication and the access log for
@@ -471,7 +376,8 @@ Incident histories behind every rule here: `failure-log` skill (`stacks/`).
   traverses FORWARD, so the `DOCKER-USER` drops never see it and
   `daemon.json`'s loopback bind cannot constrain it; it arrives on `filter
   INPUT`. The repo's usual Docker mental model therefore gives the wrong
-  answer twice over -- Netdata's `netflow` UDP listeners (Netdata section
-  above) and beszel-agent's TCP 45876. Check which chain a port lands in
-  before calling it closed, and note that moving such a service to bridge
-  mode silently swaps which layer is enforcing.
+  answer twice over -- Netdata's now-retired `netflow` UDP listeners were
+  the first instance, beszel-agent's TCP 45876 is the live one. Check
+  which chain a port lands in before calling it closed, and note that
+  moving such a service to bridge mode silently swaps which layer is
+  enforcing.

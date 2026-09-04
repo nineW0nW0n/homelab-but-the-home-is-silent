@@ -57,11 +57,11 @@ someone next touches them.
 - `verify-node.sh`: **not a provisioning script** and never run from this
   machine -- `deploy.yml`'s Verify step pipes it over the SSH connection it
   already holds (`ssh ... "sh -s -- <args>" < scripts/verify-node.sh`), so
-  it executes on the node. Args (per-node, from the deploy matrix): Netdata
-  loopback port, OpenObserve `/healthz` port or `-`, comma-separated
+  it executes on the node. Args (per-node, from the deploy matrix):
+  OpenObserve `/healthz` port or `-`, comma-separated
   `label:port` app probes or `-`, then the containers whose restart
   counters are sampled across a 75s window. The incident comments behind
-  its checks (503 restart race, restart-counter aliveness, country-rule
+  its checks (restart race, restart-counter aliveness, country-rule
   403s) live in the script itself.
 - `check-rails.sh`: **not a provisioning script** — no node, no ssh, no
   arguments; a repo-wide check that runs on every commit via

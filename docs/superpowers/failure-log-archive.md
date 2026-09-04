@@ -847,3 +847,35 @@ this Worker; the live file keeps one pointer line naming all four.
   `page.html` matches status dots to nodes by array index, so building
   that array from `Object.entries(snapshot.nodes)` would have mislabeled
   nodes under network jitter. Build from `NODE_HOSTS.split(',')`.
+
+## 9. `stacks/CLAUDE.md` — Netdata's alarm-notify.sh email default (archived 2026-09-04, Netdata retired)
+
+Moved in full when Netdata was removed from all three nodes (phoenixlab
+step 17, sections 1-4: the `netdata` service block, `health.d/`,
+`netdata.conf` and `health_alarm_notify.conf.template` all deleted per
+node; the Beszel hub already covers host metrics). `alarm-notify.sh` no
+longer exists in this repo, so the situation cannot recur.
+
+- **Set `SEND_EMAIL="NO"` in the notify templates.** `alarm-notify.sh`
+  enables email **by default**, so with no MTA every alert also runs
+  sendmail — a steady error stream that hides real breakage. Check a
+  notifier's real default before writing that an unlisted method is
+  disabled.
+
+## 10. `stacks/vps01/CLAUDE.md` — two Netdata alarm-dedup entries (archived 2026-09-04, Netdata retired)
+
+Moved in full alongside archive entry 9, same retirement. No
+`health.d/backup.conf` exists in this repo any more to unstick.
+
+- **A Netdata alarm can look armed and be permanently silent for one
+  status** — a notification whose status matches the last executed one is
+  dropped as a duplicate, and a long `delay: down` blocks the CLEAR that
+  would reset the chain. Verify with a real transition, never an
+  interactive `alarm-notify.sh test`, and never make an alarm the only
+  delivery path for something that matters. (Two earlier wrong write-ups
+  and a superseded restart-persistence clause were archived ahead of this
+  one.)
+- **To unstick a silent alarm, edit its `.conf` and redeploy** — dedup
+  state resets on a `config_hash_id` change, not on a netdata restart.
+  Re-run the stale/recover/stale drill after any change to
+  `health.d/backup.conf`.

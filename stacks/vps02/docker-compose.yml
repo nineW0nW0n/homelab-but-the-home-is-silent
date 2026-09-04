@@ -2,14 +2,15 @@
 # vps02 stack. Deployed by .github/workflows/deploy.yml to
 # /opt/stacks/vps02/docker-compose.yml.
 #
-# Netdata is this node's first workload. It gets its own dedicated
+# OpenObserve is this node's first workload (Netdata ran here too until
+# it retired 2026-09-04). This node gets its own dedicated
 # tunnel + token (CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS), never vps00's
 # shared CLOUDFLARE_TUNNEL_TOKEN (see stacks/CLAUDE.md, rail 2: a
 # shared token load-balances requests across nodes with different
 # origins and 502s).
 #
-# network_mode: host so localhost:8250 in the tunnel's Public Hostname
-# route resolves to this VPS's own Netdata, not the container's netns.
+# network_mode: host so localhost:8251 in the tunnel's Public Hostname
+# route resolves to this VPS's own OpenObserve, not the container's netns.
 services:
   cloudflared:
     image: cloudflare/cloudflared:2024.12.2
@@ -25,49 +26,6 @@ services:
     # already caused one misdiagnosed kill here (scripts/CLAUDE.md).
     mem_limit: 64m
     mem_reservation: 32m
-
-  netdata:
-    image: netdata/netdata:v2.11.0
-    container_name: netdata
-    # Image's baked-in healthcheck curls 19999; port moved 2026-08-24 (port
-    # scheme). Override with the real per-node port or Docker flags the
-    # container unhealthy forever.
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8250/api/v1/info"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      # Netdata Cloud claim. The same token goes on all three nodes on
-      # purpose: unlike a tunnel token (rail 2) this identifies the Space,
-      # not the node. Empty when the secret is unset, which is harmless —
-      # an agent that is already claimed keeps its identity in the
-      # netdatalib volume regardless. Claiming needs outbound HTTPS to
-      # app.netdata.cloud only; it opens no inbound port (rail 1).
-      NETDATA_CLAIM_TOKEN: ${NETDATA_CLAIM_TOKEN:-}
-      NETDATA_CLAIM_URL: https://app.netdata.cloud
-      NETDATA_CLAIM_ROOMS: ${NETDATA_CLAIM_ROOMS:-}
-    volumes:
-      - netdataconfig:/etc/netdata
-      - netdatalib:/var/lib/netdata
-      - netdatacache:/var/cache/netdata
-      - /etc/passwd:/host/etc/passwd:ro
-      - /etc/group:/host/etc/group:ro
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /etc/os-release:/host/etc/os-release:ro
-      - /:/host/root:ro,rslave
-      - ./netdata.conf:/etc/netdata/netdata.conf:ro
-      # health_alarm_notify.conf is deliberately NOT bind-mounted: it is
-      # written into the netdataconfig volume by deploy.yml as uid 201 so
-      # the in-container netdata user can actually read it. See
-      # stacks/CLAUDE.md, alerting section.
-      - ./health.d/ram.conf:/etc/netdata/health.d/ram.conf:ro
-      - ./health.d/disks.conf:/etc/netdata/health.d/disks.conf:ro
-    mem_limit: 256m
-    mem_reservation: 128m
 
   openobserve:
     # Log store + UI. Single binary, local Parquet under /data. Reached
@@ -140,8 +98,8 @@ services:
   # HUB_URL/TOKEN would select the agent-dials-hub WebSocket path, and
   # these nodes report source country US, which the zone firewall blocks
   # ahead of Access -- an outbound agent would fail and read as an auth
-  # error. The hub dials in instead (phoenixlab ADR 0005). Additive:
-  # netdata keeps running, and retiring it is a later, separate decision.
+  # error. The hub dials in instead (phoenixlab ADR 0005). Replaced
+  # Netdata's metrics role when it retired 2026-09-04 (phoenixlab step 17).
   #
   # Rail 1: network_mode: host is load-bearing here, not cosmetic. A
   # host-netns listener never traverses FORWARD, so DOCKER-USER and
@@ -152,7 +110,7 @@ services:
   # committed: rail 5). Converting this to bridge + ports: would move the
   # traffic to a chain that rule does not govern, silently.
   #
-  # No docker.sock, same reason as netdata and vector (stacks/CLAUDE.md):
+  # No docker.sock, same reason as vector (stacks/CLAUDE.md):
   # a :ro bind on it is still host root. Host-level CPU/memory/disk is all
   # that is wanted. No healthcheck either -- measured on 0.18.8, the
   # vendor's `/agent health` prints ok and exits 0 from a container with
@@ -180,9 +138,6 @@ services:
     mem_reservation: 32m
 
 volumes:
-  netdataconfig:
-  netdatalib:
-  netdatacache:
   openobserve-data:
   vector-data:
   beszel-agent-data:

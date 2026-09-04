@@ -292,7 +292,7 @@ Also off-Cloudflare: whether the tunnel token *files* on each node
 actually differ (only live connector identity is visible); Worker **JS**
 byte-equality, since it ships esbuild-bundled with comments stripped —
 that needs a local `wrangler deploy --dry-run --outdir` and a diff; and
-anything behind the tunnel — Netdata internals, container state, container
+anything behind the tunnel — OpenObserve internals, container state, container
 memory limits, so rail 4 too.
 
 Untested this session, so don't claim these work: R2 object listing and

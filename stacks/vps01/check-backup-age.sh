@@ -8,14 +8,14 @@
 # Deployed to /opt/stacks/vps01/ by .github/workflows/deploy.yml (rsync of
 # stacks/vps01/), run hourly from the deploy user's crontab.
 #
-# This deliberately duplicates Netdata's ezbookkeeping_backup_age alarm.
-# Netdata's health engine was observed never executing its notification
-# script for that alarm (no EXEC_RUN flag on any transition) while doing so
-# for stock alarms, so the one alert guarding the only off-site copy of the
-# books had no working delivery path. This script owns that alert outright:
-# it reads the same stamp file, talks to the Telegram API directly, and has
-# no roles, delays or notification queue to go wrong. Netdata keeps the
-# chart and the dashboard alarm; it is no longer the only path.
+# This script exists because Netdata's own ezbookkeeping_backup_age alarm
+# (retired with Netdata, 2026-09-04) was observed never executing its
+# notification script for that alarm (no EXEC_RUN flag on any transition)
+# while doing so for stock alarms, so the one alert guarding the only
+# off-site copy of the books had no working delivery path. This script
+# owns that alert outright: it reads the same stamp file, talks to the
+# Telegram API directly, and has no roles, delays or notification queue
+# to go wrong.
 #
 # It is parameterised rather than copied: the booking (EasyAppointments)
 # MySQL backup gets the same treatment by passing its own label and work
@@ -30,8 +30,8 @@ BACKUP_DIR=${2:-/opt/stacks/vps01/backup}
 STAMP_FILE="${BACKUP_DIR}/.last-success"
 STATE_FILE="${BACKUP_DIR}/.stale-alerted"
 ENV_FILE=/opt/stacks/vps01/.telegram.env
-# One missed daily run. Matches health.d/backup.conf's warn threshold so the
-# two agree about what "stale" means.
+# One missed daily run: the backup fires once every 24h, so 36h gives it
+# a 12h grace window before this counts as stale.
 STALE_HOURS=36
 # While stale, re-alert on this interval rather than hourly: a backup that
 # stays broken should keep nagging, but not once an hour all night.
