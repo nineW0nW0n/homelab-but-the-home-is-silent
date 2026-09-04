@@ -55,9 +55,13 @@ never re-run until green).
    -p` the remote stack dir, `rsync -az --delete` the stack files, write
    that node's tunnel token into a remote `.env`
    (piped over SSH stdin under `umask 077`, never a CLI arg, never
-   committed), then `docker compose pull && up -d && image prune -f &&
-   restart vector`, guarded: no services in the stack, skip
-   pull/up instead of erroring (failure log). The trailing `restart vector`
+   committed), then `docker compose pull && up -d --remove-orphans &&
+   image prune -f && restart vector`, guarded: no services in the stack, skip
+   pull/up instead of erroring (failure log). `--remove-orphans` is load-bearing,
+   not cosmetic (failure log): `up -d` alone never stops or removes a
+   container whose service was deleted from the compose file, so deleting
+   `netdata`'s service block left it running on all three nodes until this
+   flag was added. The trailing `restart vector`
    is needed because `vector.yaml` is bind-mounted and not part of the
    container spec, so changing it does not force a recreate and `up -d`
    leaves the old process running with the old file. It joined the deploy
@@ -229,6 +233,15 @@ Incident histories behind these rules: `failure-log` skill
   step.** A stack with `services: {}` makes plain `docker compose pull`
   error out with nothing to pull; don't cut the guard as dead code without
   checking every node's stack first.
+- **`docker compose up -d` does not remove a container whose service left
+  the compose file.** It only warns -- "Found orphan containers" -- and
+  leaves the old container running untouched. Deleting Netdata's service
+  block (2026-09-04, phoenixlab step 17) merged, deployed green, and
+  `docker ps` on all three nodes still showed `netdata` running, because
+  nothing in the Deploy step told Compose to clean up orphans. A green
+  deploy proves the declared services came up, not that undeclared ones
+  went away; `--remove-orphans` is what closes that gap, and any future
+  service removal needs the same check before calling it done.
 - **Never wire vps00's token into another node** (rail 2). deploy-vps02's
   `.env` step once wrote the shared `CLOUDFLARE_TUNNEL_TOKEN`; vps02 now
   has its own `CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS`, same pattern as
