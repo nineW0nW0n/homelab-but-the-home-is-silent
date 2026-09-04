@@ -64,8 +64,6 @@ jobs:
           CLOUDFLARE_TUNNEL_TOKEN_VPS00: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS00 }}
           CLOUDFLARE_TUNNEL_TOKEN_VPS01: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS01 }}
           CLOUDFLARE_TUNNEL_TOKEN_VPS02: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02 }}
-          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
-          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
           OPENOBSERVE_ROOT_EMAIL: ${{ secrets.OPENOBSERVE_ROOT_EMAIL }}
           OPENOBSERVE_ROOT_PASSWORD: ${{ secrets.OPENOBSERVE_ROOT_PASSWORD }}
           OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
@@ -96,8 +94,6 @@ jobs:
             CLOUDFLARE_TUNNEL_TOKEN_VPS00 \
             CLOUDFLARE_TUNNEL_TOKEN_VPS01 \
             CLOUDFLARE_TUNNEL_TOKEN_VPS02 \
-            NETDATA_CLAIM_TOKEN \
-            NETDATA_CLAIM_ROOMS \
             OPENOBSERVE_ROOT_EMAIL \
             OPENOBSERVE_ROOT_PASSWORD \
             OPENOBSERVE_INGEST_USER \
@@ -118,14 +114,6 @@ jobs:
             ; do
             value=$(printenv "$name" || true)
             if [ -z "$value" ]; then
-              case "$name" in
-                NETDATA_CLAIM_TOKEN|NETDATA_CLAIM_ROOMS)
-                  # Documented harmless when unset: an already-claimed
-                  # agent keeps its identity (stacks/CLAUDE.md).
-                  echo "skip $name: not set (optional)"
-                  continue
-                  ;;
-              esac
               # Empty means the secret does not exist under this name --
               # a typo'd rename used to render empty and deploy anyway.
               echo "FAIL $name: empty or unset"
@@ -192,9 +180,9 @@ jobs:
   # Each include entry carries both the lowercase node id (paths, container
   # names) and the uppercase suffix: secrets[format('SSH_HOST_{0}', ...)]
   # needs VPS0N and expressions cannot uppercase a string. verify_args are
-  # the arguments scripts/verify-node.sh documents: netdata port,
-  # openobserve /healthz port or '-', app probes or '-', then the
-  # containers whose restart counters are sampled.
+  # the arguments scripts/verify-node.sh documents: openobserve /healthz
+  # port or '-', app probes or '-', then the containers whose restart
+  # counters are sampled.
   deploy:
     name: deploy-${{ matrix.node }}
     needs: approve
@@ -206,16 +194,16 @@ jobs:
           - node: vps00
             suffix: VPS00
             verify_args: >-
-              8050 - wiki:8001,gws-mcp:8051 cloudflared-vps00 vector
+              - wiki:8001,gws-mcp:8051 cloudflared-vps00 vector
               wiki-builder wiki-web wiki-mcp gws-mcp
           - node: vps01
             suffix: VPS01
             verify_args: >-
-              8150 - booking:8101,budget:8102
+              - booking:8101,budget:8102
               cloudflared-vps01 vector booking-ptpwn8-mysql-1 ezbookkeeping
           - node: vps02
             suffix: VPS02
-            verify_args: 8250 8251 - cloudflared-vps02 openobserve vector
+            verify_args: 8251 - cloudflared-vps02 openobserve vector
     env:
       NODE: ${{ matrix.node }}
       SSH_PORT: ${{ vars[format('{0}_SSH_PORT', matrix.suffix)] || 22 }}
@@ -274,8 +262,6 @@ jobs:
         if: matrix.node == 'vps00'
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS00 }}
-          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
-          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
           OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
           OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
           CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_ID }}
@@ -292,8 +278,6 @@ jobs:
           # 120 chars. Same shape in the vps01/vps02 steps below.
           {
             printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$TUNNEL_TOKEN"
-            printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
-            printf 'NETDATA_CLAIM_ROOMS=%s\n' "$NETDATA_CLAIM_ROOMS"
             printf 'OPENOBSERVE_INGEST_USER=%s\n' "$OPENOBSERVE_INGEST_USER"
             printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
             printf 'CF_ACCESS_SIEM_CLIENT_ID=%s\n' "$CF_ACCESS_SIEM_CLIENT_ID"
@@ -309,8 +293,6 @@ jobs:
         if: matrix.node == 'vps01'
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS01 }}
-          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
-          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
           OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
           OPENOBSERVE_INGEST_PASSWORD: ${{ secrets.OPENOBSERVE_INGEST_PASSWORD }}
           CF_ACCESS_SIEM_CLIENT_ID: ${{ secrets.CLOUDFLARE_ACCESS_SIEM_CLIENT_ID }}
@@ -321,8 +303,6 @@ jobs:
         run: |
           {
             printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS01_BOOKING=%s\n' "$TUNNEL_TOKEN"
-            printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
-            printf 'NETDATA_CLAIM_ROOMS=%s\n' "$NETDATA_CLAIM_ROOMS"
             printf 'OPENOBSERVE_INGEST_USER=%s\n' "$OPENOBSERVE_INGEST_USER"
             printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
             printf 'CF_ACCESS_SIEM_CLIENT_ID=%s\n' "$CF_ACCESS_SIEM_CLIENT_ID"
@@ -337,8 +317,6 @@ jobs:
         if: matrix.node == 'vps02'
         env:
           TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_VPS02 }}
-          NETDATA_CLAIM_TOKEN: ${{ secrets.NETDATA_CLAIM_TOKEN }}
-          NETDATA_CLAIM_ROOMS: ${{ secrets.NETDATA_CLAIM_ROOMS }}
           OPENOBSERVE_ROOT_EMAIL: ${{ secrets.OPENOBSERVE_ROOT_EMAIL }}
           OPENOBSERVE_ROOT_PASSWORD: ${{ secrets.OPENOBSERVE_ROOT_PASSWORD }}
           OPENOBSERVE_INGEST_USER: ${{ secrets.OPENOBSERVE_INGEST_USER }}
@@ -346,29 +324,12 @@ jobs:
         run: |
           {
             printf 'CLOUDFLARE_TUNNEL_TOKEN_VPS02_METRICS=%s\n' "$TUNNEL_TOKEN"
-            printf 'NETDATA_CLAIM_TOKEN=%s\n' "$NETDATA_CLAIM_TOKEN"
-            printf 'NETDATA_CLAIM_ROOMS=%s\n' "$NETDATA_CLAIM_ROOMS"
             printf 'OPENOBSERVE_ROOT_EMAIL=%s\n' "$OPENOBSERVE_ROOT_EMAIL"
             printf 'OPENOBSERVE_ROOT_PASSWORD=%s\n' "$OPENOBSERVE_ROOT_PASSWORD"
             printf 'OPENOBSERVE_INGEST_USER=%s\n' "$OPENOBSERVE_INGEST_USER"
             printf 'OPENOBSERVE_INGEST_PASSWORD=%s\n' "$OPENOBSERVE_INGEST_PASSWORD"
           } | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             'umask 077 && cat > /opt/stacks/vps02/.env'
-
-      - name: Write remote health_alarm_notify.conf
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          sed \
-            -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
-            -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" \
-            "stacks/$NODE/health_alarm_notify.conf.template" | \
-            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "docker run --rm -i -v ${NODE}_netdataconfig:/etc/netdata alpine:3.21 \
-               sh -c 'cat > /etc/netdata/health_alarm_notify.conf && \
-                      chown 201:201 /etc/netdata/health_alarm_notify.conf && \
-                      chmod 600 /etc/netdata/health_alarm_notify.conf'"
 
       - name: Write remote R2 backup credentials
         if: matrix.node == 'vps01'
@@ -423,7 +384,7 @@ jobs:
             "cd /opt/stacks/$NODE && \
              if [ -n \"\$(docker compose config --services 2>/dev/null)\" ]; then \
                docker compose pull && docker compose up -d && docker image prune -f && \
-               docker compose restart netdata vector; \
+               docker compose restart vector; \
              else \
                echo 'no services defined, skipping compose pull/up'; \
              fi"

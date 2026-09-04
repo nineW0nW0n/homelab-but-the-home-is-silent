@@ -3,8 +3,7 @@
 # this file over the SSH connection it already holds:
 #   ssh ... "sh -s -- <args>" < scripts/verify-node.sh
 #
-# Usage: sh -s -- NETDATA_PORT OPENOBSERVE_PORT APP_PROBES CONTAINER...
-#   NETDATA_PORT      loopback port Netdata answers on (8050/8150/8250)
+# Usage: sh -s -- OPENOBSERVE_PORT APP_PROBES CONTAINER...
 #   OPENOBSERVE_PORT  loopback port for the OpenObserve /healthz probe,
 #                     or '-' for none (only vps02 runs OpenObserve)
 #   APP_PROBES        comma-separated label:port loopback probes, or '-'
@@ -16,21 +15,20 @@
 # not PH, so the public hostnames 403 from GitHub Actions while the service
 # is perfectly healthy. Only the apex is exempt. The origin is what CI can
 # honestly assert; the edge and tunnel path is covered by the status page
-# and Netdata Cloud.
+# and the private Beszel hub.
 #
 # It reports and fails; it never reverts (rollback is git revert, rail 12).
 set -eu
 
-netdata_port=$1
-openobserve_port=$2
-app_probes=$3
-shift 3
+openobserve_port=$1
+app_probes=$2
+shift 2
 
-# Polls rather than asking once: the Deploy step ends with 'docker compose
-# restart netdata', and Netdata answers 503 for a few seconds while it
-# initialises. Measured at ~5s on a real node; 60s of patience costs
-# nothing when everything is healthy and still fails fast enough to be
-# useful.
+# Polls rather than asking once: `docker compose up -d` can leave a
+# recreated service mid-startup for a few seconds, so a single
+# request-response race would flap red on a healthy deploy. 60s of
+# patience costs nothing when everything is healthy and still fails fast
+# enough to be useful.
 probe() {
   label=$1
   url=$2
@@ -81,8 +79,6 @@ up() {
   fi
   echo "ok   $1"
 }
-
-probe netdata "http://127.0.0.1:$netdata_port/api/v1/info"
 
 was=$(for c in "$@"; do printf '%s %s\n' "$c" "$(snap "$c")"; done)
 sleep 75

@@ -19,7 +19,8 @@ in `.claude/skills/`.
 - **Where**: `vps00`, `vps01`, `vps02`. 2 vCPU / 2GB RAM each, no swap by
   default. Plain Docker Engine, Swarm inactive on all three (it existed
   only for Dokploy; left 2026-08-23), so nothing needs 2377/7946 open
-  between them. All three run `cloudflared`, Netdata and Vector; vps01
+  between them. All three run `cloudflared`, Vector and a Beszel agent
+  (dialed into by a private hub; replaced Netdata 2026-09-04); vps01
   carries the two apps, vps02 OpenObserve, vps00 wiki-kit.
 - **When**: work in progress. Provisioning/hardening done and
   CI-deployable; four workloads live -- the two vps01 apps, centralised
@@ -43,7 +44,7 @@ in `.claude/skills/`.
 |---|---|---|
 | `infra/` | Inventory: real IPs (gitignored) + redacted template | exists → `infra/CLAUDE.md` |
 | `stacks/` | Per-node `docker-compose.yml`: cloudflared connector + compose workloads | exists → `stacks/CLAUDE.md` |
-| `stacks/vps00/` | wiki-kit (brain-work bundle) on the metrics node; the MCP node | exists → `stacks/vps00/CLAUDE.md` |
+| `stacks/vps00/` | wiki-kit (brain-work bundle); the MCP node | exists → `stacks/vps00/CLAUDE.md` |
 | `stacks/vps01/` | The two apps (booking, ezBookkeeping) and their backups, R2 retention, drills, staleness alerting | exists → `stacks/vps01/CLAUDE.md` |
 | `scripts/` | Idempotent POSIX `sh` provisioning/bootstrap scripts | exists → `scripts/CLAUDE.md` |
 | `.github/workflows/` | `validate.yml` (lint gate), `deploy.yml` (one approval, then all three nodes in parallel), `deploy-worker.yml` (status Worker) | exists → `.github/workflows/CLAUDE.md` |

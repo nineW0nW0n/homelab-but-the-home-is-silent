@@ -4,8 +4,8 @@ Parent: ../CLAUDE.md
 
 vps01 runs the only two production datasets with off-site copies:
 ezBookkeeping (SQLite, 03:00) and booking/EasyAppointments (MySQL, 04:00).
-Everything here is vps01-only; cross-node compose, tunnel and Netdata rails
-live in `../CLAUDE.md`.
+Everything here is vps01-only; cross-node compose and tunnel rails live in
+`../CLAUDE.md`.
 
 Superseded passages are archived in full in
 `docs/superpowers/failure-log-archive.md` (2026-08-20); pointers below say
@@ -21,14 +21,15 @@ log). `FORCE_BACKUP=1` bypasses the gate. Six moving parts in `stacks/vps01/`:
 | File | Role |
 |---|---|
 | `backup-ezbookkeeping.sh` | stop container, tar both volumes, start container, upload, stamp |
-| `backup_age.plugin` | Netdata external plugin charting hours since last success |
-| `health.d/backup.conf` | alarm: warn >36h, crit >72h (chart only, see failure log) |
 | `check-backup-age.sh` | hourly staleness check alerting Telegram directly; optional `[APP_LABEL] [BACKUP_DIR]`, defaults to ezBookkeeping |
 | `.r2.env` (never committed) | written by `deploy.yml` from `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` |
 | `.telegram.env` (never committed) | written by `deploy.yml` from `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` |
 
-`backup_age.plugin` is why vps01's `netdata.conf` alone carries
-`[plugins] backup_age = yes`.
+`backup_age.plugin` and `health.d/backup.conf` — a Netdata external
+plugin and alarm charting this same staleness, chart-only per the failure
+log below — retired with Netdata (2026-09-04, phoenixlab step 17).
+`check-backup-age.sh` was always the actual delivery path and is
+unaffected.
 
 The container is **stopped** for the tar so SQLite checkpoints its WAL and
 closes cleanly: a few seconds of downtime buys a provably consistent database
@@ -41,11 +42,12 @@ down. Volumes are read through a throwaway `alpine` container rather than
 (2026-08-23), so `VOLUME_PREFIX` in the script and the `name:` in the compose
 file must agree -- the first thing to check when backups start failing.
 
-**The staleness alert does not go through Netdata.** `check-backup-age.sh` runs
-hourly (`30 * * * *`), reads the same `.last-success` stamp and calls the
+**The staleness alert has never gone through Netdata.** `check-backup-age.sh`
+runs hourly (`30 * * * *`), reads the same `.last-success` stamp and calls the
 Telegram API itself: alert on crossing 36h, re-alert every 12h while stale, one
-message on recovery, state in `backup/.stale-alerted`. Netdata's alarm keeps the
-chart but is no longer the delivery path (failure log).
+message on recovery, state in `backup/.stale-alerted`. Netdata used to chart
+the same age on a now-retired dashboard (2026-09-04, phoenixlab step 17); it
+was never the delivery path (failure log).
 
 ### R2 retention and locks (one bucket, both apps)
 
@@ -226,17 +228,14 @@ Incident histories behind these rules: `failure-log` skill
   workload, not an inspection; the last drill pushed vps01 into swap.
 - **Use `gzip -cd`, never `zcat`, in dump-integrity checks** — macOS
   `zcat` appends `.Z` and rejects a *good* `.gz` when dry-run on a laptop.
-- **A Netdata alarm can look armed and be permanently silent for one
-  status** — a notification whose status matches the last executed one is
-  dropped as a duplicate, and a long `delay: down` blocks the CLEAR that
-  would reset the chain. Verify with a real transition, never an
-  interactive `alarm-notify.sh test`, and never make an alarm the only
-  delivery path for something that matters. (Two earlier wrong write-ups
-  and a superseded restart-persistence clause are archived.)
-- **To unstick a silent alarm, edit its `.conf` and redeploy** — dedup
-  state resets on a `config_hash_id` change, not on a netdata restart.
-  Re-run the stale/recover/stale drill after any change to
-  `health.d/backup.conf`.
+- Two Netdata alarm-dedup entries ("a Netdata alarm can look armed and be
+  permanently silent for one status" and "edit its `.conf` and redeploy
+  to unstick a silent alarm") are archived in full in
+  `docs/superpowers/failure-log-archive.md` (2026-09-04) -- Netdata
+  retired, so no `.conf` exists here to unstick. The still-live lesson
+  they leave behind: never make an alarm the only delivery path for
+  something that matters, which is exactly why `check-backup-age.sh`
+  above never relied on one.
 - **Read the API call named in a 403 before assuming the key is wrong** —
   rclone's S3 backend calls `CreateBucket` first, which an Object Read &
   Write R2 token cannot. Fix is `RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true`,

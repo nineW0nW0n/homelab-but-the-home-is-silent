@@ -8,8 +8,8 @@ description: Query the OpenObserve log stack from the CLI — read container or 
 Parent: ../../CLAUDE.md. Design context: `stacks/CLAUDE.md` (Logs section).
 All facts below verified 2026-08-23/24.
 
-Logs, not metrics. Metrics are Netdata (`http://127.0.0.1:8N50` on each
-node, per-container cgroup charts labelled by container ID).
+Logs, not metrics. Metrics are the private Beszel hub (host CPU/memory/
+disk over SSH; Netdata used to run this role until it retired 2026-09-04).
 
 ## Access pattern
 

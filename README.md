@@ -31,13 +31,15 @@ freed ~800 MB on the primary node.
 
 | Node  | Role      | Notes                                                     |
 |-------|-----------|-----------------------------------------------------------|
-| vps00 | primary   | wiki-kit + own `cloudflared`; the tunnel for its Netdata metrics hostname |
+| vps00 | primary   | wiki-kit + google-workspace-mcp + own `cloudflared`        |
 | vps01 | secondary | both apps + own `cloudflared`                              |
 | vps02 | secondary | OpenObserve logs + own `cloudflared`                       |
 
-All three also run Netdata (bound to loopback) and Vector (ships logs to
-vps02). Plain Docker Engine, no Swarm, no reverse proxy: each app publishes
-one loopback port and `cloudflared` dials it directly.
+All three also run Vector (ships logs to vps02) and a Beszel agent (a
+private hub dials in over SSH for host CPU/memory/disk; Netdata covered
+this until it retired 2026-09-04). Plain Docker Engine, no Swarm, no
+reverse proxy: each app publishes one loopback port and `cloudflared`
+dials it directly.
 
 2 vCPU / 2GB RAM each. Real IPs are never committed.
 `infra/inventory.example.yaml` is the redacted template, usage examples in
@@ -57,7 +59,7 @@ them.
 ```mermaid
 flowchart LR
     internet(("Public traffic")) --> tunnel["Cloudflare Tunnel\n(outbound-only)"]
-    tunnel --> vps00["vps00, primary\nmetrics + wiki"]
+    tunnel --> vps00["vps00, primary\nwiki + MCP"]
     tunnel --> vps01["vps01, secondary\napps"]
     tunnel --> vps02["vps02, secondary\nlogs (OpenObserve)"]
 
@@ -107,8 +109,8 @@ off-node, not `ufw status`. That sweep now runs twice daily in CI
 manual sweep remains the post-provisioning check after any hardening run.
 
 Public hostnames that should not be public are behind **Cloudflare
-Access**: all three Netdata endpoints, the OpenObserve UI,
-`wiki.maybeit.work` and `budget.maybeit.work` require authentication at
+Access**: the OpenObserve UI, `wiki.maybeit.work`, `gws.maybeit.work` and
+`budget.maybeit.work` require authentication at
 the edge, before the tunnel. `booking.maybeit.work` is deliberately **not** — it is the public
 booking page clients use, and locking it behind Access would defeat its
 purpose. Do not "fix" that.
@@ -134,10 +136,11 @@ Actions runners and the nodes themselves, gets a `403` that looks exactly
 like an outage and is not one. The rule lives only in the Cloudflare
 dashboard, so nothing in this repo can restore it.
 
-All three Netdata agents are also **claimed into Netdata Cloud**, an
-outbound HTTPS connection to a third party from every node. It opens no
-inbound port, so the statement above still holds, but it is a dependency
-worth naming next to a zero-inbound-ports posture.
+A Beszel hub, outside this repo, dials **in** to each node's Beszel agent
+over SSH (tcp/45876) for host CPU/memory/disk — the one workload port here
+that isn't loopback-bound, guarded by a hand-applied, source-restricted
+UFW rule rather than the tunnel. It replaced Netdata (which used to claim
+itself into Netdata Cloud, an outbound-only dependency) on 2026-09-04.
 
 ## 📦 Repo layout
 
@@ -154,9 +157,8 @@ worth naming next to a zero-inbound-ports posture.
 infra/
   inventory.example.yaml             redacted node IP template (real IPs stay gitignored)
 stacks/
-  vps0N/docker-compose.yml           per-node cloudflared connector + Netdata + Vector (vps00 adds wiki-kit, vps01 the two apps, vps02 OpenObserve)
+  vps0N/docker-compose.yml           per-node cloudflared connector + Vector + Beszel agent (vps00 adds wiki-kit + gws-mcp, vps01 the two apps, vps02 OpenObserve)
   vps0N/vector.yaml                  journal shipper config, byte-identical on all three nodes
-  vps0N/netdata.conf, health.d/      loopback bind, tightened RAM/disk alert thresholds
   vps01/backup-ezbookkeeping.sh      nightly off-site backup to Cloudflare R2
   vps01/backup-booking.sh            nightly MySQL dump to Cloudflare R2
   vps01/check-backup-age.sh          hourly staleness alert, straight to Telegram
@@ -199,21 +201,22 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
   protects node-side state the repo does not own: each backup's run log
   and last-success stamp, and the two credential files later steps write
   back (a deploy overlapping the hourly staleness check once made it exit
-  1 and skip that hour silently) — write that node's tunnel token and Netdata
-  Cloud claim values to a remote `.env` over stdin plus separate
+  1 and skip that hour silently) — write that node's tunnel token
+  to a remote `.env` over stdin plus separate
   `.r2.env` and `.telegram.env` credential files, then a guarded
   `docker compose pull && up -d`, guarded because a stack with no
   services defined makes plain `compose pull` error out otherwise.
-- Each deploy job ends by verifying the node it just touched: Netdata
-  answers on loopback, that node's `cloudflared` is running, and on vps01
+- Each deploy job ends by verifying the node it just touched:
+  that node's `cloudflared` is running, and on vps01
   both apps answer directly on their loopback ports (127.0.0.1:8101 and
   :8102) — there is no reverse proxy. The check runs on the node over the SSH
   connection the deploy already holds, because a zone-wide Cloudflare rule
   blocks every request from outside the Philippines, so probing the public
   hostnames fails from CI while the site is perfectly healthy. Node health
-  is watched by the private Beszel hub and by Netdata Cloud instead; the
+  is watched by the private Beszel hub instead; the
   status Worker's poller, which used to probe the tunnel path, retired
-  2026-09-03. The check
+  2026-09-03, and Netdata, which used to run alongside it, retired
+  2026-09-04. The check
   reports and fails; it never rolls back. A revert cannot undo node-side
   state, and an automated retry loop against three nodes with nobody awake
   is worse than an alert.
@@ -236,19 +239,19 @@ re-run; most matter again if a node ever gets rebuilt from scratch.
 - Fail2Ban: aggressive sshd jail, `backend = systemd` (these images ship
   without rsyslog, so the default file-based jail backend has nothing to
   tail).
-- Cloudflare Access in front of every Netdata endpoint, the OpenObserve
-  UI, `wiki` (owner-only) and `budget`. The status Worker holds **no
+- Cloudflare Access in front of the OpenObserve
+  UI, `wiki`, `gws-mcp` (both owner-only) and `budget`. The status Worker holds **no
   credentials at all** since its poller retired (2026-09-03). `booking` stays open
   on purpose — it is the public booking page.
 - One CI key **per node**, so a leaked Actions secret reaches one node
   rather than three, and deploys require a human approval.
-- Netdata does not get the Docker socket. A `:ro` bind on a socket
-  restricts nothing: anything that can reach the Docker API can start a
-  container with the host filesystem mounted.
-- A zone-wide Cloudflare rule blocks all non-Philippines traffic, and all
-  three Netdata agents stream outbound to Netdata Cloud (see
-  [Network model](#-network-model)). Both live outside this repo: the geo
-  rule in the Cloudflare dashboard, the Cloud claim in a GitHub secret.
+- No container gets the Docker socket, anywhere in this repo — including
+  the Beszel agent that replaced Netdata (2026-09-04). A `:ro` bind on a
+  socket restricts nothing: anything that can reach the Docker API can
+  start a container with the host filesystem mounted.
+- A zone-wide Cloudflare rule blocks all non-Philippines traffic (see
+  [Network model](#-network-model)); it lives outside this repo, in the
+  Cloudflare dashboard.
 
 > [!NOTE]
 > The CI deploy user has no sudo, but that is a smaller guarantee than it
@@ -274,9 +277,9 @@ in the script cannot erase history.
 Staleness is alerted by `check-backup-age.sh`: an hourly cron job that reads
 the same stamp file the backup writes and calls the Telegram API directly.
 First alert at 36 hours, re-alert every 12 hours while stale, one message on
-recovery. **It deliberately does not go through Netdata.** A Netdata alarm
-charts the same age for the dashboard, but it silently stopped notifying
-once and nothing depends on it any more.
+recovery. **It has never gone through Netdata.** A Netdata alarm used to chart
+the same age for a dashboard, but it silently stopped notifying once and
+nothing ever depended on it; Netdata itself retired 2026-09-04.
 
 A backup that is never restored is a guess, so the restore path is drilled by
 hand: pull the newest archive, extract it into throwaway volumes, boot a

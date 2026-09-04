@@ -53,18 +53,19 @@ never re-run until green).
 3. Per matrix leg: SSH key via `webfactory/ssh-agent`, `known_hosts` pinned from
    the `SSH_KNOWN_HOSTS` secret (never `StrictHostKeyChecking no`), `mkdir
    -p` the remote stack dir, `rsync -az --delete` the stack files, write
-   that node's tunnel token and Netdata claim values into a remote `.env`
+   that node's tunnel token into a remote `.env`
    (piped over SSH stdin under `umask 077`, never a CLI arg, never
    committed), then `docker compose pull && up -d && image prune -f &&
-   restart netdata vector`, guarded: no services in the stack, skip
-   pull/up instead of erroring (failure log). The trailing `restart` is
-   needed because a bind-mounted config file -- `netdata.conf`,
-   `health_alarm_notify.conf`, `vector.yaml` -- is not part of the
+   restart vector`, guarded: no services in the stack, skip
+   pull/up instead of erroring (failure log). The trailing `restart vector`
+   is needed because `vector.yaml` is bind-mounted and not part of the
    container spec, so changing it does not force a recreate and `up -d`
-   leaves the old process running with the old file. `vector` joined that
-   list after a deploy shipped a fixed `vector.yaml` and changed nothing:
+   leaves the old process running with the old file. It joined the deploy
+   step after a deploy shipped a fixed `vector.yaml` and changed nothing:
    the only reason it took effect was that the container happened to be
-   crashlooping and picked the new file up on its next restart.
+   crashlooping and picked the new file up on its next restart. Netdata
+   used to be restarted alongside it for the same reason (`health.d/*.conf`
+   is bind-mounted too); it retired 2026-09-04 (phoenixlab step 17).
 4. vps01 only (`if: matrix.node == 'vps01'`): the rsync excludes `backup/`, `backup-booking/`, `.r2.env`,
    `.telegram.env` (failure log), two extra steps write those two
    credential files, and one brace group piped to `crontab -` installs all
@@ -77,8 +78,8 @@ never re-run until green).
    exit 1.
 5. Each leg ends with `Verify vps0N`: `scripts/verify-node.sh` piped over
    the SSH connection the job already holds (`sh -s -- <args>`), args from
-   the leg's `matrix.verify_args`, checking the node's own origin: Netdata answers 200 on
-   loopback, `cloudflared-vps0N` is running, and on vps01 both apps answer
+   the leg's `matrix.verify_args`, checking the node's own origin:
+   `cloudflared-vps0N` is running, and on vps01 both apps answer
    200 directly on their loopback ports (127.0.0.1:8101 and :8102) -- no
    proxy, no `Host:` header. Every HTTP probe polls, 30
    tries 2s apart. It reports and fails; it never reverts.
@@ -104,11 +105,8 @@ node, see blast radius below), `SSH_KNOWN_HOSTS`, `SSH_HOST_VPS00` /
 rail 2), `CLOUDFLARE_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
 `R2_SECRET_ACCESS_KEY`
 (vps01's `.r2.env`; without them both nightly backups exit 1),
-`NETDATA_CLAIM_TOKEN`, `NETDATA_CLAIM_ROOMS` (Netdata Cloud claim, the
-**same** value on all three nodes, unlike a tunnel token; the only two
-the empty-secret guard treats as optional),
-`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (Netdata alert config on all 3
-nodes, and vps01's `.telegram.env` for `check-backup-age.sh`),
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (vps01's `.telegram.env` for
+`check-backup-age.sh`),
 `BOOKING_MYSQL_APP_PASSWORD`, `BOOKING_MYSQL_ROOT_PASSWORD` (the booking
 app's MySQL credentials, vps01 `.env`), `BUDGET_SECRET_KEY`
 (ezBookkeeping's session secret, vps01 `.env`; a restore without it

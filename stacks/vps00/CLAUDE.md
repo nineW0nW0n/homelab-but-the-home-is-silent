@@ -2,7 +2,7 @@ Parent: ../CLAUDE.md
 
 # stacks/vps00/: metrics node + wiki-kit + google-workspace-mcp
 
-Baseline services (cloudflared, Netdata, Vector) are documented in
+Baseline services (cloudflared, Vector, Beszel agent) are documented in
 `stacks/CLAUDE.md`; this file exists for the workloads added
 since: wiki-kit (2026-08-26) and google-workspace-mcp (2026-08-29).
 
